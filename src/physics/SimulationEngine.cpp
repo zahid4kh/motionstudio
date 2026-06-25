@@ -422,9 +422,13 @@ void SimulationEngine::applyConveyorBelts() {
                 float dx = fabsf(obj->transform.position.x() - beltPos.x());
                 float dz = fabsf(obj->transform.position.z() - beltPos.z());
                 if (dx < beltHalfX && dz < beltHalfZ) {
-                    // Set horizontal velocity components to belt velocity
+                    // Override linear velocity along belt direction
                     m_mjData->qvel[dofAdr + 0] = double(worldDir.x() * belt.velocity);
                     m_mjData->qvel[dofAdr + 2] = double(worldDir.z() * belt.velocity);
+                    // Zero angular velocity so the object slides, not rolls
+                    m_mjData->qvel[dofAdr + 3] = 0.0;
+                    m_mjData->qvel[dofAdr + 4] = 0.0;
+                    m_mjData->qvel[dofAdr + 5] = 0.0;
                 }
             }
         }

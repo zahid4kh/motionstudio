@@ -1,0 +1,94 @@
+{
+    "joints": [
+    ],
+    "motors": [
+    ],
+    "objects": [
+        {
+            "id": 3,
+            "name": "Sphere",
+            "parentId": -1,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 3,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "Sphere"
+        },
+        {
+            "id": 1,
+            "name": "Cube",
+            "parentId": -1,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 3,
+                    "z": 2
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "Cube"
+        }
+    ],
+    "rigidBodies": [
+        {
+            "collision": {
+                "halfD": 0.5,
+                "halfH": 0.5,
+                "halfW": 0.5,
+                "height": 1,
+                "offset": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "radius": 0.5,
+                "type": "Box"
+            },
+            "gravityEnabled": true,
+            "hasCollision": true,
+            "mass": 1,
+            "objectId": 1
+        },
+        {
+            "collision": {
+                "halfD": 0.5,
+                "halfH": 0.5,
+                "halfW": 0.5,
+                "height": 1,
+                "offset": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "radius": 0.5,
+                "type": "Sphere"
+            },
+            "gravityEnabled": true,
+            "hasCollision": true,
+            "mass": 1,
+            "objectId": 3
+        }
+    ]
+}

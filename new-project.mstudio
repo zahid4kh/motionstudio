@@ -1,0 +1,110 @@
+{
+    "conveyorBelts": [
+        {
+            "direction": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "enabled": true,
+            "objectId": 1,
+            "velocity": 1
+        }
+    ],
+    "joints": [
+    ],
+    "motors": [
+    ],
+    "objects": [
+        {
+            "id": 4,
+            "name": "Basket",
+            "parentId": -1,
+            "transform": {
+                "position": {
+                    "x": 3.2171242237091064,
+                    "y": 0.5,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "Basket"
+        },
+        {
+            "id": 2,
+            "name": "object",
+            "parentId": -1,
+            "transform": {
+                "position": {
+                    "x": -2,
+                    "y": 3,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.5,
+                    "y": 0.5,
+                    "z": 0.5
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 1,
+            "name": "belt",
+            "parentId": -1,
+            "transform": {
+                "position": {
+                    "x": 0.024195194244384766,
+                    "y": 2,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 5.099999904632568,
+                    "y": 0.07999999821186066,
+                    "z": 2
+                }
+            },
+            "type": "Cube"
+        }
+    ],
+    "rigidBodies": [
+        {
+            "collision": {
+                "halfD": 0.25,
+                "halfH": 0.25,
+                "halfW": 0.25,
+                "height": 1,
+                "offset": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "radius": 0.5,
+                "type": "Box"
+            },
+            "gravityEnabled": true,
+            "hasCollision": true,
+            "mass": 0.10000000149011612,
+            "objectId": 2
+        }
+    ]
+}

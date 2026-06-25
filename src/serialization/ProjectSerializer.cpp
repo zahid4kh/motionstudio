@@ -34,6 +34,7 @@ static QString primitiveToStr(PrimitiveType t) {
         case PrimitiveType::Cylinder: return "Cylinder";
         case PrimitiveType::Sphere:   return "Sphere";
         case PrimitiveType::Capsule:  return "Capsule";
+        case PrimitiveType::Basket:   return "Basket";
     }
     return "Cube";
 }
@@ -41,6 +42,7 @@ static PrimitiveType primitiveFromStr(const QString& s) {
     if (s == "Cylinder") return PrimitiveType::Cylinder;
     if (s == "Sphere")   return PrimitiveType::Sphere;
     if (s == "Capsule")  return PrimitiveType::Capsule;
+    if (s == "Basket")   return PrimitiveType::Basket;
     return PrimitiveType::Cube;
 }
 
@@ -63,7 +65,7 @@ static CollisionType collisionTypeFromStr(const QString& s) {
 // ── save ─────────────────────────────────────────────────────────────────────
 
 bool ProjectSerializer::save(const SceneGraph& scene, const QString& filePath) {
-    QJsonArray objects, joints, motors, rigidBodies;
+    QJsonArray objects, joints, motors, rigidBodies, conveyorBelts;
 
     for (auto& [id, obj] : scene.allObjects()) {
         QJsonObject o;
@@ -120,11 +122,21 @@ bool ProjectSerializer::save(const SceneGraph& scene, const QString& filePath) {
         rigidBodies.append(o);
     }
 
+    for (auto& [objectId, belt] : scene.allConveyorBelts()) {
+        QJsonObject o;
+        o["objectId"]  = objectId;
+        o["velocity"]  = double(belt.velocity);
+        o["direction"] = vec3ToJson(belt.direction);
+        o["enabled"]   = belt.enabled;
+        conveyorBelts.append(o);
+    }
+
     QJsonObject root;
-    root["objects"]      = objects;
-    root["joints"]       = joints;
-    root["motors"]       = motors;
-    root["rigidBodies"]  = rigidBodies;
+    root["objects"]       = objects;
+    root["joints"]        = joints;
+    root["motors"]        = motors;
+    root["rigidBodies"]   = rigidBodies;
+    root["conveyorBelts"] = conveyorBelts;
 
     QFile f(filePath);
     if (!f.open(QIODevice::WriteOnly)) return false;
@@ -227,6 +239,20 @@ bool ProjectSerializer::load(SceneGraph& scene, const QString& filePath) {
                 rb->collision.height = float(c["height"].toDouble(1.0));
                 rb->collision.offset = vec3FromJson(c["offset"].toObject());
             }
+        }
+    }
+
+    // Conveyor belts
+    for (auto v : root["conveyorBelts"].toArray()) {
+        auto o = v.toObject();
+        int origId = o["objectId"].toInt();
+        int newId  = idMap.value(origId, -1);
+        if (newId == -1) continue;
+        scene.addConveyorBelt(newId);
+        if (ConveyorBelt* belt = scene.getConveyorBelt(newId)) {
+            belt->velocity  = float(o["velocity"].toDouble(1.0));
+            belt->direction = vec3FromJson(o["direction"].toObject());
+            belt->enabled   = o["enabled"].toBool(true);
         }
     }
 
