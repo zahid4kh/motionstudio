@@ -1,0 +1,60 @@
+{
+    "objects": [
+        {
+            "id": 1,
+            "name": "Stand",
+            "type": "Cube",
+            "parentId": -1,
+            "transform": {
+                "position": {"x": 0, "y": 0.05, "z": 0},
+                "rotation": {"x": 0, "y": 0, "z": 0},
+                "scale":    {"x": 0.9, "y": 0.1, "z": 0.9}
+            }
+        },
+        {
+            "id": 2,
+            "name": "Disc",
+            "type": "Cylinder",
+            "parentId": 1,
+            "transform": {
+                "position": {"x": 0, "y": 0.18, "z": 0},
+                "rotation": {"x": 0, "y": 0, "z": 0},
+                "scale":    {"x": 0.65, "y": 0.12, "z": 0.65}
+            }
+        },
+        {
+            "id": 3,
+            "name": "Spike",
+            "type": "Capsule",
+            "parentId": 2,
+            "transform": {
+                "position": {"x": 0, "y": 0.6, "z": 0},
+                "rotation": {"x": 0, "y": 0, "z": 0},
+                "scale":    {"x": 0.12, "y": 0.5, "z": 0.12}
+            }
+        }
+    ],
+    "joints": [
+        {
+            "id": 4,
+            "name": "Disc_joint",
+            "type": "Revolute",
+            "axis": {"x": 0, "y": 1, "z": 0},
+            "limitMin": -180,
+            "limitMax": 180,
+            "initialAngle": 0,
+            "parentBodyId": 1,
+            "childBodyId": 2
+        }
+    ],
+    "motors": [
+        {
+            "id": 5,
+            "name": "Motor_Disc_joint",
+            "velocity": 180,
+            "targetPosition": 0,
+            "jointId": 4,
+            "enabled": true
+        }
+    ]
+}

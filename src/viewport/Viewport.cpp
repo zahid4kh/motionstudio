@@ -115,6 +115,19 @@ void Viewport::resizeGL(int w, int h) {
 }
 
 void Viewport::paintGL() {
+    QPainter p(this);
+    p.setRenderHint(QPainter::TextAntialiasing);
+
+    p.beginNativePainting();
+
+    // Explicitly reset state — QPainter leaves depth writes disabled
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDepthFunc(GL_LESS);
+    glDisable(GL_BLEND);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_SCISSOR_TEST);
+    glClearColor(0.88f, 0.90f, 0.94f, 1.0f);
     glViewport(0, 0, m_vpW, m_vpH);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -122,14 +135,13 @@ void Viewport::paintGL() {
     drawScene();
     drawAxisGizmo();
 
-    // restore full viewport before QPainter
     glViewport(0, 0, m_vpW, m_vpH);
+    glDisable(GL_SCISSOR_TEST);
 
-    QPainter p(this);
-    p.setRenderHint(QPainter::TextAntialiasing);
+    p.endNativePainting();
+
     drawAxisLabels(p);
     drawKeyHints(p);
-    p.end();
 }
 
 // ── Shader / mesh setup ──────────────────────────────────────────────────────

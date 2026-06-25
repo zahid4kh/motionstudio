@@ -16,6 +16,7 @@ public:
 private slots:
     void newProject();
     void openProject();
+    void openTemplate();
     void saveProject();
     void saveProjectAs();
 

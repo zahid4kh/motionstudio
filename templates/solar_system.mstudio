@@ -1,0 +1,79 @@
+{
+    "objects": [
+        {
+            "id": 1,
+            "name": "Sun",
+            "type": "Sphere",
+            "parentId": -1,
+            "transform": {
+                "position": {"x": 0, "y": 0.5, "z": 0},
+                "rotation": {"x": 0, "y": 0, "z": 0},
+                "scale":    {"x": 0.8, "y": 0.8, "z": 0.8}
+            }
+        },
+        {
+            "id": 2,
+            "name": "Planet",
+            "type": "Sphere",
+            "parentId": 1,
+            "transform": {
+                "position": {"x": 2.5, "y": 0, "z": 0},
+                "rotation": {"x": 0, "y": 0, "z": 0},
+                "scale":    {"x": 0.3, "y": 0.3, "z": 0.3}
+            }
+        },
+        {
+            "id": 3,
+            "name": "Moon",
+            "type": "Sphere",
+            "parentId": 2,
+            "transform": {
+                "position": {"x": 0.9, "y": 0, "z": 0},
+                "rotation": {"x": 0, "y": 0, "z": 0},
+                "scale":    {"x": 0.12, "y": 0.12, "z": 0.12}
+            }
+        }
+    ],
+    "joints": [
+        {
+            "id": 4,
+            "name": "Planet_orbit",
+            "type": "Revolute",
+            "axis": {"x": 0, "y": 1, "z": 0},
+            "limitMin": -180,
+            "limitMax": 180,
+            "initialAngle": 0,
+            "parentBodyId": 1,
+            "childBodyId": 2
+        },
+        {
+            "id": 5,
+            "name": "Moon_orbit",
+            "type": "Revolute",
+            "axis": {"x": 0, "y": 1, "z": 0},
+            "limitMin": -180,
+            "limitMax": 180,
+            "initialAngle": 0,
+            "parentBodyId": 2,
+            "childBodyId": 3
+        }
+    ],
+    "motors": [
+        {
+            "id": 6,
+            "name": "Motor_Planet_orbit",
+            "velocity": 20,
+            "targetPosition": 0,
+            "jointId": 4,
+            "enabled": true
+        },
+        {
+            "id": 7,
+            "name": "Motor_Moon_orbit",
+            "velocity": 75,
+            "targetPosition": 0,
+            "jointId": 5,
+            "enabled": true
+        }
+    ]
+}

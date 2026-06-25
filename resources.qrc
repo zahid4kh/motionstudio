@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="/">
+        <file>templates/simple_pendulum.mstudio</file>
+        <file>templates/robotic_arm.mstudio</file>
+        <file>templates/solar_system.mstudio</file>
+        <file>templates/spinning_top.mstudio</file>
+        <file>templates/crank_arm.mstudio</file>
+    </qresource>
+</RCC>

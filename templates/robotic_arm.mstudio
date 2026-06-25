@@ -1,0 +1,109 @@
+{
+    "objects": [
+        {
+            "id": 1,
+            "name": "Base",
+            "type": "Cube",
+            "parentId": -1,
+            "transform": {
+                "position": {"x": 0, "y": 0.1, "z": 0},
+                "rotation": {"x": 0, "y": 0, "z": 0},
+                "scale":    {"x": 0.6, "y": 0.2, "z": 0.6}
+            }
+        },
+        {
+            "id": 2,
+            "name": "Arm1",
+            "type": "Cylinder",
+            "parentId": 1,
+            "transform": {
+                "position": {"x": 0, "y": 0.7, "z": 0},
+                "rotation": {"x": 0, "y": 0, "z": 0},
+                "scale":    {"x": 0.18, "y": 0.7, "z": 0.18}
+            }
+        },
+        {
+            "id": 3,
+            "name": "Arm2",
+            "type": "Cylinder",
+            "parentId": 2,
+            "transform": {
+                "position": {"x": 0, "y": 1.4, "z": 0},
+                "rotation": {"x": 0, "y": 0, "z": 0},
+                "scale":    {"x": 0.14, "y": 0.6, "z": 0.14}
+            }
+        },
+        {
+            "id": 4,
+            "name": "Gripper",
+            "type": "Capsule",
+            "parentId": 3,
+            "transform": {
+                "position": {"x": 0, "y": 1.2, "z": 0},
+                "rotation": {"x": 0, "y": 0, "z": 0},
+                "scale":    {"x": 0.1, "y": 0.35, "z": 0.1}
+            }
+        }
+    ],
+    "joints": [
+        {
+            "id": 5,
+            "name": "Arm1_joint",
+            "type": "Revolute",
+            "axis": {"x": 0, "y": 0, "z": 1},
+            "limitMin": -120,
+            "limitMax": 120,
+            "initialAngle": 0,
+            "parentBodyId": 1,
+            "childBodyId": 2
+        },
+        {
+            "id": 6,
+            "name": "Arm2_joint",
+            "type": "Revolute",
+            "axis": {"x": 0, "y": 0, "z": 1},
+            "limitMin": -110,
+            "limitMax": 110,
+            "initialAngle": 0,
+            "parentBodyId": 2,
+            "childBodyId": 3
+        },
+        {
+            "id": 7,
+            "name": "Gripper_joint",
+            "type": "Revolute",
+            "axis": {"x": 0, "y": 1, "z": 0},
+            "limitMin": -180,
+            "limitMax": 180,
+            "initialAngle": 0,
+            "parentBodyId": 3,
+            "childBodyId": 4
+        }
+    ],
+    "motors": [
+        {
+            "id": 8,
+            "name": "Motor_Arm1_joint",
+            "velocity": 25,
+            "targetPosition": 0,
+            "jointId": 5,
+            "enabled": true
+        },
+        {
+            "id": 9,
+            "name": "Motor_Arm2_joint",
+            "velocity": 40,
+            "targetPosition": 0,
+            "jointId": 6,
+            "enabled": true
+        },
+        {
+            "id": 10,
+            "name": "Motor_Gripper_joint",
+            "velocity": 90,
+            "targetPosition": 0,
+            "jointId": 7,
+            "enabled": true
+        }
+    ]
+}

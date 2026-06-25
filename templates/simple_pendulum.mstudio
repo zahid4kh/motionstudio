@@ -1,0 +1,49 @@
+{
+    "objects": [
+        {
+            "id": 1,
+            "name": "Pivot",
+            "type": "Cylinder",
+            "parentId": -1,
+            "transform": {
+                "position": {"x": 0, "y": 0.25, "z": 0},
+                "rotation": {"x": 0, "y": 0, "z": 0},
+                "scale":    {"x": 0.3, "y": 0.5, "z": 0.3}
+            }
+        },
+        {
+            "id": 2,
+            "name": "Bob",
+            "type": "Sphere",
+            "parentId": 1,
+            "transform": {
+                "position": {"x": 0, "y": -1.6, "z": 0},
+                "rotation": {"x": 0, "y": 0, "z": 0},
+                "scale":    {"x": 0.35, "y": 0.35, "z": 0.35}
+            }
+        }
+    ],
+    "joints": [
+        {
+            "id": 3,
+            "name": "Pendulum_joint",
+            "type": "Revolute",
+            "axis": {"x": 1, "y": 0, "z": 0},
+            "limitMin": -150,
+            "limitMax": 150,
+            "initialAngle": 0,
+            "parentBodyId": 1,
+            "childBodyId": 2
+        }
+    ],
+    "motors": [
+        {
+            "id": 4,
+            "name": "Motor_Pendulum_joint",
+            "velocity": 30,
+            "targetPosition": 0,
+            "jointId": 3,
+            "enabled": true
+        }
+    ]
+}

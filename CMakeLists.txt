@@ -4,6 +4,7 @@ project(MotionStudio VERSION 0.1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets)
 
@@ -43,7 +44,9 @@ set(SOURCES
     src/physics/SimulationEngine.cpp
     src/ui/HierarchyPanel.cpp
     src/ui/PropertiesPanel.cpp
+    src/ui/TemplateDialog.cpp
     src/serialization/ProjectSerializer.cpp
+    resources.qrc
 )
 
 add_executable(MotionStudio ${SOURCES})

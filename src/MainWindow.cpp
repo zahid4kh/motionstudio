@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 #include "serialization/ProjectSerializer.h"
+#include "ui/TemplateDialog.h"
 #include <QApplication>
 #include <QMenuBar>
 #include <QToolBar>
@@ -107,8 +108,9 @@ void MainWindow::buildMenu() {
         m->addAction(a);
         return a;
     };
-    mkA(file, "&New Project",   &MainWindow::newProject,   QKeySequence::New);
+    mkA(file, "&New Project",    &MainWindow::newProject,   QKeySequence::New);
     mkA(file, "&Open Project…", &MainWindow::openProject,  QKeySequence::Open);
+    mkA(file, "Open &Template…",&MainWindow::openTemplate);
     file->addSeparator();
     mkA(file, "&Save",          &MainWindow::saveProject,  QKeySequence::Save);
     mkA(file, "Save &As…",      &MainWindow::saveProjectAs);
@@ -244,6 +246,28 @@ void MainWindow::openProject() {
             "Could not load project from:\n" + path +
             "\n\nThe file may be corrupt or incompatible.");
         showStatus("Failed to open project", false);
+    }
+}
+
+void MainWindow::openTemplate() {
+    if(m_dirty && QMessageBox::question(this, "Open Template",
+        "You have unsaved changes. Discard and load a template?",
+        QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes) return;
+
+    TemplateDialog dlg(this);
+    if(dlg.exec() != QDialog::Accepted) return;
+
+    QString path = dlg.selectedPath();
+    if(path.isEmpty()) return;
+
+    m_sim->reset();
+    if(ProjectSerializer::load(*m_scene, path)){
+        m_currentFile.clear();
+        m_dirty = false;
+        updateTitle();
+        showStatus("Template loaded — press Play to run the simulation");
+    } else {
+        showStatus("Failed to load template", false);
     }
 }
 
