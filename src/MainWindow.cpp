@@ -9,28 +9,35 @@
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QKeySequence>
+#include <QFileInfo>
 
-MainWindow::MainWindow(QWidget* parent)
-    : QMainWindow(parent)
-{
+// ── Style constants ───────────────────────────────────────────────────────────
+
+static const char* kWinStyle =
+    "QMainWindow   { background:#f0f2f5; }"
+    "QMenuBar       { background:#ffffff; color:#222; border-bottom:1px solid #d0d0d0; font-size:12px; }"
+    "QMenuBar::item:selected { background:#e0eaf8; }"
+    "QMenu          { background:#ffffff; color:#222; border:1px solid #c8c8c8; font-size:12px; }"
+    "QMenu::item:selected    { background:#d0e4f8; }"
+    "QDockWidget    { color:#222; font-size:12px; }"
+    "QDockWidget::title { background:#e8ecf2; padding:5px 8px; color:#333; font-weight:bold; border-bottom:1px solid #d0d0d0; }"
+    "QStatusBar     { background:#f8f9fc; color:#555; border-top:1px solid #d8d8d8; font-size:11px; padding:2px 6px; }";
+
+static const char* kToolbarStyle =
+    "QToolBar { background:#ffffff; border-bottom:1px solid #d8d8d8; spacing:3px; padding:4px 6px; }"
+    "QToolButton { color:#333; background:#f4f6fb; border:1px solid #c8cdd8; "
+    "              padding:5px 11px; border-radius:5px; font-size:12px; min-width:32px; }"
+    "QToolButton:hover   { background:#ddeafc; border-color:#7aaae8; color:#1040a0; }"
+    "QToolButton:pressed { background:#c4d8f8; border-color:#5588cc; }"
+    "QToolButton:checked { background:#1a6fda; color:#fff; border-color:#1050b0; }"
+    "QToolButton:disabled { color:#aaa; background:#f0f0f0; border-color:#ddd; }";
+
+// ── Constructor ───────────────────────────────────────────────────────────────
+
+MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle("MotionStudio — New Project");
     resize(1280, 800);
-    setStyleSheet(
-        "QMainWindow { background:#f0f2f5; }"
-        "QMenuBar { background:#ffffff; color:#222222; border-bottom:1px solid #d0d0d0; }"
-        "QMenuBar::item:selected { background:#e0eaf8; }"
-        "QMenu { background:#ffffff; color:#222222; border:1px solid #c0c0c0; }"
-        "QMenu::item:selected { background:#d0e4f8; }"
-        "QToolBar { background:#ffffff; border-bottom:1px solid #d8d8d8; spacing:4px; padding:3px; }"
-        "QToolButton { color:#222222; background:#f5f7fa; border:1px solid #c8c8c8; "
-        "              padding:4px 10px; border-radius:4px; font-size:12px; }"
-        "QToolButton:hover { background:#e0eaf8; border:1px solid #88aadd; }"
-        "QToolButton:pressed { background:#c8daf4; }"
-        "QToolButton:checked { background:#2a7cdf; color:#ffffff; border:1px solid #1a5cb0; }"
-        "QDockWidget { color:#222222; }"
-        "QDockWidget::title { background:#e8ecf2; padding:5px; color:#333333; font-weight:bold; }"
-        "QStatusBar { background:#f0f2f5; color:#555555; border-top:1px solid #d0d0d0; }"
-    );
+    setStyleSheet(kWinStyle);
 
     m_scene    = new SceneGraph(this);
     m_sim      = new SimulationEngine(m_scene, this);
@@ -43,71 +50,138 @@ MainWindow::MainWindow(QWidget* parent)
     buildDocks();
     buildStatusBar();
 
+    // Dirty-tracking
+    connect(m_scene, &SceneGraph::objectAdded,   this, &MainWindow::onSceneDirtied);
+    connect(m_scene, &SceneGraph::objectRemoved, this, &MainWindow::onSceneDirtied);
+    connect(m_scene, &SceneGraph::objectChanged, this, &MainWindow::onSceneDirtied);
+    connect(m_scene, &SceneGraph::jointAdded,    this, &MainWindow::onSceneDirtied);
+    connect(m_scene, &SceneGraph::motorAdded,    this, &MainWindow::onSceneDirtied);
+
     connect(m_sim, &SimulationEngine::stateChanged, this, &MainWindow::onSimStateChanged);
     connect(m_sim, &SimulationEngine::timeUpdated,  this, &MainWindow::onTimeUpdated);
     connect(m_sim, &SimulationEngine::stepped,      m_viewport, QOverload<>::of(&QWidget::update));
+
+    m_statusTimer.setSingleShot(true);
+    connect(&m_statusTimer, &QTimer::timeout, this, [this](){
+        statusBar()->setStyleSheet(
+            "QStatusBar { background:#f8f9fc; color:#555; border-top:1px solid #d8d8d8; font-size:11px; padding:2px 6px; }");
+        statusBar()->clearMessage();
+    });
 }
 
-// ── Menu ─────────────────────────────────────────────────────────────────────
+// ── Status helper ─────────────────────────────────────────────────────────────
+
+void MainWindow::showStatus(const QString& msg, bool success) {
+    QString bg   = success ? "#f0fff4" : "#fff2f2";
+    QString fg   = success ? "#1a7a30" : "#b01020";
+    QString bdr  = success ? "#b0ddb8" : "#f0b0b0";
+    statusBar()->setStyleSheet(QString(
+        "QStatusBar { background:%1; color:%2; border-top:1px solid %3; font-size:11px; padding:2px 6px; }"
+    ).arg(bg, fg, bdr));
+    statusBar()->showMessage(msg);
+    m_statusTimer.start(4000);
+}
+
+void MainWindow::updateTitle() {
+    QString base = "MotionStudio";
+    if(!m_currentFile.isEmpty())
+        base += " — " + QFileInfo(m_currentFile).fileName();
+    else
+        base += " — New Project";
+    if(m_dirty) base += "  •";
+    setWindowTitle(base);
+}
+
+void MainWindow::onSceneDirtied() {
+    if(!m_dirty) { m_dirty = true; updateTitle(); }
+}
+
+// ── Menu ──────────────────────────────────────────────────────────────────────
 
 void MainWindow::buildMenu() {
     auto* file = menuBar()->addMenu("&File");
-    auto mkAction = [&](QMenu* m, const QString& text, auto slot, QKeySequence::StandardKey key = QKeySequence::UnknownKey) {
-        auto* a = new QAction(text, this);
-        if(key != QKeySequence::UnknownKey) a->setShortcut(key);
+    auto mkA = [&](QMenu* m, const QString& txt, auto slot, QKeySequence::StandardKey k = QKeySequence::UnknownKey){
+        auto* a = new QAction(txt, this);
+        if(k != QKeySequence::UnknownKey) a->setShortcut(k);
         connect(a, &QAction::triggered, this, slot);
         m->addAction(a);
         return a;
     };
-    mkAction(file, "&New Project",   &MainWindow::newProject,   QKeySequence::New);
-    mkAction(file, "&Open Project…", &MainWindow::openProject,  QKeySequence::Open);
+    mkA(file, "&New Project",   &MainWindow::newProject,   QKeySequence::New);
+    mkA(file, "&Open Project…", &MainWindow::openProject,  QKeySequence::Open);
     file->addSeparator();
-    mkAction(file, "&Save",          &MainWindow::saveProject,  QKeySequence::Save);
-    mkAction(file, "Save &As…",      &MainWindow::saveProjectAs);
+    mkA(file, "&Save",          &MainWindow::saveProject,  QKeySequence::Save);
+    mkA(file, "Save &As…",      &MainWindow::saveProjectAs);
     file->addSeparator();
     {
-        auto* quit = new QAction("&Quit", this);
-        quit->setShortcut(QKeySequence::Quit);
-        connect(quit, &QAction::triggered, qApp, &QApplication::quit);
-        file->addAction(quit);
+        auto* q = new QAction("&Quit", this);
+        q->setShortcut(QKeySequence::Quit);
+        connect(q, &QAction::triggered, qApp, &QApplication::quit);
+        file->addAction(q);
     }
 }
 
 // ── Toolbar ───────────────────────────────────────────────────────────────────
 
+static QAction* mkBtn(QToolBar* tb, const QString& text, const QString& tip) {
+    auto* a = tb->addAction(text);
+    a->setToolTip(tip);
+    return a;
+}
+
 void MainWindow::buildToolbar() {
-    // File toolbar
-    auto* tbFile = addToolBar("File");
-    tbFile->setObjectName("tbFile");
-    tbFile->addAction("New",  this, &MainWindow::newProject);
-    tbFile->addAction("Open", this, &MainWindow::openProject);
-    tbFile->addAction("Save", this, &MainWindow::saveProject);
-    tbFile->addSeparator();
+    auto* tb = addToolBar("Main");
+    tb->setObjectName("mainToolbar");
+    tb->setMovable(false);
+    tb->setStyleSheet(kToolbarStyle);
 
-    // Add objects
-    tbFile->addAction("+ Cube",     this, [this]{ addObject(PrimitiveType::Cube); });
-    tbFile->addAction("+ Cylinder", this, [this]{ addObject(PrimitiveType::Cylinder); });
-    tbFile->addAction("+ Sphere",   this, [this]{ addObject(PrimitiveType::Sphere); });
-    tbFile->addAction("+ Capsule",  this, [this]{ addObject(PrimitiveType::Capsule); });
-    tbFile->addSeparator();
+    // ── File ──
+    connect(mkBtn(tb,"New", "New project  (Ctrl+N)"),  &QAction::triggered, this, &MainWindow::newProject);
+    connect(mkBtn(tb,"Open","Open project  (Ctrl+O)"), &QAction::triggered, this, &MainWindow::openProject);
+    connect(mkBtn(tb,"Save","Save project  (Ctrl+S)"), &QAction::triggered, this, &MainWindow::saveProject);
+    tb->addSeparator();
 
-    // Joint / motor helpers
-    tbFile->addAction("Add Joint",  this, &MainWindow::addJointToSelected);
-    tbFile->addAction("Add Motor",  this, &MainWindow::addMotorToSelected);
-    tbFile->addAction("Delete",     this, &MainWindow::deleteSelected);
-    tbFile->addSeparator();
+    // ── Add primitives ──
+    connect(mkBtn(tb,"+ Cube",    "Add Cube\nAdded as child of selection"),     &QAction::triggered, this, [this]{ addObject(PrimitiveType::Cube);     });
+    connect(mkBtn(tb,"+ Cylinder","Add Cylinder\nAdded as child of selection"), &QAction::triggered, this, [this]{ addObject(PrimitiveType::Cylinder); });
+    connect(mkBtn(tb,"+ Sphere",  "Add Sphere\nAdded as child of selection"),   &QAction::triggered, this, [this]{ addObject(PrimitiveType::Sphere);   });
+    connect(mkBtn(tb,"+ Capsule", "Add Capsule\nAdded as child of selection"),  &QAction::triggered, this, [this]{ addObject(PrimitiveType::Capsule);  });
+    tb->addSeparator();
 
-    // Simulation
-    auto* playAction  = tbFile->addAction("▶ Play",  m_sim, &SimulationEngine::play);
-    auto* pauseAction = tbFile->addAction("⏸ Pause", m_sim, &SimulationEngine::pause);
-    auto* resetAction = tbFile->addAction("↺ Reset", m_sim, &SimulationEngine::reset);
+    // ── Assembly ──
+    connect(mkBtn(tb,"Add Joint","Add Revolute joint\nObject must have a parent"), &QAction::triggered, this, &MainWindow::addJointToSelected);
+    connect(mkBtn(tb,"Add Motor","Add Motor to joint\nObject must have a joint"),  &QAction::triggered, this, &MainWindow::addMotorToSelected);
+    connect(mkBtn(tb,"Delete",   "Delete selected  (Del)"),                        &QAction::triggered, this, &MainWindow::deleteSelected);
+    tb->addSeparator();
 
-    connect(m_sim, &SimulationEngine::stateChanged, [playAction, pauseAction](bool running){
-        playAction->setEnabled(!running);
-        pauseAction->setEnabled(running);
+    // ── Simulation ──
+    auto* playA  = mkBtn(tb, "▶  Play",  "Start simulation  (Space)");
+    auto* pauseA = mkBtn(tb, "⏸  Pause", "Pause simulation  (Space)");
+    auto* resetA = mkBtn(tb, "↺  Reset", "Stop and reset to t=0");
+    connect(playA,  &QAction::triggered, m_sim, &SimulationEngine::play);
+    connect(pauseA, &QAction::triggered, m_sim, &SimulationEngine::pause);
+    connect(resetA, &QAction::triggered, m_sim, &SimulationEngine::reset);
+    Q_UNUSED(resetA);
+
+    connect(m_sim, &SimulationEngine::stateChanged, [playA, pauseA](bool running){
+        playA->setEnabled(!running);
+        pauseA->setEnabled(running);
     });
-    pauseAction->setEnabled(false);
-    Q_UNUSED(resetAction);
+    pauseA->setEnabled(false);
+
+    // Spacebar shortcut for play/pause toggle
+    auto* spaceShortcut = new QAction(this);
+    spaceShortcut->setShortcut(Qt::Key_Space);
+    connect(spaceShortcut, &QAction::triggered, this, [this](){
+        m_sim->isRunning() ? m_sim->pause() : m_sim->play();
+    });
+    addAction(spaceShortcut);
+
+    // Delete key shortcut
+    auto* delShortcut = new QAction(this);
+    delShortcut->setShortcut(Qt::Key_Delete);
+    connect(delShortcut, &QAction::triggered, this, &MainWindow::deleteSelected);
+    addAction(delShortcut);
 }
 
 // ── Docks ─────────────────────────────────────────────────────────────────────
@@ -116,68 +190,81 @@ void MainWindow::buildDocks() {
     m_hierarchy  = new HierarchyPanel(m_scene, this);
     m_properties = new PropertiesPanel(m_scene, this);
 
-    auto* leftDock = new QDockWidget("Hierarchy", this);
-    leftDock->setObjectName("leftDock");
-    leftDock->setWidget(m_hierarchy);
-    leftDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
-    addDockWidget(Qt::LeftDockWidgetArea, leftDock);
-
-    auto* rightDock = new QDockWidget("Properties", this);
-    rightDock->setObjectName("rightDock");
-    rightDock->setWidget(m_properties);
-    rightDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
-    addDockWidget(Qt::RightDockWidgetArea, rightDock);
+    auto mkDock = [&](const QString& title, QWidget* w, Qt::DockWidgetArea area){
+        auto* d = new QDockWidget(title, this);
+        d->setWidget(w);
+        d->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+        d->setMinimumWidth(200);
+        addDockWidget(area, d);
+        return d;
+    };
+    mkDock("Hierarchy",  m_hierarchy,  Qt::LeftDockWidgetArea);
+    mkDock("Properties", m_properties, Qt::RightDockWidgetArea);
 }
 
 // ── Status bar ────────────────────────────────────────────────────────────────
 
 void MainWindow::buildStatusBar() {
     m_timeLabel = new QLabel("t = 0.000 s", this);
+    m_timeLabel->setStyleSheet("color:#666; font-size:11px; padding-right:8px;");
     statusBar()->addPermanentWidget(m_timeLabel);
-    statusBar()->showMessage("Ready");
+    statusBar()->showMessage("Ready — open a project or add objects to get started");
 }
 
 // ── File actions ──────────────────────────────────────────────────────────────
 
 void MainWindow::newProject() {
-    if(QMessageBox::question(this, "New Project",
-        "Discard current project and start fresh?",
+    if(m_dirty && QMessageBox::question(this, "New Project",
+        "You have unsaved changes. Discard and start fresh?",
         QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes) return;
     m_sim->reset();
     m_scene->clear();
     m_currentFile.clear();
-    setWindowTitle("MotionStudio — New Project");
-    statusBar()->showMessage("New project created");
+    m_dirty = false;
+    updateTitle();
+    showStatus("New project created");
 }
 
 void MainWindow::openProject() {
+    if(m_dirty && QMessageBox::question(this, "Open Project",
+        "You have unsaved changes. Discard and open another project?",
+        QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes) return;
+
     QString path = QFileDialog::getOpenFileName(this, "Open Project", {},
-        "MotionStudio Project (*.mstudio);;JSON Files (*.json)");
+        "MotionStudio Project (*.mstudio);;JSON Files (*.json);;All Files (*)");
     if(path.isEmpty()) return;
     m_sim->reset();
     if(ProjectSerializer::load(*m_scene, path)){
         m_currentFile = path;
-        setWindowTitle("MotionStudio — " + path);
-        statusBar()->showMessage("Loaded: " + path);
+        m_dirty = false;
+        updateTitle();
+        showStatus("Opened: " + QFileInfo(path).fileName());
     } else {
-        QMessageBox::warning(this, "Error", "Failed to load project.");
+        QMessageBox::critical(this, "Load Failed",
+            "Could not load project from:\n" + path +
+            "\n\nThe file may be corrupt or incompatible.");
+        showStatus("Failed to open project", false);
     }
 }
 
 void MainWindow::saveProject() {
     if(m_currentFile.isEmpty()){ saveProjectAs(); return; }
-    if(ProjectSerializer::save(*m_scene, m_currentFile))
-        statusBar()->showMessage("Saved: " + m_currentFile);
-    else
-        QMessageBox::warning(this, "Error", "Failed to save project.");
+    if(ProjectSerializer::save(*m_scene, m_currentFile)){
+        m_dirty = false;
+        updateTitle();
+        showStatus("Saved: " + QFileInfo(m_currentFile).fileName());
+    } else {
+        QMessageBox::critical(this, "Save Failed",
+            "Could not save to:\n" + m_currentFile);
+        showStatus("Save failed — check file permissions", false);
+    }
 }
 
 void MainWindow::saveProjectAs() {
-    QString path = QFileDialog::getSaveFileName(this, "Save Project", "project.mstudio",
+    QString path = QFileDialog::getSaveFileName(this, "Save Project As", "project.mstudio",
         "MotionStudio Project (*.mstudio);;JSON Files (*.json)");
     if(path.isEmpty()) return;
     m_currentFile = path;
-    setWindowTitle("MotionStudio — " + path);
     saveProject();
 }
 
@@ -187,28 +274,27 @@ void MainWindow::addObject(PrimitiveType type) {
     static const char* names[] = {"Cube","Cylinder","Sphere","Capsule"};
     int parentId = m_scene->selectedObjectId();
     int id = m_scene->addObject(names[int(type)], type, parentId == -1 ? -1 : parentId);
-    // Position slightly above grid if root
     if(parentId == -1){
         if(auto* obj = m_scene->getObject(id))
             obj->transform.position = {0, 0.5f, 0};
     }
     m_scene->selectObject(id);
-    statusBar()->showMessage(QString("Added %1").arg(names[int(type)]));
+    showStatus(QString("Added %1").arg(names[int(type)]));
 }
 
 void MainWindow::addJointToSelected() {
     int id = m_scene->selectedObjectId();
     if(id == -1){
-        statusBar()->showMessage("Select a child object first");
+        showStatus("Select a child object first, then click Add Joint", false);
         return;
     }
     SceneObject* obj = m_scene->getObject(id);
     if(!obj || obj->parentId == -1){
-        statusBar()->showMessage("Object must have a parent to add a joint");
+        showStatus("Object must have a parent to add a joint — select a child object", false);
         return;
     }
     if(m_scene->jointForChild(id)){
-        statusBar()->showMessage("Object already has a joint");
+        showStatus("This object already has a joint — edit it in the Properties panel", false);
         return;
     }
     Joint j;
@@ -216,32 +302,33 @@ void MainWindow::addJointToSelected() {
     j.parentBodyId = obj->parentId;
     j.childBodyId  = id;
     m_scene->addJoint(j);
-    statusBar()->showMessage("Joint added to " + obj->name);
+    showStatus("Joint added to " + obj->name + "  — configure it in Properties");
 }
 
 void MainWindow::addMotorToSelected() {
     int id = m_scene->selectedObjectId();
-    if(id == -1){ statusBar()->showMessage("Select an object first"); return; }
+    if(id == -1){ showStatus("Select an object first", false); return; }
     Joint* joint = m_scene->jointForChild(id);
-    if(!joint){ statusBar()->showMessage("Add a joint first"); return; }
+    if(!joint){ showStatus("Add a joint to this object first", false); return; }
     Motor m;
     m.name    = "Motor_" + joint->name;
     m.jointId = joint->id;
     m_scene->addMotor(m);
-    statusBar()->showMessage("Motor added");
+    showStatus("Motor added — set velocity in Properties, then press Play");
 }
 
 void MainWindow::deleteSelected() {
     int id = m_scene->selectedObjectId();
-    if(id == -1){ statusBar()->showMessage("Nothing selected"); return; }
+    if(id == -1){ showStatus("Nothing selected", false); return; }
+    QString name = m_scene->getObject(id) ? m_scene->getObject(id)->name : "object";
     m_scene->removeObject(id);
-    statusBar()->showMessage("Deleted");
+    showStatus("Deleted " + name);
 }
 
 // ── Sim slots ─────────────────────────────────────────────────────────────────
 
 void MainWindow::onSimStateChanged(bool running) {
-    statusBar()->showMessage(running ? "Simulation running" : "Simulation paused");
+    showStatus(running ? "Simulation running  —  Space to pause" : "Simulation paused");
 }
 
 void MainWindow::onTimeUpdated(double seconds) {

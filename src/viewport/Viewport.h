@@ -2,6 +2,7 @@
 #include <QOpenGLWidget>
 #include <QOpenGLFunctions_3_3_Core>
 #include <QOpenGLShaderProgram>
+#include <QPainter>
 #include <QPoint>
 #include "Camera.h"
 #include "../scene/SceneGraph.h"
@@ -33,6 +34,7 @@ private:
     void buildShaders();
     void buildMeshes();
     void buildGrid();
+    void buildAxisGizmo();
 
     MeshData makeCube();
     MeshData makeCylinder(int segs = 20);
@@ -43,8 +45,12 @@ private:
     void drawMesh (const MeshData& m);
     void drawScene();
     void drawGrid();
+    void drawAxisGizmo();
+    void drawAxisLabels(QPainter& p);
+    void drawKeyHints  (QPainter& p);
 
     void tryPickObject(int x, int y);
+    void updateHover  (int x, int y);
     bool rayAABB(const QVector3D& orig, const QVector3D& dir,
                  const QVector3D& mn,  const QVector3D& mx,  float& t);
 
@@ -55,8 +61,15 @@ private:
 
     MeshData m_cube, m_cylinder, m_sphere, m_capsule;
     GLuint   m_gridVao = 0, m_gridVbo = 0;
+    GLuint   m_axisVao = 0, m_axisVbo = 0;
     int      m_gridLines = 0;
 
+    // Gizmo: set in drawAxisGizmo(), read in drawAxisLabels()
+    QMatrix4x4 m_gizmoView, m_gizmoProj;
+    static constexpr int kGizmoSize   = 80;
+    static constexpr int kGizmoMargin = 14;
+
+    int              m_hoveredId = -1;
     QPoint           m_lastMouse;
     Qt::MouseButton  m_dragBtn = Qt::NoButton;
     int              m_vpW = 1, m_vpH = 1;

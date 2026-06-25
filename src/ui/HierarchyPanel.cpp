@@ -26,6 +26,7 @@ HierarchyPanel::HierarchyPanel(SceneGraph* scene, QWidget* parent)
         "QTreeWidget::item:hover { background:#eef4ff; }"
     );
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_tree->setCursor(Qt::PointingHandCursor);
     layout->addWidget(m_tree);
 
     connect(m_tree, &QTreeWidget::itemSelectionChanged,

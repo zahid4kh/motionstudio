@@ -35,6 +35,7 @@ uniform vec3  objColor;
 uniform vec3  lightDir;
 uniform vec3  viewPos;
 uniform bool  isSelected;
+uniform bool  isHovered;
 out vec4 fragColor;
 void main(){
     vec3 n = normalize(normal);
@@ -44,7 +45,8 @@ void main(){
     vec3 h = normalize(l + v);
     float spec = pow(max(dot(n,h), 0.0), 48.0);
     vec3 col = objColor * (0.18 + 0.72*diff) + vec3(0.4)*spec;
-    if(isSelected) col = mix(col, vec3(1.0,0.75,0.1), 0.35);
+    if(isHovered)  col = mix(col, vec3(0.45, 0.72, 1.0), 0.28);
+    if(isSelected) col = mix(col, vec3(1.0, 0.75, 0.1),  0.40);
     fragColor = vec4(col, 1.0);
 }
 )";
@@ -70,11 +72,12 @@ Viewport::Viewport(SceneGraph* scene, QWidget* parent)
     : QOpenGLWidget(parent), m_scene(scene)
 {
     setFocusPolicy(Qt::StrongFocus);
-    connect(scene, &SceneGraph::objectAdded,   this, [this](int){ update(); });
-    connect(scene, &SceneGraph::objectRemoved, this, [this](int){ update(); });
-    connect(scene, &SceneGraph::objectChanged, this, [this](int){ update(); });
+    setMouseTracking(true); // needed for hover without button press
+    connect(scene, &SceneGraph::objectAdded,      this, [this](int){ update(); });
+    connect(scene, &SceneGraph::objectRemoved,    this, [this](int){ m_hoveredId = -1; update(); });
+    connect(scene, &SceneGraph::objectChanged,    this, [this](int){ update(); });
     connect(scene, &SceneGraph::selectionChanged, this, [this](int){ update(); });
-    connect(scene, &SceneGraph::sceneCleared,  this, [this]{ update(); });
+    connect(scene, &SceneGraph::sceneCleared,     this, [this]{ m_hoveredId = -1; update(); });
 }
 
 Viewport::~Viewport() {
@@ -86,6 +89,8 @@ Viewport::~Viewport() {
     del(m_cube); del(m_cylinder); del(m_sphere); del(m_capsule);
     if(m_gridVao) glDeleteVertexArrays(1, &m_gridVao);
     if(m_gridVbo) glDeleteBuffers(1, &m_gridVbo);
+    if(m_axisVao) glDeleteVertexArrays(1, &m_axisVao);
+    if(m_axisVbo) glDeleteBuffers(1, &m_axisVbo);
     delete m_objShader;
     delete m_gridShader;
     doneCurrent();
@@ -101,6 +106,7 @@ void Viewport::initializeGL() {
     buildShaders();
     buildMeshes();
     buildGrid();
+    buildAxisGizmo();
 }
 
 void Viewport::resizeGL(int w, int h) {
@@ -109,23 +115,21 @@ void Viewport::resizeGL(int w, int h) {
 }
 
 void Viewport::paintGL() {
+    glViewport(0, 0, m_vpW, m_vpH);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    float aspect = float(m_vpW) / float(std::max(m_vpH, 1));
-    QMatrix4x4 view = m_camera.viewMatrix();
-    QMatrix4x4 proj = m_camera.projectionMatrix(aspect);
 
-    // Grid
-    m_gridShader->bind();
-    m_gridShader->setUniformValue("view", view);
-    m_gridShader->setUniformValue("proj", proj);
-    m_gridShader->setUniformValue("lineColor", QVector3D(0.65f, 0.68f, 0.74f));
-    glBindVertexArray(m_gridVao);
-    glDrawArrays(GL_LINES, 0, m_gridLines);
-    glBindVertexArray(0);
-    m_gridShader->release();
-
-    // Objects
+    drawGrid();
     drawScene();
+    drawAxisGizmo();
+
+    // restore full viewport before QPainter
+    glViewport(0, 0, m_vpW, m_vpH);
+
+    QPainter p(this);
+    p.setRenderHint(QPainter::TextAntialiasing);
+    drawAxisLabels(p);
+    drawKeyHints(p);
+    p.end();
 }
 
 // ── Shader / mesh setup ──────────────────────────────────────────────────────
@@ -148,10 +152,8 @@ void Viewport::uploadMesh(MeshData& m, const std::vector<float>& v) {
     glBindVertexArray(m.vao);
     glBindBuffer(GL_ARRAY_BUFFER, m.vbo);
     glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STATIC_DRAW);
-    // position
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6*sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
-    // normal
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6*sizeof(float), (void*)(3*sizeof(float)));
     glEnableVertexAttribArray(1);
     glBindVertexArray(0);
@@ -165,28 +167,37 @@ void Viewport::buildMeshes() {
     m_capsule  = makeCapsule();
 }
 
+void Viewport::buildAxisGizmo() {
+    // 3 axes × 2 vertices × 3 floats (position only, colour via uniform)
+    static const float verts[] = {
+        0,0,0,  1,0,0,   // X
+        0,0,0,  0,1,0,   // Y
+        0,0,0,  0,0,1,   // Z
+    };
+    glGenVertexArrays(1, &m_axisVao);
+    glGenBuffers(1, &m_axisVbo);
+    glBindVertexArray(m_axisVao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_axisVbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glBindVertexArray(0);
+}
+
 // ── Mesh generators ──────────────────────────────────────────────────────────
 
 MeshData Viewport::makeCube() {
-    // 6 faces × 2 triangles × 3 vertices × 6 floats
     static const float v[] = {
-        // pos             // normal
-        // +Z
         -0.5f,-0.5f, 0.5f, 0,0,1,  0.5f,-0.5f, 0.5f, 0,0,1,  0.5f, 0.5f, 0.5f, 0,0,1,
         -0.5f,-0.5f, 0.5f, 0,0,1,  0.5f, 0.5f, 0.5f, 0,0,1, -0.5f, 0.5f, 0.5f, 0,0,1,
-        // -Z
         -0.5f,-0.5f,-0.5f, 0,0,-1,  0.5f, 0.5f,-0.5f, 0,0,-1,  0.5f,-0.5f,-0.5f, 0,0,-1,
         -0.5f,-0.5f,-0.5f, 0,0,-1, -0.5f, 0.5f,-0.5f, 0,0,-1,  0.5f, 0.5f,-0.5f, 0,0,-1,
-        // +X
          0.5f,-0.5f,-0.5f, 1,0,0,  0.5f, 0.5f,-0.5f, 1,0,0,  0.5f, 0.5f, 0.5f, 1,0,0,
          0.5f,-0.5f,-0.5f, 1,0,0,  0.5f, 0.5f, 0.5f, 1,0,0,  0.5f,-0.5f, 0.5f, 1,0,0,
-        // -X
         -0.5f,-0.5f,-0.5f,-1,0,0, -0.5f, 0.5f, 0.5f,-1,0,0, -0.5f, 0.5f,-0.5f,-1,0,0,
         -0.5f,-0.5f,-0.5f,-1,0,0, -0.5f,-0.5f, 0.5f,-1,0,0, -0.5f, 0.5f, 0.5f,-1,0,0,
-        // +Y
         -0.5f, 0.5f,-0.5f, 0,1,0, -0.5f, 0.5f, 0.5f, 0,1,0,  0.5f, 0.5f, 0.5f, 0,1,0,
         -0.5f, 0.5f,-0.5f, 0,1,0,  0.5f, 0.5f, 0.5f, 0,1,0,  0.5f, 0.5f,-0.5f, 0,1,0,
-        // -Y
         -0.5f,-0.5f,-0.5f, 0,-1,0,  0.5f,-0.5f, 0.5f, 0,-1,0, -0.5f,-0.5f, 0.5f, 0,-1,0,
         -0.5f,-0.5f,-0.5f, 0,-1,0,  0.5f,-0.5f,-0.5f, 0,-1,0,  0.5f,-0.5f, 0.5f, 0,-1,0,
     };
@@ -197,160 +208,120 @@ MeshData Viewport::makeCube() {
 
 MeshData Viewport::makeCylinder(int segs) {
     std::vector<float> v;
-    v.reserve(segs * 12 * 6);
     const float r = 0.5f, h = 0.5f;
-
     auto push = [&](float x,float y,float z, float nx,float ny,float nz){
         v.insert(v.end(), {x,y,z,nx,ny,nz});
     };
-
     for(int i = 0; i < segs; i++){
         float a0 = float(i)   / segs * 2*M_PI;
         float a1 = float(i+1) / segs * 2*M_PI;
-        float x0=r*cosf(a0), z0=r*sinf(a0);
-        float x1=r*cosf(a1), z1=r*sinf(a1);
-        float nx0=cosf(a0), nz0=sinf(a0);
-        float nx1=cosf(a1), nz1=sinf(a1);
-        // Side quad
+        float x0=r*cosf(a0),z0=r*sinf(a0), nx0=cosf(a0),nz0=sinf(a0);
+        float x1=r*cosf(a1),z1=r*sinf(a1), nx1=cosf(a1),nz1=sinf(a1);
         push(x0,-h,z0, nx0,0,nz0); push(x1,-h,z1, nx1,0,nz1); push(x1, h,z1, nx1,0,nz1);
         push(x0,-h,z0, nx0,0,nz0); push(x1, h,z1, nx1,0,nz1); push(x0, h,z0, nx0,0,nz0);
-        // Top cap
         push(0,h,0, 0,1,0); push(r*cosf(a0),h,r*sinf(a0), 0,1,0); push(r*cosf(a1),h,r*sinf(a1), 0,1,0);
-        // Bottom cap
         push(0,-h,0, 0,-1,0); push(r*cosf(a1),-h,r*sinf(a1), 0,-1,0); push(r*cosf(a0),-h,r*sinf(a0), 0,-1,0);
     }
-
-    MeshData m;
-    uploadMesh(m, v);
-    return m;
+    MeshData m; uploadMesh(m, v); return m;
 }
 
 MeshData Viewport::makeSphere(int rings, int sectors) {
     std::vector<float> v;
     const float r = 0.5f;
-
     auto push = [&](float phi, float theta){
-        float nx = sinf(phi)*cosf(theta);
-        float ny = cosf(phi);
-        float nz = sinf(phi)*sinf(theta);
-        v.insert(v.end(), {r*nx, r*ny, r*nz, nx, ny, nz});
+        float nx=sinf(phi)*cosf(theta), ny=cosf(phi), nz=sinf(phi)*sinf(theta);
+        v.insert(v.end(), {r*nx,r*ny,r*nz,nx,ny,nz});
     };
-
-    for(int i = 0; i < rings; i++){
-        float p0 = float(i)   / rings * M_PI;
-        float p1 = float(i+1) / rings * M_PI;
-        for(int j = 0; j < sectors; j++){
-            float t0 = float(j)   / sectors * 2*M_PI;
-            float t1 = float(j+1) / sectors * 2*M_PI;
+    for(int i=0;i<rings;i++){
+        float p0=float(i)/rings*M_PI, p1=float(i+1)/rings*M_PI;
+        for(int j=0;j<sectors;j++){
+            float t0=float(j)/sectors*2*M_PI, t1=float(j+1)/sectors*2*M_PI;
             push(p0,t0); push(p1,t0); push(p1,t1);
             push(p0,t0); push(p1,t1); push(p0,t1);
         }
     }
-    MeshData m;
-    uploadMesh(m, v);
-    return m;
+    MeshData m; uploadMesh(m, v); return m;
 }
 
 MeshData Viewport::makeCapsule(int rings, int sectors) {
     std::vector<float> v;
-    const float r = 0.25f, halfCyl = 0.25f;
-
-    auto pushSide = [&](float phi, float theta, float yOff, bool flipY){
-        float nx = cosf(phi)*cosf(theta);
-        float ny = flipY ? -sinf(phi) : sinf(phi);
-        float nz = cosf(phi)*sinf(theta);
-        v.insert(v.end(), {r*nx, r*ny + yOff, r*nz, nx, ny, nz});
+    const float r=0.25f, hcy=0.25f;
+    auto pushS=[&](float phi,float theta,float yOff,bool flipY){
+        float nx=cosf(phi)*cosf(theta), ny=flipY?-sinf(phi):sinf(phi), nz=cosf(phi)*sinf(theta);
+        v.insert(v.end(), {r*nx,r*ny+yOff,r*nz,nx,ny,nz});
     };
-
-    // Cylinder section
-    for(int j = 0; j < sectors; j++){
-        float a0 = float(j)   / sectors * 2*M_PI;
-        float a1 = float(j+1) / sectors * 2*M_PI;
-        float x0=r*cosf(a0),z0=r*sinf(a0), nx0=cosf(a0),nz0=sinf(a0);
-        float x1=r*cosf(a1),z1=r*sinf(a1), nx1=cosf(a1),nz1=sinf(a1);
-        v.insert(v.end(), {x0,-halfCyl,z0, nx0,0,nz0});
-        v.insert(v.end(), {x1,-halfCyl,z1, nx1,0,nz1});
-        v.insert(v.end(), {x1, halfCyl,z1, nx1,0,nz1});
-        v.insert(v.end(), {x0,-halfCyl,z0, nx0,0,nz0});
-        v.insert(v.end(), {x1, halfCyl,z1, nx1,0,nz1});
-        v.insert(v.end(), {x0, halfCyl,z0, nx0,0,nz0});
+    for(int j=0;j<sectors;j++){
+        float a0=float(j)/sectors*2*M_PI, a1=float(j+1)/sectors*2*M_PI;
+        float x0=r*cosf(a0),z0=r*sinf(a0),nx0=cosf(a0),nz0=sinf(a0);
+        float x1=r*cosf(a1),z1=r*sinf(a1),nx1=cosf(a1),nz1=sinf(a1);
+        v.insert(v.end(),{x0,-hcy,z0,nx0,0,nz0}); v.insert(v.end(),{x1,-hcy,z1,nx1,0,nz1}); v.insert(v.end(),{x1,hcy,z1,nx1,0,nz1});
+        v.insert(v.end(),{x0,-hcy,z0,nx0,0,nz0}); v.insert(v.end(),{x1,hcy,z1,nx1,0,nz1}); v.insert(v.end(),{x0,hcy,z0,nx0,0,nz0});
     }
-
-    // Top hemisphere
-    for(int i = 0; i < rings; i++){
-        float p0 = float(i)   / rings * M_PI/2;
-        float p1 = float(i+1) / rings * M_PI/2;
-        for(int j = 0; j < sectors; j++){
-            float t0 = float(j)   / sectors * 2*M_PI;
-            float t1 = float(j+1) / sectors * 2*M_PI;
-            pushSide(p0,t0, halfCyl,false); pushSide(p1,t0, halfCyl,false); pushSide(p1,t1, halfCyl,false);
-            pushSide(p0,t0, halfCyl,false); pushSide(p1,t1, halfCyl,false); pushSide(p0,t1, halfCyl,false);
+    for(int i=0;i<rings;i++){
+        float p0=float(i)/rings*M_PI/2, p1=float(i+1)/rings*M_PI/2;
+        for(int j=0;j<sectors;j++){
+            float t0=float(j)/sectors*2*M_PI, t1=float(j+1)/sectors*2*M_PI;
+            pushS(p0,t0,hcy,false); pushS(p1,t0,hcy,false); pushS(p1,t1,hcy,false);
+            pushS(p0,t0,hcy,false); pushS(p1,t1,hcy,false); pushS(p0,t1,hcy,false);
+            pushS(p0,t1,-hcy,true); pushS(p1,t1,-hcy,true); pushS(p1,t0,-hcy,true);
+            pushS(p0,t1,-hcy,true); pushS(p1,t0,-hcy,true); pushS(p0,t0,-hcy,true);
         }
     }
-
-    // Bottom hemisphere (flipped)
-    for(int i = 0; i < rings; i++){
-        float p0 = float(i)   / rings * M_PI/2;
-        float p1 = float(i+1) / rings * M_PI/2;
-        for(int j = 0; j < sectors; j++){
-            float t0 = float(j)   / sectors * 2*M_PI;
-            float t1 = float(j+1) / sectors * 2*M_PI;
-            pushSide(p0,t1,-halfCyl,true); pushSide(p1,t1,-halfCyl,true); pushSide(p1,t0,-halfCyl,true);
-            pushSide(p0,t1,-halfCyl,true); pushSide(p1,t0,-halfCyl,true); pushSide(p0,t0,-halfCyl,true);
-        }
-    }
-
-    MeshData m;
-    uploadMesh(m, v);
-    return m;
+    MeshData m; uploadMesh(m, v); return m;
 }
 
 void Viewport::buildGrid() {
     std::vector<float> v;
     const int half = 20;
-    for(int i = -half; i <= half; i++){
-        float f = float(i);
-        // Along Z
-        v.insert(v.end(), {f, 0, float(-half),  f, 0, float(half)});
-        // Along X
-        v.insert(v.end(), {float(-half), 0, f,  float(half), 0, f});
+    for(int i=-half;i<=half;i++){
+        float f=float(i);
+        v.insert(v.end(),{f,0,float(-half),f,0,float(half)});
+        v.insert(v.end(),{float(-half),0,f,float(half),0,f});
     }
-    glGenVertexArrays(1, &m_gridVao);
-    glGenBuffers(1, &m_gridVbo);
-    glBindVertexArray(m_gridVao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_gridVbo);
-    glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
+    glGenVertexArrays(1,&m_gridVao); glGenBuffers(1,&m_gridVbo);
+    glBindVertexArray(m_gridVao); glBindBuffer(GL_ARRAY_BUFFER,m_gridVbo);
+    glBufferData(GL_ARRAY_BUFFER,v.size()*sizeof(float),v.data(),GL_STATIC_DRAW);
+    glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,3*sizeof(float),(void*)0);
     glEnableVertexAttribArray(0);
     glBindVertexArray(0);
-    m_gridLines = int(v.size()) / 3;
+    m_gridLines=int(v.size())/3;
 }
 
-// ── Rendering ────────────────────────────────────────────────────────────────
+// ── Rendering ─────────────────────────────────────────────────────────────────
 
-static QVector3D primitiveColor(PrimitiveType t) {
+static QVector3D primitiveColor(PrimitiveType t){
     switch(t){
-        case PrimitiveType::Cube:     return {0.25f, 0.55f, 1.00f};  // blue
-        case PrimitiveType::Cylinder: return {0.15f, 0.78f, 0.35f};  // green
-        case PrimitiveType::Sphere:   return {1.00f, 0.45f, 0.15f};  // orange
-        case PrimitiveType::Capsule:  return {0.72f, 0.25f, 1.00f};  // purple
+        case PrimitiveType::Cube:     return {0.25f,0.55f,1.00f};
+        case PrimitiveType::Cylinder: return {0.15f,0.78f,0.35f};
+        case PrimitiveType::Sphere:   return {1.00f,0.45f,0.15f};
+        case PrimitiveType::Capsule:  return {0.72f,0.25f,1.00f};
     }
-    return {0.6f, 0.6f, 0.6f};
+    return {0.6f,0.6f,0.6f};
 }
 
-void Viewport::drawMesh(const MeshData& m) {
+void Viewport::drawMesh(const MeshData& m){
     glBindVertexArray(m.vao);
-    glDrawArrays(GL_TRIANGLES, 0, m.count);
+    glDrawArrays(GL_TRIANGLES,0,m.count);
     glBindVertexArray(0);
 }
 
-void Viewport::drawScene() {
-    float aspect = float(m_vpW) / float(std::max(m_vpH, 1));
-    QMatrix4x4 view = m_camera.viewMatrix();
-    QMatrix4x4 proj = m_camera.projectionMatrix(aspect);
-    QVector3D  vpos = m_camera.position();
+void Viewport::drawGrid(){
+    float aspect=float(m_vpW)/float(std::max(m_vpH,1));
+    m_gridShader->bind();
+    m_gridShader->setUniformValue("view", m_camera.viewMatrix());
+    m_gridShader->setUniformValue("proj", m_camera.projectionMatrix(aspect));
+    m_gridShader->setUniformValue("lineColor", QVector3D(0.65f,0.68f,0.74f));
+    glBindVertexArray(m_gridVao);
+    glDrawArrays(GL_LINES,0,m_gridLines);
+    glBindVertexArray(0);
+    m_gridShader->release();
+}
 
-    QVector3D lightDir = QVector3D(-0.5f, -1.0f, -0.7f).normalized();
+void Viewport::drawScene(){
+    float aspect=float(m_vpW)/float(std::max(m_vpH,1));
+    QMatrix4x4 view=m_camera.viewMatrix(), proj=m_camera.projectionMatrix(aspect);
+    QVector3D vpos=m_camera.position();
+    QVector3D lightDir=QVector3D(-0.5f,-1.0f,-0.7f).normalized();
 
     m_objShader->bind();
     m_objShader->setUniformValue("view",     view);
@@ -358,15 +329,13 @@ void Viewport::drawScene() {
     m_objShader->setUniformValue("lightDir", lightDir);
     m_objShader->setUniformValue("viewPos",  vpos);
 
-    for(auto& [id, obj] : m_scene->allObjects()){
-        QMatrix4x4 model = m_scene->worldTransform(id);
-        QMatrix3x3 nm    = model.normalMatrix();
-
+    for(auto& [id,obj] : m_scene->allObjects()){
+        QMatrix4x4 model=m_scene->worldTransform(id);
         m_objShader->setUniformValue("model",      model);
-        m_objShader->setUniformValue("normMat",    nm);
+        m_objShader->setUniformValue("normMat",    model.normalMatrix());
         m_objShader->setUniformValue("objColor",   primitiveColor(obj.type));
         m_objShader->setUniformValue("isSelected", obj.selected);
-
+        m_objShader->setUniformValue("isHovered",  id == m_hoveredId && !obj.selected);
         switch(obj.type){
             case PrimitiveType::Cube:     drawMesh(m_cube);     break;
             case PrimitiveType::Cylinder: drawMesh(m_cylinder); break;
@@ -377,101 +346,204 @@ void Viewport::drawScene() {
     m_objShader->release();
 }
 
-// ── Selection via ray-AABB ───────────────────────────────────────────────────
+// ── Axis gizmo ────────────────────────────────────────────────────────────────
 
-bool Viewport::rayAABB(const QVector3D& orig, const QVector3D& dir,
-                        const QVector3D& mn,  const QVector3D& mx, float& t) {
-    float tMin = -std::numeric_limits<float>::max();
-    float tMax =  std::numeric_limits<float>::max();
-    for(int i = 0; i < 3; i++){
-        float d  = (i==0)?dir.x():(i==1)?dir.y():dir.z();
-        float o  = (i==0)?orig.x():(i==1)?orig.y():orig.z();
-        float lo = (i==0)?mn.x():(i==1)?mn.y():mn.z();
-        float hi = (i==0)?mx.x():(i==1)?mx.y():mx.z();
-        if(std::abs(d) < 1e-8f){
-            if(o < lo || o > hi) return false;
-        } else {
-            float t1 = (lo - o) / d;
-            float t2 = (hi - o) / d;
-            if(t1 > t2) std::swap(t1, t2);
-            tMin = std::max(tMin, t1);
-            tMax = std::min(tMax, t2);
-            if(tMin > tMax) return false;
-        }
-    }
-    t = tMin;
-    return tMin >= 0;
+void Viewport::drawAxisGizmo(){
+    int sz=kGizmoSize, mg=kGizmoMargin;
+
+    // Scissor-limited depth clear so the main scene depth is preserved
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(mg, mg, sz, sz);
+    glViewport(mg, mg, sz, sz);
+    glClear(GL_DEPTH_BUFFER_BIT);
+
+    // Rotation-only view (no translation, just extract camera rotation)
+    m_gizmoView = m_camera.viewMatrix();
+    m_gizmoView.setColumn(3, {0, 0, -2.5f, 1});
+
+    m_gizmoProj.setToIdentity();
+    m_gizmoProj.ortho(-1.4f, 1.4f, -1.4f, 1.4f, 0.1f, 10.0f);
+
+    m_gridShader->bind();
+    m_gridShader->setUniformValue("view", m_gizmoView);
+    m_gridShader->setUniformValue("proj", m_gizmoProj);
+
+    glBindVertexArray(m_axisVao);
+    glLineWidth(2.5f);
+
+    m_gridShader->setUniformValue("lineColor", QVector3D(0.92f, 0.18f, 0.18f)); // X red
+    glDrawArrays(GL_LINES, 0, 2);
+    m_gridShader->setUniformValue("lineColor", QVector3D(0.15f, 0.78f, 0.20f)); // Y green
+    glDrawArrays(GL_LINES, 2, 2);
+    m_gridShader->setUniformValue("lineColor", QVector3D(0.18f, 0.40f, 0.95f)); // Z blue
+    glDrawArrays(GL_LINES, 4, 2);
+
+    glBindVertexArray(0);
+    glLineWidth(1.0f);
+    m_gridShader->release();
+
+    glDisable(GL_SCISSOR_TEST);
 }
 
-void Viewport::tryPickObject(int x, int y) {
-    float aspect = float(m_vpW) / float(std::max(m_vpH, 1));
-    float ndcX   = (2.0f * x) / m_vpW - 1.0f;
-    float ndcY   = 1.0f - (2.0f * y) / m_vpH;
+void Viewport::drawAxisLabels(QPainter& p){
+    int sz=kGizmoSize, mg=kGizmoMargin;
 
-    QVector3D orig = m_camera.position();
-    QVector3D dir  = m_camera.rayFromNDC(ndcX, ndcY, aspect);
+    // Project a world-space point through the gizmo VP to Qt screen coords
+    auto project=[&](QVector3D wp) -> QPointF {
+        QVector4D clip = m_gizmoProj * m_gizmoView * QVector4D(wp, 1.0f);
+        float ndcX = clip.x() / clip.w();
+        float ndcY = clip.y() / clip.w();
+        float glX  = mg + (ndcX + 1.0f) * 0.5f * sz;
+        float glY  = mg + (ndcY + 1.0f) * 0.5f * sz;  // y-up in GL
+        return { glX, float(m_vpH) - glY };             // flip to Qt y-down
+    };
 
-    int   bestId = -1;
-    float bestT  = std::numeric_limits<float>::max();
+    struct { QVector3D tip; QColor col; QString label; } axes[] = {
+        { {1,0,0}, {210,40,40},  "X" },
+        { {0,1,0}, {20,170,55},  "Y" },
+        { {0,0,1}, {35,90,235},  "Z" },
+    };
 
-    for(auto& [id, obj] : m_scene->allObjects()){
-        QMatrix4x4 world = m_scene->worldTransform(id);
-        // Half-extents in local space (approximate bounding box)
-        QVector3D he(0.5f, 0.5f, 0.5f);
-        // Transform ray to object local space
-        QMatrix4x4 inv = world.inverted();
-        QVector3D lo = inv.map(orig);
-        // Direction transform (no translation)
-        QVector3D ld = QVector3D(inv * QVector4D(dir, 0.0f));
-        float t;
-        if(rayAABB(lo, ld, -he, he, t) && t < bestT){
-            bestT  = t;
-            bestId = id;
-        }
+    QFont f = p.font();
+    f.setBold(true);
+    f.setPointSize(9);
+    p.setFont(f);
+
+    for(auto& ax : axes){
+        QPointF pos = project(ax.tip);
+        // shadow
+        p.setPen(QColor(0,0,0,60));
+        p.drawText(pos + QPointF(3,3), ax.label);
+        // label
+        p.setPen(ax.col);
+        p.drawText(pos + QPointF(2,2), ax.label);
     }
-
-    m_scene->selectObject(bestId);
 }
 
-// ── Mouse events ─────────────────────────────────────────────────────────────
+void Viewport::drawKeyHints(QPainter& p){
+    static const QString hints[] = {
+        "MMB  Orbit",
+        "RMB  Pan",
+        "Scroll  Zoom",
+        "Click  Select",
+    };
+    QFont f;
+    f.setPointSize(8);
+    p.setFont(f);
 
-void Viewport::mousePressEvent(QMouseEvent* e) {
-    m_lastMouse = e->pos();
-    m_dragBtn   = e->button();
+    int x = m_vpW - 120;
+    int y = m_vpH - 12 - 4*16;
 
-    if(e->button() == Qt::LeftButton && !(e->modifiers() & Qt::AltModifier)){
+    for(auto& h : hints){
+        p.setPen(QColor(0,0,0,55));
+        p.drawText(x+1, y+1, h);
+        p.setPen(QColor(40,50,80,130));
+        p.drawText(x, y, h);
+        y += 16;
+    }
+}
+
+// ── Hover / selection helpers ─────────────────────────────────────────────────
+
+bool Viewport::rayAABB(const QVector3D& orig,const QVector3D& dir,
+                        const QVector3D& mn,  const QVector3D& mx, float& t){
+    float tMin=-std::numeric_limits<float>::max(), tMax=std::numeric_limits<float>::max();
+    for(int i=0;i<3;i++){
+        float d=(i==0)?dir.x():(i==1)?dir.y():dir.z();
+        float o=(i==0)?orig.x():(i==1)?orig.y():orig.z();
+        float lo=(i==0)?mn.x():(i==1)?mn.y():mn.z();
+        float hi=(i==0)?mx.x():(i==1)?mx.y():mx.z();
+        if(std::abs(d)<1e-8f){ if(o<lo||o>hi) return false; }
+        else {
+            float t1=(lo-o)/d, t2=(hi-o)/d;
+            if(t1>t2) std::swap(t1,t2);
+            tMin=std::max(tMin,t1); tMax=std::min(tMax,t2);
+            if(tMin>tMax) return false;
+        }
+    }
+    t=tMin; return tMin>=0;
+}
+
+static std::pair<int,float> pickNearest(SceneGraph* scene, const QVector3D& orig, const QVector3D& dir){
+    int bestId=-1; float bestT=std::numeric_limits<float>::max();
+    for(auto& [id,obj] : scene->allObjects()){
+        QMatrix4x4 inv=scene->worldTransform(id).inverted();
+        QVector3D lo=inv.map(orig), ld(inv*QVector4D(dir,0.0f));
+        float t; QVector3D he(0.5f,0.5f,0.5f);
+        if(true){ // inline rayAABB
+            float tMn=-1e9f,tMx=1e9f;
+            for(int i=0;i<3;i++){
+                float d=(i==0)?ld.x():(i==1)?ld.y():ld.z();
+                float o2=(i==0)?lo.x():(i==1)?lo.y():lo.z();
+                float mn2=(i==0)?-he.x():(i==1)?-he.y():-he.z();
+                float mx2=(i==0)?he.x():(i==1)?he.y():he.z();
+                if(std::abs(d)<1e-8f){ if(o2<mn2||o2>mx2){ tMn=1e9f; break; } }
+                else { float t1=(mn2-o2)/d,t2=(mx2-o2)/d; if(t1>t2) std::swap(t1,t2); tMn=std::max(tMn,t1); tMx=std::min(tMx,t2); if(tMn>tMx){ tMn=1e9f; break; } }
+            }
+            t=tMn;
+        }
+        if(t<bestT&&t>=0){ bestT=t; bestId=id; }
+    }
+    return {bestId,bestT};
+}
+
+void Viewport::tryPickObject(int x, int y){
+    float aspect=float(m_vpW)/float(std::max(m_vpH,1));
+    float ndcX=(2.0f*x)/m_vpW-1.0f, ndcY=1.0f-(2.0f*y)/m_vpH;
+    auto [id,t]=pickNearest(m_scene, m_camera.position(), m_camera.rayFromNDC(ndcX,ndcY,aspect));
+    m_scene->selectObject(id);
+}
+
+void Viewport::updateHover(int x, int y){
+    float aspect=float(m_vpW)/float(std::max(m_vpH,1));
+    float ndcX=(2.0f*x)/m_vpW-1.0f, ndcY=1.0f-(2.0f*y)/m_vpH;
+    auto [id,t]=pickNearest(m_scene, m_camera.position(), m_camera.rayFromNDC(ndcX,ndcY,aspect));
+    if(id!=m_hoveredId){
+        m_hoveredId=id;
+        setCursor(id!=-1 ? Qt::PointingHandCursor : Qt::ArrowCursor);
+        update();
+    }
+}
+
+// ── Mouse events ──────────────────────────────────────────────────────────────
+
+void Viewport::mousePressEvent(QMouseEvent* e){
+    m_lastMouse=e->pos();
+    m_dragBtn=e->button();
+    if(e->button()==Qt::LeftButton && !(e->modifiers()&Qt::AltModifier)){
         makeCurrent();
         tryPickObject(e->pos().x(), e->pos().y());
         doneCurrent();
     }
 }
 
-void Viewport::mouseMoveEvent(QMouseEvent* e) {
-    QPoint delta = e->pos() - m_lastMouse;
-    m_lastMouse  = e->pos();
+void Viewport::mouseMoveEvent(QMouseEvent* e){
+    QPoint delta=e->pos()-m_lastMouse;
+    m_lastMouse=e->pos();
 
-    bool alt = e->modifiers() & Qt::AltModifier;
+    if(m_dragBtn==Qt::NoButton){
+        updateHover(e->pos().x(), e->pos().y());
+        return;
+    }
 
-    if((m_dragBtn == Qt::LeftButton && alt) || m_dragBtn == Qt::MiddleButton){
-        if(e->modifiers() & Qt::ShiftModifier)
+    bool alt=e->modifiers()&Qt::AltModifier;
+    if(m_dragBtn==Qt::MiddleButton || (m_dragBtn==Qt::LeftButton&&alt)){
+        if(e->modifiers()&Qt::ShiftModifier)
             m_camera.pan(delta.x(), delta.y());
         else
             m_camera.orbit(delta.x(), delta.y());
         update();
-    } else if(m_dragBtn == Qt::RightButton){
+    } else if(m_dragBtn==Qt::RightButton){
         m_camera.pan(delta.x(), delta.y());
-        update();
-    } else if(m_dragBtn == Qt::LeftButton && alt){
-        m_camera.orbit(delta.x(), delta.y());
         update();
     }
 }
 
-void Viewport::mouseReleaseEvent(QMouseEvent*) {
-    m_dragBtn = Qt::NoButton;
+void Viewport::mouseReleaseEvent(QMouseEvent*){
+    m_dragBtn=Qt::NoButton;
 }
 
-void Viewport::wheelEvent(QWheelEvent* e) {
-    m_camera.zoom(e->angleDelta().y() / 120.0f);
+void Viewport::wheelEvent(QWheelEvent* e){
+    m_camera.zoom(e->angleDelta().y()/120.0f);
     update();
 }
