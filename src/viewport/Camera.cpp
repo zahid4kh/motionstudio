@@ -5,7 +5,7 @@
 Camera::Camera() { reset(); }
 
 void Camera::orbit(float dx, float dy) {
-    m_azimuth   += dx * 0.5f;
+    m_azimuth   -= dx * 0.5f;   // negate: drag right → camera orbits left (scene follows right)
     m_elevation += dy * 0.5f;
     m_elevation  = std::clamp(m_elevation, -89.0f, 89.0f);
 }

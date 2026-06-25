@@ -97,7 +97,7 @@ void Viewport::initializeGL() {
     initializeOpenGLFunctions();
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_MULTISAMPLE);
-    glClearColor(0.12f, 0.14f, 0.18f, 1.0f);
+    glClearColor(0.88f, 0.90f, 0.94f, 1.0f);
     buildShaders();
     buildMeshes();
     buildGrid();
@@ -118,7 +118,7 @@ void Viewport::paintGL() {
     m_gridShader->bind();
     m_gridShader->setUniformValue("view", view);
     m_gridShader->setUniformValue("proj", proj);
-    m_gridShader->setUniformValue("lineColor", QVector3D(0.28f, 0.30f, 0.35f));
+    m_gridShader->setUniformValue("lineColor", QVector3D(0.65f, 0.68f, 0.74f));
     glBindVertexArray(m_gridVao);
     glDrawArrays(GL_LINES, 0, m_gridLines);
     glBindVertexArray(0);
@@ -330,12 +330,12 @@ void Viewport::buildGrid() {
 
 static QVector3D primitiveColor(PrimitiveType t) {
     switch(t){
-        case PrimitiveType::Cube:     return {0.40f, 0.60f, 1.00f};
-        case PrimitiveType::Cylinder: return {0.40f, 1.00f, 0.45f};
-        case PrimitiveType::Sphere:   return {1.00f, 0.60f, 0.30f};
-        case PrimitiveType::Capsule:  return {0.80f, 0.45f, 1.00f};
+        case PrimitiveType::Cube:     return {0.25f, 0.55f, 1.00f};  // blue
+        case PrimitiveType::Cylinder: return {0.15f, 0.78f, 0.35f};  // green
+        case PrimitiveType::Sphere:   return {1.00f, 0.45f, 0.15f};  // orange
+        case PrimitiveType::Capsule:  return {0.72f, 0.25f, 1.00f};  // purple
     }
-    return {0.8f, 0.8f, 0.8f};
+    return {0.6f, 0.6f, 0.6f};
 }
 
 void Viewport::drawMesh(const MeshData& m) {

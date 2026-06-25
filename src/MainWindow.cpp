@@ -16,20 +16,20 @@ MainWindow::MainWindow(QWidget* parent)
     setWindowTitle("MotionStudio — New Project");
     resize(1280, 800);
     setStyleSheet(
-        "QMainWindow { background:#12141a; }"
-        "QMenuBar { background:#1a1c22; color:#c8c8c8; }"
-        "QMenuBar::item:selected { background:#2a3040; }"
-        "QMenu { background:#1e2128; color:#c8c8c8; border:1px solid #444; }"
-        "QMenu::item:selected { background:#2a3040; }"
-        "QToolBar { background:#1a1c22; border:none; spacing:4px; padding:2px; }"
-        "QToolButton { color:#c8c8c8; background:#252830; border:1px solid #3a3a3a; "
-        "              padding:4px 8px; border-radius:3px; }"
-        "QToolButton:hover { background:#3a4a6a; }"
-        "QToolButton:pressed { background:#2a3860; }"
-        "QToolButton:checked { background:#1e5080; border:1px solid #4090c0; }"
-        "QDockWidget { color:#c8c8c8; }"
-        "QDockWidget::title { background:#1e2128; padding:4px; }"
-        "QStatusBar { background:#1a1c22; color:#888; }"
+        "QMainWindow { background:#f0f2f5; }"
+        "QMenuBar { background:#ffffff; color:#222222; border-bottom:1px solid #d0d0d0; }"
+        "QMenuBar::item:selected { background:#e0eaf8; }"
+        "QMenu { background:#ffffff; color:#222222; border:1px solid #c0c0c0; }"
+        "QMenu::item:selected { background:#d0e4f8; }"
+        "QToolBar { background:#ffffff; border-bottom:1px solid #d8d8d8; spacing:4px; padding:3px; }"
+        "QToolButton { color:#222222; background:#f5f7fa; border:1px solid #c8c8c8; "
+        "              padding:4px 10px; border-radius:4px; font-size:12px; }"
+        "QToolButton:hover { background:#e0eaf8; border:1px solid #88aadd; }"
+        "QToolButton:pressed { background:#c8daf4; }"
+        "QToolButton:checked { background:#2a7cdf; color:#ffffff; border:1px solid #1a5cb0; }"
+        "QDockWidget { color:#222222; }"
+        "QDockWidget::title { background:#e8ecf2; padding:5px; color:#333333; font-weight:bold; }"
+        "QStatusBar { background:#f0f2f5; color:#555555; border-top:1px solid #d0d0d0; }"
     );
 
     m_scene    = new SceneGraph(this);

@@ -14,16 +14,16 @@ HierarchyPanel::HierarchyPanel(SceneGraph* scene, QWidget* parent)
 
     auto* header = new QLabel("  Hierarchy", this);
     header->setFixedHeight(28);
-    header->setStyleSheet("background:#1e2128; color:#aaaaaa; font-size:11px; font-weight:bold;");
+    header->setStyleSheet("background:#e8ecf2; color:#333333; font-size:11px; font-weight:bold; border-bottom:1px solid #d0d0d0;");
     layout->addWidget(header);
 
     m_tree = new QTreeWidget(this);
     m_tree->setHeaderHidden(true);
     m_tree->setIndentation(16);
     m_tree->setStyleSheet(
-        "QTreeWidget { background:#1a1c22; color:#d0d0d0; border:none; }"
-        "QTreeWidget::item:selected { background:#3a4a6a; }"
-        "QTreeWidget::item:hover { background:#252830; }"
+        "QTreeWidget { background:#ffffff; color:#222222; border:none; font-size:12px; }"
+        "QTreeWidget::item:selected { background:#cce0ff; color:#111111; }"
+        "QTreeWidget::item:hover { background:#eef4ff; }"
     );
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     layout->addWidget(m_tree);

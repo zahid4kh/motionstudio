@@ -32,14 +32,17 @@ PropertiesPanel::PropertiesPanel(SceneGraph* scene, QWidget* parent)
     : QWidget(parent), m_scene(scene)
 {
     setStyleSheet(
-        "QGroupBox { color:#aaaaaa; border:1px solid #333; margin-top:6px; font-size:11px; }"
-        "QGroupBox::title { subcontrol-origin:margin; left:8px; }"
-        "QLabel { color:#c0c0c0; font-size:11px; }"
-        "QDoubleSpinBox { background:#252830; color:#d0d0d0; border:1px solid #444; }"
-        "QComboBox { background:#252830; color:#d0d0d0; border:1px solid #444; }"
-        "QCheckBox { color:#c0c0c0; }"
-        "QPushButton { background:#2a3040; color:#aaaaaa; border:1px solid #444; padding:3px 8px; }"
-        "QPushButton:hover { background:#3a4a6a; }"
+        "QWidget { background:#ffffff; }"
+        "QGroupBox { color:#333333; border:1px solid #d0d0d0; margin-top:8px; font-size:11px; font-weight:bold; background:#ffffff; }"
+        "QGroupBox::title { subcontrol-origin:margin; left:8px; color:#2a6ac0; }"
+        "QLabel { color:#333333; font-size:11px; background:transparent; }"
+        "QDoubleSpinBox { background:#f8f9fc; color:#111111; border:1px solid #c0c8d8; border-radius:3px; padding:1px 3px; }"
+        "QDoubleSpinBox:focus { border:1px solid #4488cc; }"
+        "QComboBox { background:#f8f9fc; color:#111111; border:1px solid #c0c8d8; border-radius:3px; padding:1px 4px; }"
+        "QCheckBox { color:#333333; }"
+        "QPushButton { background:#f0f4fc; color:#333333; border:1px solid #b0bcd8; border-radius:4px; padding:4px 10px; }"
+        "QPushButton:hover { background:#dce8f8; border:1px solid #88aadd; }"
+        "QScrollArea { border:none; background:#ffffff; }"
     );
     setMinimumWidth(240);
 
@@ -49,16 +52,16 @@ PropertiesPanel::PropertiesPanel(SceneGraph* scene, QWidget* parent)
 
     auto* header = new QLabel("  Properties", this);
     header->setFixedHeight(28);
-    header->setStyleSheet("background:#1e2128; color:#aaaaaa; font-size:11px; font-weight:bold;");
+    header->setStyleSheet("background:#e8ecf2; color:#333333; font-size:11px; font-weight:bold; border-bottom:1px solid #d0d0d0;");
     outerLayout->addWidget(header);
 
     auto* scroll = new QScrollArea(this);
     scroll->setWidgetResizable(true);
-    scroll->setStyleSheet("QScrollArea { background:#1a1c22; border:none; }");
+    scroll->setStyleSheet("QScrollArea { background:#ffffff; border:none; }");
     outerLayout->addWidget(scroll);
 
     auto* inner = new QWidget;
-    inner->setStyleSheet("background:#1a1c22;");
+    inner->setStyleSheet("background:#ffffff;");
     auto* vbox = new QVBoxLayout(inner);
     vbox->setContentsMargins(8, 8, 8, 8);
     vbox->setSpacing(4);

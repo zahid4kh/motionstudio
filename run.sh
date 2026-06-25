@@ -11,6 +11,7 @@ cmake -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -S "$SCRIPT_DIR" -DFETCHCONTENT
 echo "==> Building..."
 cmake --build "$BUILD_DIR" -j"$(nproc)"
 
+clear
 echo "==> Running MotionStudio..."
 LD_LIBRARY_PATH="$MUJOCO_LIB${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
     "$BUILD_DIR/MotionStudio" "$@"
