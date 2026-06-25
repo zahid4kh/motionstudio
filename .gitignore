@@ -1,3 +1,5 @@
 build/
 .cache/
 *.user
+packaging/staging_motionstd/
+packaging/*.deb

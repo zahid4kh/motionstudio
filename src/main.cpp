@@ -12,6 +12,7 @@ int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
     app.setApplicationName("MotionStudio");
     app.setApplicationVersion("0.1.0");
+    app.setDesktopFileName("motionstd");
 
     MainWindow window;
     window.show();
