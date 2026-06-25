@@ -13,6 +13,9 @@ class PropertiesPanel : public QWidget {
 public:
     explicit PropertiesPanel(SceneGraph* scene, QWidget* parent = nullptr);
 
+public slots:
+    void showPointCoords(const QString& name, const QVector3D& pos);
+
 private slots:
     void onSelectionChanged(int id);
     void onTransformEdited();
@@ -22,18 +25,36 @@ private slots:
     void removeJoint();
     void addMotor();
     void removeMotor();
+    void onRigidBodyEdited();
+    void addRigidBody();
+    void removeRigidBody();
+    void addCollision();
+    void removeCollision();
+    void onCollisionEdited();
+    void onCollisionTypeChanged(int idx);
+    void snapToFloor();
+    void addConveyorBelt();
+    void removeConveyorBelt();
+    void onConveyorEdited();
 
 private:
     void buildNameSection();
+    void buildPointSection();
     void buildTransformSection();
-    void buildConnectionsSection();   // "Add Joint to Parent" when no joint
+    void buildConnectionsSection();
     void buildJointSection();
     void buildMotorSection();
+    void buildPhysicsSection();
+    void buildConveyorSection();
 
     void loadObject(int id);
     void showJointGroup(bool show);
     void showMotorGroup(bool show);
     void showConnectionsGroup(bool show);
+    void updatePhysicsUI(int objectId);
+    void updateConveyorUI(int objectId);
+    void updateCollisionRows(int colTypeIdx);
+    void updateJointUnits(bool isRevolute);
 
     QDoubleSpinBox* makeSpin(float mn, float mx, float step, const QString& suffix = {});
 
@@ -41,17 +62,23 @@ private:
     int         m_currentId = -1;
     bool        m_loading   = false;
 
-    // Name / header
+    // Name card
     QLabel*         m_nameLabel  = nullptr;
     QLabel*         m_typeLabel  = nullptr;
 
+    // Selected point coordinates
+    QGroupBox*      m_pointGroup     = nullptr;
+    QLabel*         m_pointNameLabel = nullptr;
+    QLabel*         m_ptX = nullptr, *m_ptY = nullptr, *m_ptZ = nullptr;
+
     // Transform
-    QGroupBox*      m_transformGroup = nullptr;
+    QGroupBox*      m_transformGroup  = nullptr;
     QDoubleSpinBox* m_px = nullptr, *m_py = nullptr, *m_pz = nullptr;
     QDoubleSpinBox* m_rx = nullptr, *m_ry = nullptr, *m_rz = nullptr;
     QDoubleSpinBox* m_sx = nullptr, *m_sy = nullptr, *m_sz = nullptr;
+    QPushButton*    m_snapToFloorBtn  = nullptr;
 
-    // Connections (shown when parent exists but no joint)
+    // Connections
     QGroupBox*      m_connectionsGroup = nullptr;
     QPushButton*    m_addJointBtn      = nullptr;
 
@@ -62,11 +89,42 @@ private:
     QDoubleSpinBox* m_jLimitMin   = nullptr;
     QDoubleSpinBox* m_jLimitMax   = nullptr;
     QDoubleSpinBox* m_jInitAngle  = nullptr;
-    QPushButton*    m_addMotorBtn = nullptr;   // shown when joint has no motor
+    QLabel*         m_jInitLabel  = nullptr;
+    QPushButton*    m_addMotorBtn = nullptr;
 
     // Motor
     QGroupBox*      m_motorGroup  = nullptr;
     QDoubleSpinBox* m_mVel        = nullptr;
     QDoubleSpinBox* m_mTarget     = nullptr;
     QCheckBox*      m_mEnabled    = nullptr;
+
+    // Physics — rigid body
+    QGroupBox*      m_physicsGroup  = nullptr;
+    QPushButton*    m_rbAddBtn      = nullptr;
+    QWidget*        m_rbPropsWidget = nullptr;
+    QDoubleSpinBox* m_rbMass        = nullptr;
+    QCheckBox*      m_rbGravity     = nullptr;
+    QPushButton*    m_colAddBtn     = nullptr;
+    QPushButton*    m_rbRemBtn      = nullptr;
+
+    // Physics — collision body
+    QWidget*        m_colWidget     = nullptr;
+    QComboBox*      m_colType       = nullptr;
+    QWidget*        m_colBoxRow     = nullptr;
+    QDoubleSpinBox* m_cHW = nullptr, *m_cHH = nullptr, *m_cHD = nullptr;
+    QWidget*        m_colRadiusRow  = nullptr;
+    QDoubleSpinBox* m_cRadius       = nullptr;
+    QWidget*        m_colHeightRow  = nullptr;
+    QDoubleSpinBox* m_cHeight       = nullptr;
+    QDoubleSpinBox* m_cOffX = nullptr, *m_cOffY = nullptr, *m_cOffZ = nullptr;
+    QPushButton*    m_colRemBtn     = nullptr;
+
+    // Conveyor belt
+    QGroupBox*      m_conveyorGroup   = nullptr;
+    QPushButton*    m_cvAddBtn        = nullptr;
+    QWidget*        m_cvPropsWidget   = nullptr;
+    QDoubleSpinBox* m_cvVelocity      = nullptr;
+    QComboBox*      m_cvDir           = nullptr;
+    QCheckBox*      m_cvEnabled       = nullptr;
+    QPushButton*    m_cvRemBtn        = nullptr;
 };

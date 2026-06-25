@@ -1,5 +1,9 @@
 #include "SimulationEngine.h"
 #include <algorithm>
+#include <cmath>
+#include <QtMath>
+
+// ── Constructor / Destructor ─────────────────────────────────────────────────
 
 SimulationEngine::SimulationEngine(SceneGraph* scene, QObject* parent)
     : QObject(parent), m_scene(scene)
@@ -8,15 +12,39 @@ SimulationEngine::SimulationEngine(SceneGraph* scene, QObject* parent)
     connect(&m_timer, &QTimer::timeout, this, &SimulationEngine::tick);
 }
 
+SimulationEngine::~SimulationEngine() {
+    teardownMuJoCo();
+}
+
+// ── Public control ────────────────────────────────────────────────────────────
+
 void SimulationEngine::play() {
-    if(m_running) return;
+    if (m_running) return;
+
+    // Save initial state once (before first play of this session)
+    if (m_savedTransforms.empty()) {
+        for (auto& [id, obj] : m_scene->allObjects())
+            m_savedTransforms[id] = obj.transform;
+        for (auto& [jid, j] : m_scene->allJoints())
+            m_savedJointAngles[jid] = j.currentValue;
+    }
+
+#ifdef MUJOCO_ENABLED
+    // Switch to MuJoCo when any object has a rigid body
+    if (!m_scene->allRigidBodies().empty()) {
+        if (!buildMuJoCoModel()) {
+            return; // model build failed, stay stopped
+        }
+    }
+#endif
+
     m_running = true;
     m_timer.start();
     emit stateChanged(true);
 }
 
 void SimulationEngine::pause() {
-    if(!m_running) return;
+    if (!m_running) return;
     m_running = false;
     m_timer.stop();
     emit stateChanged(false);
@@ -24,46 +52,452 @@ void SimulationEngine::pause() {
 
 void SimulationEngine::reset() {
     pause();
+    teardownMuJoCo();
     m_elapsed = 0.0;
     m_motorDirs.clear();
-    resetJoints();
+
+    // Restore saved transforms and joint angles
+    for (auto& [id, t] : m_savedTransforms) {
+        if (SceneObject* obj = m_scene->getObject(id))
+            obj->transform = t;
+    }
+    for (auto& [jid, val] : m_savedJointAngles) {
+        if (Joint* j = m_scene->getJoint(jid))
+            j->currentValue = val;
+    }
+    m_savedTransforms.clear();
+    m_savedJointAngles.clear();
+
     emit timeUpdated(0.0);
+    emit stepped();
 }
 
+// ── Simulation tick ───────────────────────────────────────────────────────────
+
 void SimulationEngine::tick() {
+#ifdef MUJOCO_ENABLED
+    if (m_mjModel && m_mjData) {
+        setMuJoCoActuators();
+        // Run multiple sub-steps for stability (16ms frame / 2ms MuJoCo dt = 8 steps)
+        int nSteps = qMax(1, int(kDt / m_mjModel->opt.timestep + 0.5));
+        for (int i = 0; i < nSteps; i++)
+            mj_step(m_mjModel, m_mjData);
+        syncFromMuJoCo();
+    } else {
+        applyMotors(kDt);
+    }
+#else
     applyMotors(kDt);
+#endif
     m_elapsed += kDt;
     emit timeUpdated(m_elapsed);
     emit stepped();
 }
 
-void SimulationEngine::applyMotors(double dt) {
-    for(auto& [mid, motor] : m_scene->allMotors()){
-        if(!motor.enabled) continue;
-        Joint* joint = m_scene->getJoint(motor.jointId);
-        if(!joint) continue;
+// ── Kinematic engine ──────────────────────────────────────────────────────────
 
-        // Per-motor direction multiplier (default +1)
-        if(m_motorDirs.find(mid) == m_motorDirs.end())
+void SimulationEngine::applyMotors(double dt) {
+    for (auto& [mid, motor] : m_scene->allMotors()) {
+        if (!motor.enabled) continue;
+        Joint* joint = m_scene->getJoint(motor.jointId);
+        if (!joint) continue;
+
+        if (m_motorDirs.find(mid) == m_motorDirs.end())
             m_motorDirs[mid] = 1.0f;
 
         float step = motor.velocity * m_motorDirs[mid] * float(dt);
         joint->currentValue += step;
-        joint->currentValue  = std::clamp(joint->currentValue,
-                                           joint->limitMin,
-                                           joint->limitMax);
+        joint->currentValue  = std::clamp(joint->currentValue, joint->limitMin, joint->limitMax);
 
-        // Bounce at limits
-        if(joint->currentValue >= joint->limitMax ||
-           joint->currentValue <= joint->limitMin){
+        if (joint->currentValue >= joint->limitMax || joint->currentValue <= joint->limitMin)
             m_motorDirs[mid] *= -1.0f;
-        }
     }
 }
 
 void SimulationEngine::resetJoints() {
-    for(auto& [jid, _] : m_scene->allJoints()){
-        if(Joint* j = m_scene->getJoint(jid))
+    for (auto& [jid, _] : m_scene->allJoints()) {
+        if (Joint* j = m_scene->getJoint(jid))
             j->currentValue = j->initialAngle;
     }
 }
+
+// ── MuJoCo backend ────────────────────────────────────────────────────────────
+
+#ifdef MUJOCO_ENABLED
+
+static QVector3D quatToEulerXYZ(float w, float x, float y, float z) {
+    // Rotation matrix from quaternion
+    float r00 = 1-2*(y*y+z*z), r01 = 2*(x*y-w*z), r02 = 2*(x*z+w*y);
+    float r11 = 1-2*(x*x+z*z), r12 = 2*(y*z-w*x);
+    float r21 = 2*(y*z+w*x),   r22 = 1-2*(x*x+y*y);
+
+    // Extract XYZ Euler angles: R = Rx(a)*Ry(b)*Rz(c)
+    float b = asinf(std::clamp(r02, -1.0f, 1.0f));
+    float a, c;
+    if (fabsf(cosf(b)) > 1e-6f) {
+        a = atan2f(-r12, r22);
+        c = atan2f(-r01, r00);
+    } else {
+        a = atan2f(r21, r11);
+        c = 0.0f;
+    }
+    const float kR2D = 180.0f / float(M_PI);
+    return { a*kR2D, b*kR2D, c*kR2D };
+}
+
+static QString flt(float v) { return QString::number(double(v), 'f', 6); }
+
+void SimulationEngine::writeGeomXML(QString& xml, const SceneObject* obj,
+                                     const RigidBody* rb, const QString& pad) const {
+    bool hasColl = rb && rb->hasCollision;
+    QString massAttr = rb ? QString(" mass=\"%1\"").arg(flt(rb->mass))
+                          : QString(" mass=\"0.001\"");
+    // No-RigidBody bodies are static (no freejoint) and still need collision so other
+    // objects can rest on them (e.g. a conveyor belt platform).
+    QString noCol;
+
+    auto pos3 = [](QVector3D v) {
+        return QString(" pos=\"%1 %2 %3\"").arg(flt(v.x())).arg(flt(v.y())).arg(flt(v.z()));
+    };
+
+    if (hasColl) {
+        const auto& c = rb->collision;
+        QString posAttr = c.offset.isNull() ? QString() : pos3(c.offset);
+        switch (c.type) {
+            case CollisionType::Box:
+                xml += pad + QString("<geom type=\"box\" size=\"%1 %2 %3\"%4%5/>\n")
+                    .arg(flt(c.halfW)).arg(flt(c.halfH)).arg(flt(c.halfD))
+                    .arg(posAttr).arg(massAttr);
+                break;
+            case CollisionType::Cylinder:
+                xml += pad + QString("<geom type=\"cylinder\" size=\"%1 %2\" euler=\"-90 0 0\"%3%4/>\n")
+                    .arg(flt(c.radius)).arg(flt(c.height * 0.5f))
+                    .arg(posAttr).arg(massAttr);
+                break;
+            case CollisionType::Sphere:
+                xml += pad + QString("<geom type=\"sphere\" size=\"%1\"%2%3/>\n")
+                    .arg(flt(c.radius)).arg(posAttr).arg(massAttr);
+                break;
+            case CollisionType::Capsule:
+                xml += pad + QString("<geom type=\"capsule\" size=\"%1 %2\" euler=\"-90 0 0\"%3%4/>\n")
+                    .arg(flt(c.radius)).arg(flt(c.height * 0.5f))
+                    .arg(posAttr).arg(massAttr);
+                break;
+        }
+    } else {
+        // Use visual mesh dimensions (no explicit collision shape)
+        const auto& s = obj->transform.scale;
+        switch (obj->type) {
+            case PrimitiveType::Cube:
+                xml += pad + QString("<geom type=\"box\" size=\"%1 %2 %3\"%4%5/>\n")
+                    .arg(flt(s.x()*0.5f)).arg(flt(s.y()*0.5f)).arg(flt(s.z()*0.5f))
+                    .arg(massAttr).arg(noCol);
+                break;
+            case PrimitiveType::Cylinder:
+                // mesh: r=0.5*scale.x, half-h=0.5*scale.y
+                xml += pad + QString("<geom type=\"cylinder\" size=\"%1 %2\" euler=\"-90 0 0\"%3%4/>\n")
+                    .arg(flt(s.x()*0.5f)).arg(flt(s.y()*0.5f))
+                    .arg(massAttr).arg(noCol);
+                break;
+            case PrimitiveType::Sphere:
+                xml += pad + QString("<geom type=\"sphere\" size=\"%1\"%2%3/>\n")
+                    .arg(flt(s.x()*0.5f)).arg(massAttr).arg(noCol);
+                break;
+            case PrimitiveType::Capsule:
+                xml += pad + QString("<geom type=\"capsule\" size=\"%1 %2\" euler=\"-90 0 0\"%3%4/>\n")
+                    .arg(flt(s.x()*0.25f)).arg(flt(s.y()*0.25f))
+                    .arg(massAttr).arg(noCol);
+                break;
+            case PrimitiveType::Basket: {
+                // 5-wall basket: floor + 4 walls, each with 1/5 of the mass
+                float m5 = rb ? rb->mass / 5.0f : 0.001f / 5.0f;
+                QString ma5 = QString(" mass=\"%1\"").arg(flt(m5));
+                float sx = s.x(), sy = s.y(), sz = s.z();
+                // Floor
+                xml += pad + QString("<geom type=\"box\" size=\"%1 %2 %3\" pos=\"0 %4 0\"%5%6/>\n")
+                    .arg(flt(0.5f*sx)).arg(flt(0.025f*sy)).arg(flt(0.5f*sz))
+                    .arg(flt(-0.475f*sy)).arg(ma5).arg(noCol);
+                // Left wall
+                xml += pad + QString("<geom type=\"box\" size=\"%1 %2 %3\" pos=\"%4 %5 0\"%6%7/>\n")
+                    .arg(flt(0.025f*sx)).arg(flt(0.475f*sy)).arg(flt(0.5f*sz))
+                    .arg(flt(-0.475f*sx)).arg(flt(0.025f*sy)).arg(ma5).arg(noCol);
+                // Right wall
+                xml += pad + QString("<geom type=\"box\" size=\"%1 %2 %3\" pos=\"%4 %5 0\"%6%7/>\n")
+                    .arg(flt(0.025f*sx)).arg(flt(0.475f*sy)).arg(flt(0.5f*sz))
+                    .arg(flt(0.475f*sx)).arg(flt(0.025f*sy)).arg(ma5).arg(noCol);
+                // Front wall
+                xml += pad + QString("<geom type=\"box\" size=\"%1 %2 %3\" pos=\"0 %4 %5\"%6%7/>\n")
+                    .arg(flt(0.45f*sx)).arg(flt(0.475f*sy)).arg(flt(0.025f*sz))
+                    .arg(flt(0.025f*sy)).arg(flt(0.475f*sz)).arg(ma5).arg(noCol);
+                // Back wall
+                xml += pad + QString("<geom type=\"box\" size=\"%1 %2 %3\" pos=\"0 %4 %5\"%6%7/>\n")
+                    .arg(flt(0.45f*sx)).arg(flt(0.475f*sy)).arg(flt(0.025f*sz))
+                    .arg(flt(0.025f*sy)).arg(flt(-0.475f*sz)).arg(ma5).arg(noCol);
+                break;
+            }
+        }
+    }
+}
+
+void SimulationEngine::writeBodyXML(QString& xml, int oid, int indent) const {
+    const SceneObject* obj = m_scene->getObject(oid);
+    if (!obj) return;
+
+    const RigidBody* rb   = m_scene->getRigidBody(oid);
+    const Joint*     jnt  = m_scene->jointForChild(oid);
+    const auto&      t    = obj->transform;
+    QString          pad(indent * 2, ' ');
+
+    // Gravity compensation for bodies without a gravity-enabled RigidBody
+    QString gravComp = (!rb || !rb->gravityEnabled) ? " gravcomp=\"1\"" : "";
+
+    xml += pad + QString("<body name=\"body_%1\" pos=\"%2 %3 %4\"%5>\n")
+        .arg(oid).arg(flt(t.position.x())).arg(flt(t.position.y())).arg(flt(t.position.z()))
+        .arg(gravComp);
+
+    // Initial body euler rotation (only if non-zero)
+    if (t.rotation.x() != 0 || t.rotation.y() != 0 || t.rotation.z() != 0) {
+        // Re-open line — instead insert euler into the body tag
+        // Replace the last >\n with euler...>\n
+        QString eulTag = QString(" euler=\"%1 %2 %3\"")
+            .arg(flt(t.rotation.x())).arg(flt(t.rotation.y())).arg(flt(t.rotation.z()));
+        xml.replace(xml.lastIndexOf(">\n"), 2, eulTag + ">\n");
+    }
+
+    // Joint connecting this body to its parent (lives inside the child body in MJCF)
+    if (jnt) {
+        QString jType = (jnt->type == JointType::Revolute) ? "hinge" : "slide";
+        xml += pad + QString("  <joint name=\"joint_%1\" type=\"%2\" axis=\"%3 %4 %5\""
+                             " range=\"%6 %7\" damping=\"1.0\"/>\n")
+            .arg(jnt->id).arg(jType)
+            .arg(flt(jnt->axis.x())).arg(flt(jnt->axis.y())).arg(flt(jnt->axis.z()))
+            .arg(flt(jnt->limitMin)).arg(flt(jnt->limitMax));
+    } else if (obj->parentId == -1 && rb) {
+        // Root body with RigidBody: free joint so it can move dynamically
+        xml += pad + QString("  <freejoint name=\"free_%1\"/>\n").arg(oid);
+    }
+
+    writeGeomXML(xml, obj, rb, pad + "  ");
+
+    for (int childId : obj->childIds)
+        writeBodyXML(xml, childId, indent + 1);
+
+    xml += pad + "</body>\n";
+}
+
+QString SimulationEngine::buildMJCF() const {
+    QString xml;
+    xml += "<mujoco model=\"MotionStudio\">\n";
+    xml += "  <compiler autolimits=\"true\"/>\n";
+    // Y-up coordinate system: gravity in -Y
+    xml += "  <option gravity=\"0 -9.81 0\" timestep=\"0.002\"/>\n";
+    xml += "  <worldbody>\n";
+
+    // Floor plane at Y=0 (euler rotates MuJoCo's default Z-normal to +Y)
+    if (m_scene->floorEnabled())
+        xml += "    <geom name=\"floor\" type=\"plane\" size=\"20 20 0.1\""
+               " pos=\"0 0 0\" euler=\"-90 0 0\"/>\n";
+
+    for (int rootId : m_scene->rootObjects())
+        writeBodyXML(xml, rootId, 2);
+
+    xml += "  </worldbody>\n";
+    xml += "  <actuator>\n";
+
+    for (auto& [mid, motor] : m_scene->allMotors()) {
+        if (!motor.enabled) continue;
+        const Joint* j = m_scene->getJoint(motor.jointId);
+        if (!j) continue;
+        xml += QString("    <velocity name=\"motor_%1\" joint=\"joint_%2\" kv=\"100\"/>\n")
+            .arg(mid).arg(j->id);
+    }
+
+    xml += "  </actuator>\n";
+    xml += "</mujoco>\n";
+    return xml;
+}
+
+bool SimulationEngine::buildMuJoCoModel() {
+    teardownMuJoCo();
+
+    QString xml = buildMJCF();
+    QByteArray xmlBytes = xml.toUtf8();
+
+    char errBuf[2000] = {};
+    mjSpec* spec = mj_parseXMLString(xmlBytes.constData(), nullptr, errBuf, sizeof(errBuf));
+    if (!spec) {
+        qWarning() << "MuJoCo XML parse error:" << errBuf;
+        qWarning() << "MJCF was:\n" << xml;
+        return false;
+    }
+
+    m_mjModel = mj_compile(spec, nullptr);
+    mj_deleteSpec(spec);
+
+    if (!m_mjModel) {
+        qWarning() << "MuJoCo compile error";
+        return false;
+    }
+
+    m_mjData = mj_makeData(m_mjModel);
+    buildIdMappings();
+
+    // Set initial joint angles from scene (MuJoCo starts at ref=0 radians)
+    for (auto& [jid, qposadr] : m_jointQposAddr) {
+        const Joint* j = m_scene->getJoint(jid);
+        if (!j) continue;
+        double initVal = (j->type == JointType::Revolute)
+            ? j->initialAngle * M_PI / 180.0
+            : j->initialAngle;
+        m_mjData->qpos[qposadr] = initVal;
+    }
+
+    mj_forward(m_mjModel, m_mjData);
+    return true;
+}
+
+void SimulationEngine::buildIdMappings() {
+    m_jointQposAddr.clear();
+    m_bodyMjId.clear();
+    m_motorActuatorId.clear();
+    m_freeJointQposAddr.clear();
+    m_freeJointDofAddr.clear();
+    m_freeJointDofAddr.clear();
+
+    for (auto& [jid, _] : m_scene->allJoints()) {
+        QString name = QString("joint_%1").arg(jid);
+        int mjId = mj_name2id(m_mjModel, mjOBJ_JOINT, name.toStdString().c_str());
+        if (mjId >= 0)
+            m_jointQposAddr[jid] = m_mjModel->jnt_qposadr[mjId];
+    }
+
+    for (auto& [oid, _] : m_scene->allObjects()) {
+        QString name = QString("body_%1").arg(oid);
+        int mjId = mj_name2id(m_mjModel, mjOBJ_BODY, name.toStdString().c_str());
+        if (mjId >= 0)
+            m_bodyMjId[oid] = mjId;
+
+        // Free joint for root dynamic bodies
+        QString fname = QString("free_%1").arg(oid);
+        int fjId = mj_name2id(m_mjModel, mjOBJ_JOINT, fname.toStdString().c_str());
+        if (fjId >= 0) {
+            m_freeJointQposAddr[oid] = m_mjModel->jnt_qposadr[fjId];
+            m_freeJointDofAddr[oid]  = m_mjModel->jnt_dofadr[fjId];
+        }
+    }
+
+    for (auto& [mid, _] : m_scene->allMotors()) {
+        QString name = QString("motor_%1").arg(mid);
+        int mjId = mj_name2id(m_mjModel, mjOBJ_ACTUATOR, name.toStdString().c_str());
+        if (mjId >= 0)
+            m_motorActuatorId[mid] = mjId;
+    }
+}
+
+void SimulationEngine::applyConveyorBelts() {
+    for (auto& [beltId, belt] : m_scene->allConveyorBelts()) {
+        if (!belt.enabled) continue;
+        const SceneObject* beltObj = m_scene->getObject(beltId);
+        if (!beltObj) continue;
+
+        // Belt top surface in world space
+        QMatrix4x4 bw = m_scene->worldTransform(beltId);
+        QVector3D beltPos = QVector3D(bw.column(3));
+        float beltTopY   = beltPos.y() + beltObj->transform.scale.y() * 0.5f;
+        float beltHalfX  = beltObj->transform.scale.x() * 0.5f + 0.1f;
+        float beltHalfZ  = beltObj->transform.scale.z() * 0.5f + 0.1f;
+
+        // World-space push direction
+        QVector3D worldDir = (bw * QVector4D(belt.direction, 0.0f)).toVector3D().normalized();
+
+        for (auto& [oid, dofAdr] : m_freeJointDofAddr) {
+            const SceneObject* obj = m_scene->getObject(oid);
+            if (!obj) continue;
+
+            float bodyBottomY = obj->transform.position.y() - obj->transform.scale.y() * 0.5f;
+            float dy = bodyBottomY - beltTopY;
+
+            // Body must be resting on (or just above) the belt surface
+            if (dy > -0.08f && dy < 0.25f) {
+                float dx = fabsf(obj->transform.position.x() - beltPos.x());
+                float dz = fabsf(obj->transform.position.z() - beltPos.z());
+                if (dx < beltHalfX && dz < beltHalfZ) {
+                    // Set horizontal velocity components to belt velocity
+                    m_mjData->qvel[dofAdr + 0] = double(worldDir.x() * belt.velocity);
+                    m_mjData->qvel[dofAdr + 2] = double(worldDir.z() * belt.velocity);
+                }
+            }
+        }
+    }
+}
+
+void SimulationEngine::setMuJoCoActuators() {
+    applyConveyorBelts();
+
+    for (auto& [mid, actuatorId] : m_motorActuatorId) {
+        const Motor* motor = nullptr;
+        for (auto& [motId, m] : m_scene->allMotors()) {
+            if (motId == mid) { motor = &m; break; }
+        }
+        if (!motor || !motor->enabled) {
+            m_mjData->ctrl[actuatorId] = 0.0;
+            continue;
+        }
+
+        if (m_motorDirs.find(mid) == m_motorDirs.end())
+            m_motorDirs[mid] = 1.0f;
+
+        // Bounce at joint limits (mirror kinematic engine behaviour)
+        const Joint* j = m_scene->getJoint(motor->jointId);
+        if (j) {
+            bool atMax = j->currentValue >= j->limitMax;
+            bool atMin = j->currentValue <= j->limitMin;
+            if ((atMax && m_motorDirs[mid] > 0) || (atMin && m_motorDirs[mid] < 0))
+                m_motorDirs[mid] *= -1.0f;
+        }
+
+        double vel = motor->velocity * double(m_motorDirs[mid]);
+        if (j && j->type == JointType::Revolute)
+            vel *= M_PI / 180.0;  // deg/s → rad/s
+        m_mjData->ctrl[actuatorId] = vel;
+    }
+}
+
+void SimulationEngine::syncFromMuJoCo() {
+    // Sync regular joint angles from qpos
+    for (auto& [jid, qposadr] : m_jointQposAddr) {
+        Joint* j = m_scene->getJoint(jid);
+        if (!j) continue;
+        double raw = m_mjData->qpos[qposadr];
+        j->currentValue = (j->type == JointType::Revolute)
+            ? float(raw * 180.0 / M_PI)
+            : float(raw);
+    }
+
+    // Sync free-body world positions and orientations
+    for (auto& [oid, mjBId] : m_bodyMjId) {
+        SceneObject* obj = m_scene->getObject(oid);
+        if (!obj) continue;
+        if (obj->parentId != -1) continue;          // only root objects
+        if (!m_freeJointQposAddr.count(oid)) continue; // only freejoint bodies
+
+        const mjtNum* xp = m_mjData->xpos  + mjBId * 3;
+        const mjtNum* xq = m_mjData->xquat + mjBId * 4;
+
+        obj->transform.position = { float(xp[0]), float(xp[1]), float(xp[2]) };
+        obj->transform.rotation = quatToEulerXYZ(
+            float(xq[0]), float(xq[1]), float(xq[2]), float(xq[3]));
+    }
+}
+
+void SimulationEngine::teardownMuJoCo() {
+    if (m_mjData)  { mj_deleteData(m_mjData);   m_mjData  = nullptr; }
+    if (m_mjModel) { mj_deleteModel(m_mjModel); m_mjModel = nullptr; }
+    m_jointQposAddr.clear();
+    m_bodyMjId.clear();
+    m_motorActuatorId.clear();
+    m_freeJointQposAddr.clear();
+    m_freeJointDofAddr.clear();
+}
+
+#endif // MUJOCO_ENABLED

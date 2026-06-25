@@ -2,6 +2,8 @@
 #include "SceneObject.h"
 #include "Joint.h"
 #include "Motor.h"
+#include "RigidBody.h"
+#include "ConveyorBelt.h"
 #include <QObject>
 #include <QMatrix4x4>
 #include <unordered_map>
@@ -34,6 +36,22 @@ public:
     Motor*  getMotor(int id);
     const std::unordered_map<int, Motor>& allMotors() const { return m_motors; }
 
+    // Rigid bodies
+    void        addRigidBody(int objectId);
+    void        removeRigidBody(int objectId);
+    RigidBody*  getRigidBody(int objectId);
+    const std::unordered_map<int, RigidBody>& allRigidBodies() const { return m_rigidBodies; }
+
+    // Conveyor belts
+    void           addConveyorBelt(int objectId);
+    void           removeConveyorBelt(int objectId);
+    ConveyorBelt*  getConveyorBelt(int objectId);
+    const std::unordered_map<int, ConveyorBelt>& allConveyorBelts() const { return m_conveyorBelts; }
+
+    // Floor plane
+    bool floorEnabled() const { return m_floorEnabled; }
+    void setFloorEnabled(bool v);
+
     // Selection
     void selectObject(int id);
     void deselectAll();
@@ -52,13 +70,23 @@ signals:
     void selectionChanged(int id);
     void jointAdded(int id);
     void motorAdded(int id);
+    void rigidBodyAdded(int objectId);
+    void rigidBodyRemoved(int objectId);
+    void rigidBodyChanged(int objectId);
+    void conveyorBeltAdded(int objectId);
+    void conveyorBeltRemoved(int objectId);
+    void conveyorBeltChanged(int objectId);
+    void floorChanged(bool enabled);
     void sceneCleared();
 
 private:
-    std::unordered_map<int, SceneObject> m_objects;
-    std::unordered_map<int, Joint>       m_joints;
-    std::unordered_map<int, Motor>       m_motors;
-    std::vector<int>                     m_roots;
-    int  m_nextId    = 1;
-    int  m_selectedId = -1;
+    std::unordered_map<int, SceneObject>   m_objects;
+    std::unordered_map<int, Joint>         m_joints;
+    std::unordered_map<int, Motor>         m_motors;
+    std::unordered_map<int, RigidBody>     m_rigidBodies;
+    std::unordered_map<int, ConveyorBelt>  m_conveyorBelts;
+    std::vector<int>                       m_roots;
+    int  m_nextId      = 1;
+    int  m_selectedId  = -1;
+    bool m_floorEnabled = true;
 };

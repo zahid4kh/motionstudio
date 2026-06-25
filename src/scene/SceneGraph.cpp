@@ -54,6 +54,8 @@ void SceneGraph::removeObject(int id) {
 
     if (m_selectedId == id) m_selectedId = -1;
 
+    m_rigidBodies.erase(id);
+    m_conveyorBelts.erase(id);
     m_objects.erase(it);
     emit objectRemoved(id);
 }
@@ -172,10 +174,80 @@ QMatrix4x4 SceneGraph::worldTransform(int id) const {
     return worldTransform(obj->parentId) * jointT * local;
 }
 
+void SceneGraph::addRigidBody(int objectId) {
+    if (m_rigidBodies.count(objectId)) return;
+    RigidBody rb;
+    rb.objectId = objectId;
+    if (const SceneObject* obj = getObject(objectId)) {
+        auto& c = rb.collision;
+        switch (obj->type) {
+            case PrimitiveType::Cube:
+            case PrimitiveType::Basket:
+                c.type  = CollisionType::Box;
+                c.halfW = obj->transform.scale.x() / 2.0f;
+                c.halfH = obj->transform.scale.y() / 2.0f;
+                c.halfD = obj->transform.scale.z() / 2.0f;
+                break;
+            case PrimitiveType::Sphere:
+                c.type   = CollisionType::Sphere;
+                c.radius = obj->transform.scale.x() / 2.0f;
+                break;
+            case PrimitiveType::Cylinder:
+                c.type   = CollisionType::Cylinder;
+                c.radius = obj->transform.scale.x() / 2.0f;
+                c.height = obj->transform.scale.y();
+                break;
+            case PrimitiveType::Capsule:
+                c.type   = CollisionType::Capsule;
+                c.radius = obj->transform.scale.x() / 2.0f;
+                c.height = obj->transform.scale.y();
+                break;
+        }
+    }
+    m_rigidBodies[objectId] = rb;
+    emit rigidBodyAdded(objectId);
+}
+
+void SceneGraph::addConveyorBelt(int objectId) {
+    if (m_conveyorBelts.count(objectId)) return;
+    m_conveyorBelts[objectId] = ConveyorBelt{};
+    emit conveyorBeltAdded(objectId);
+}
+
+void SceneGraph::removeConveyorBelt(int objectId) {
+    if (!m_conveyorBelts.count(objectId)) return;
+    m_conveyorBelts.erase(objectId);
+    emit conveyorBeltRemoved(objectId);
+}
+
+ConveyorBelt* SceneGraph::getConveyorBelt(int objectId) {
+    auto it = m_conveyorBelts.find(objectId);
+    return it != m_conveyorBelts.end() ? &it->second : nullptr;
+}
+
+void SceneGraph::setFloorEnabled(bool v) {
+    if (m_floorEnabled == v) return;
+    m_floorEnabled = v;
+    emit floorChanged(v);
+}
+
+void SceneGraph::removeRigidBody(int objectId) {
+    if (!m_rigidBodies.count(objectId)) return;
+    m_rigidBodies.erase(objectId);
+    emit rigidBodyRemoved(objectId);
+}
+
+RigidBody* SceneGraph::getRigidBody(int objectId) {
+    auto it = m_rigidBodies.find(objectId);
+    return it != m_rigidBodies.end() ? &it->second : nullptr;
+}
+
 void SceneGraph::clear() {
     m_objects.clear();
     m_joints.clear();
     m_motors.clear();
+    m_rigidBodies.clear();
+    m_conveyorBelts.clear();
     m_roots.clear();
     m_selectedId = -1;
     m_nextId     = 1;

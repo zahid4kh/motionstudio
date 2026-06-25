@@ -148,6 +148,7 @@ void MainWindow::buildToolbar() {
     connect(mkBtn(tb,"+ Cylinder","Add Cylinder\nAdded as child of selection"), &QAction::triggered, this, [this]{ addObject(PrimitiveType::Cylinder); });
     connect(mkBtn(tb,"+ Sphere",  "Add Sphere\nAdded as child of selection"),   &QAction::triggered, this, [this]{ addObject(PrimitiveType::Sphere);   });
     connect(mkBtn(tb,"+ Capsule", "Add Capsule\nAdded as child of selection"),  &QAction::triggered, this, [this]{ addObject(PrimitiveType::Capsule);  });
+    connect(mkBtn(tb,"+ Basket",  "Add Basket\nOpen-top container — add as root to drop objects into"), &QAction::triggered, this, [this]{ addObject(PrimitiveType::Basket);  });
     tb->addSeparator();
 
     // ── Assembly ──
@@ -202,6 +203,9 @@ void MainWindow::buildDocks() {
     };
     mkDock("Hierarchy",  m_hierarchy,  Qt::LeftDockWidgetArea);
     mkDock("Properties", m_properties, Qt::RightDockWidgetArea);
+
+    connect(m_viewport, &Viewport::keyPointSelected,
+            m_properties, &PropertiesPanel::showPointCoords);
 }
 
 // ── Status bar ────────────────────────────────────────────────────────────────
@@ -295,7 +299,7 @@ void MainWindow::saveProjectAs() {
 // ── Object actions ────────────────────────────────────────────────────────────
 
 void MainWindow::addObject(PrimitiveType type) {
-    static const char* names[] = {"Cube","Cylinder","Sphere","Capsule"};
+    static const char* names[] = {"Cube","Cylinder","Sphere","Capsule","Basket"};
     int parentId = m_scene->selectedObjectId();
     int id = m_scene->addObject(names[int(type)], type, parentId == -1 ? -1 : parentId);
     if(parentId == -1){

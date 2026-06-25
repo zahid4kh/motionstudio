@@ -31,6 +31,11 @@ void Camera::reset() {
     m_elevation = 30.0f;
 }
 
+void Camera::setView(float az, float el) {
+    m_azimuth   = az;
+    m_elevation = std::clamp(el, -89.0f, 89.0f);
+}
+
 QVector3D Camera::position() const {
     float el = qDegreesToRadians(m_elevation);
     float az = qDegreesToRadians(m_azimuth);

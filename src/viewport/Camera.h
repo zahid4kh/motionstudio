@@ -10,6 +10,7 @@ public:
     void pan(float deltaX, float deltaY);
     void zoom(float delta);
     void reset();
+    void setView(float azimuth, float elevation);
 
     QMatrix4x4 viewMatrix()                   const;
     QMatrix4x4 projectionMatrix(float aspect) const;

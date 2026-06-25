@@ -3,7 +3,7 @@
 #include <QVector3D>
 #include <vector>
 
-enum class PrimitiveType { Cube, Cylinder, Sphere, Capsule };
+enum class PrimitiveType { Cube, Cylinder, Sphere, Capsule, Basket };
 
 struct Transform {
     QVector3D position{0.0f, 0.0f, 0.0f};

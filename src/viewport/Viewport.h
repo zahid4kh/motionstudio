@@ -3,7 +3,9 @@
 #include <QOpenGLFunctions_3_3_Core>
 #include <QOpenGLShaderProgram>
 #include <QPainter>
+#include <QPushButton>
 #include <QPoint>
+#include <vector>
 #include "Camera.h"
 #include "../scene/SceneGraph.h"
 
@@ -21,6 +23,9 @@ public:
 
     Camera& camera() { return m_camera; }
 
+signals:
+    void keyPointSelected(const QString& name, const QVector3D& worldPos);
+
 protected:
     void initializeGL()          override;
     void resizeGL(int w, int h)  override;
@@ -31,15 +36,20 @@ protected:
     void wheelEvent       (QWheelEvent*)  override;
 
 private:
+    struct KeyPoint { QString name; QVector3D localPos; };
+    static std::vector<KeyPoint> keyPointsFor(PrimitiveType t);
+
     void buildShaders();
     void buildMeshes();
     void buildGrid();
     void buildAxisGizmo();
+    void buildWireResources();
 
     MeshData makeCube();
     MeshData makeCylinder(int segs = 20);
     MeshData makeSphere  (int rings = 16, int sectors = 24);
     MeshData makeCapsule (int rings = 8,  int sectors = 20);
+    MeshData makeBasket  ();
 
     void uploadMesh(MeshData& m, const std::vector<float>& v);
     void drawMesh (const MeshData& m);
@@ -48,6 +58,11 @@ private:
     void drawAxisGizmo();
     void drawAxisLabels(QPainter& p);
     void drawKeyHints  (QPainter& p);
+    void drawPhysicsOverlays();
+    void drawKeyPoints (QPainter& p);
+    void drawWireLines(const std::vector<float>& verts, const QVector3D& color,
+                       const QMatrix4x4& model, float alpha = 1.0f);
+    void repositionOverlays();
 
     void tryPickObject(int x, int y);
     void updateHover  (int x, int y);
@@ -58,11 +73,20 @@ private:
     Camera                 m_camera;
     QOpenGLShaderProgram*  m_objShader  = nullptr;
     QOpenGLShaderProgram*  m_gridShader = nullptr;
+    QOpenGLShaderProgram*  m_wireShader = nullptr;
 
-    MeshData m_cube, m_cylinder, m_sphere, m_capsule;
+    MeshData m_cube, m_cylinder, m_sphere, m_capsule, m_basket;
     GLuint   m_gridVao = 0, m_gridVbo = 0;
     GLuint   m_axisVao = 0, m_axisVbo = 0;
+    GLuint   m_wireVao = 0, m_wireVbo = 0;
+    GLuint   m_floorVao = 0, m_floorVbo = 0;
     int      m_gridLines = 0;
+
+    // Overlay view-snap + floor buttons
+    QPushButton* m_btnFront  = nullptr;
+    QPushButton* m_btnTop    = nullptr;
+    QPushButton* m_btnSide   = nullptr;
+    QPushButton* m_btnFloor  = nullptr;
 
     // Gizmo: set in drawAxisGizmo(), read in drawAxisLabels()
     QMatrix4x4 m_gizmoView, m_gizmoProj;
@@ -70,7 +94,20 @@ private:
     static constexpr int kGizmoMargin = 14;
 
     int              m_hoveredId = -1;
+    int              m_nearKeyPointIdx = -1;  // index into keyPointsFor(hovered obj type)
     QPoint           m_lastMouse;
     Qt::MouseButton  m_dragBtn = Qt::NoButton;
     int              m_vpW = 1, m_vpH = 1;
+
+    // Translate gizmo
+    int       m_gizmoHoveredAxis  = -1;   // 0=X, 1=Y, 2=Z
+    int       m_gizmoDragAxis     = -1;
+    float     m_gizmoDragStartT   = 0.f;
+    QVector3D m_gizmoDragStartPos;        // local position at drag start
+    QVector3D m_gizmoDragWorldCenter;     // world center at drag start (fixed reference)
+
+    void  drawTranslateGizmo();
+    int   hitTestGizmoAxis(int mx, int my) const;
+    float projectOntoAxis(int axis, const QVector3D& center, int mx, int my) const;
+    float gizmoArrowLength(int objectId) const;
 };
