@@ -42,6 +42,22 @@ QDoubleSpinBox* PropertiesPanel::makeSpin(float mn, float mx, float step, const 
     return s;
 }
 
+// Length-quantity spinbox: value is always kept in metres internally, but
+// its range/step/suffix are rescaled for the active LengthUnit (see onUnitChanged).
+QDoubleSpinBox* PropertiesPanel::makeLengthSpin(float mn, float mx, float step, const QString& baseSuffix) {
+    auto* s = makeSpin(mn, mx, step, baseSuffix);
+    m_lengthFields.push_back({s, mn, mx, step, baseSuffix});
+    return s;
+}
+
+// Only " m" and " m/s" suffixes appear on length fields today.
+static QString scaledLengthSuffix(const QString& baseSuffix, bool millimeters) {
+    if (!millimeters) return baseSuffix;
+    if (baseSuffix == " m")   return " mm";
+    if (baseSuffix == " m/s") return " mm/s";
+    return baseSuffix;
+}
+
 // Labeled XYZ row with color-coded X/Y/Z chips.
 // Label column is 66px to accommodate "Dimensions".
 static QHBoxLayout* xyzRow(const QString& label,
@@ -92,11 +108,25 @@ PropertiesPanel::PropertiesPanel(SceneGraph* scene, QWidget* parent)
     outer->setContentsMargins(0, 0, 0, 0);
     outer->setSpacing(0);
 
-    auto* hdr = new QLabel("  Properties", this);
-    hdr->setFixedHeight(28);
-    hdr->setStyleSheet("background:#e8ecf2; color:#333; font-size:11px; font-weight:bold;"
-                       "border-bottom:1px solid #d0d0d0;");
-    outer->addWidget(hdr);
+    auto* hdrRow = new QWidget(this);
+    hdrRow->setFixedHeight(28);
+    hdrRow->setStyleSheet("background:#e8ecf2; border-bottom:1px solid #d0d0d0;");
+    auto* hdrLayout = new QHBoxLayout(hdrRow);
+    hdrLayout->setContentsMargins(6, 0, 6, 0);
+
+    auto* hdr = new QLabel("Properties", hdrRow);
+    hdr->setStyleSheet("color:#333; font-size:11px; font-weight:bold; background:transparent; border:none;");
+    hdrLayout->addWidget(hdr);
+    hdrLayout->addStretch();
+
+    m_unitCombo = new QComboBox(hdrRow);
+    m_unitCombo->addItems({"m", "mm"});
+    m_unitCombo->setToolTip("Length display unit (values are still stored in metres)");
+    m_unitCombo->setFixedWidth(56);
+    hdrLayout->addWidget(m_unitCombo);
+    connect(m_unitCombo, &QComboBox::currentIndexChanged, this, &PropertiesPanel::onUnitChanged);
+
+    outer->addWidget(hdrRow);
 
     auto* scroll = new QScrollArea(this);
     scroll->setWidgetResizable(true);
@@ -199,11 +229,17 @@ void PropertiesPanel::buildPointSection() {
 }
 
 void PropertiesPanel::showPointCoords(const QString& name, const QVector3D& pos) {
+    m_lastPointName = name;
+    m_lastPointPos  = pos;
+
     m_pointGroup->show();
     m_pointNameLabel->setText(name);
-    m_ptX->setText(QString("X: %1 m").arg(double(pos.x()), 0, 'f', 4));
-    m_ptY->setText(QString("Y: %1 m").arg(double(pos.y()), 0, 'f', 4));
-    m_ptZ->setText(QString("Z: %1 m").arg(double(pos.z()), 0, 'f', 4));
+    const double f    = unitFactor();
+    const QString unit = m_lengthUnit == LengthUnit::Millimeters ? "mm" : "m";
+    const int decimals  = m_lengthUnit == LengthUnit::Millimeters ? 1 : 4;
+    m_ptX->setText(QString("X: %1 %2").arg(double(pos.x()) * f, 0, 'f', decimals).arg(unit));
+    m_ptY->setText(QString("Y: %1 %2").arg(double(pos.y()) * f, 0, 'f', decimals).arg(unit));
+    m_ptZ->setText(QString("Z: %1 %2").arg(double(pos.z()) * f, 0, 'f', decimals).arg(unit));
 }
 
 void PropertiesPanel::buildTransformSection() {
@@ -211,20 +247,20 @@ void PropertiesPanel::buildTransformSection() {
     auto* vb = new QVBoxLayout(m_transformGroup);
     vb->setSpacing(5);
 
-    // Position in metres
-    m_px = makeSpin(-1e4, 1e4, 0.01f, " m");
-    m_py = makeSpin(-1e4, 1e4, 0.01f, " m");
-    m_pz = makeSpin(-1e4, 1e4, 0.01f, " m");
+    // Position — stored in metres, displayed in the active unit
+    m_px = makeLengthSpin(-1e4, 1e4, 0.01f);
+    m_py = makeLengthSpin(-1e4, 1e4, 0.01f);
+    m_pz = makeLengthSpin(-1e4, 1e4, 0.01f);
 
     // Rotation in degrees
     m_rx = makeSpin(-360, 360, 1.0f, "°");
     m_ry = makeSpin(-360, 360, 1.0f, "°");
     m_rz = makeSpin(-360, 360, 1.0f, "°");
 
-    // Dimensions in metres (scale × unit mesh = actual size)
-    m_sx = makeSpin(0.001f, 1000, 0.01f, " m");
-    m_sy = makeSpin(0.001f, 1000, 0.01f, " m");
-    m_sz = makeSpin(0.001f, 1000, 0.01f, " m");
+    // Dimensions — stored in metres (scale × unit mesh = actual size)
+    m_sx = makeLengthSpin(0.001f, 1000, 0.01f);
+    m_sy = makeLengthSpin(0.001f, 1000, 0.01f);
+    m_sz = makeLengthSpin(0.001f, 1000, 0.01f);
     m_sx->setValue(1); m_sy->setValue(1); m_sz->setValue(1);
 
     vb->addLayout(xyzRow("Position",   m_px, m_py, m_pz));
@@ -399,9 +435,9 @@ void PropertiesPanel::buildPhysicsSection() {
         auto* bvb = new QVBoxLayout(m_colBoxRow);
         bvb->setContentsMargins(0, 0, 0, 0);
         bvb->setSpacing(3);
-        m_cHW = makeSpin(0.001f, 1e4f, 0.01f, " m"); m_cHW->setValue(0.5f);
-        m_cHH = makeSpin(0.001f, 1e4f, 0.01f, " m"); m_cHH->setValue(0.5f);
-        m_cHD = makeSpin(0.001f, 1e4f, 0.01f, " m"); m_cHD->setValue(0.5f);
+        m_cHW = makeLengthSpin(0.001f, 1e4f, 0.01f); m_cHW->setValue(0.5f);
+        m_cHH = makeLengthSpin(0.001f, 1e4f, 0.01f); m_cHH->setValue(0.5f);
+        m_cHD = makeLengthSpin(0.001f, 1e4f, 0.01f); m_cHD->setValue(0.5f);
         labelRow(bvb, "Half W", m_cHW);
         labelRow(bvb, "Half H", m_cHH);
         labelRow(bvb, "Half D", m_cHD);
@@ -413,7 +449,7 @@ void PropertiesPanel::buildPhysicsSection() {
     {
         auto* rvb = new QVBoxLayout(m_colRadiusRow);
         rvb->setContentsMargins(0, 0, 0, 0);
-        m_cRadius = makeSpin(0.001f, 1e4f, 0.01f, " m"); m_cRadius->setValue(0.5f);
+        m_cRadius = makeLengthSpin(0.001f, 1e4f, 0.01f); m_cRadius->setValue(0.5f);
         labelRow(rvb, "Radius", m_cRadius);
     }
     colvb->addWidget(m_colRadiusRow);
@@ -423,15 +459,15 @@ void PropertiesPanel::buildPhysicsSection() {
     {
         auto* hvb = new QVBoxLayout(m_colHeightRow);
         hvb->setContentsMargins(0, 0, 0, 0);
-        m_cHeight = makeSpin(0.001f, 1e4f, 0.01f, " m"); m_cHeight->setValue(1.0f);
+        m_cHeight = makeLengthSpin(0.001f, 1e4f, 0.01f); m_cHeight->setValue(1.0f);
         labelRow(hvb, "Height", m_cHeight);
     }
     colvb->addWidget(m_colHeightRow);
 
     // Offset XYZ
-    m_cOffX = makeSpin(-1e4f, 1e4f, 0.01f, " m");
-    m_cOffY = makeSpin(-1e4f, 1e4f, 0.01f, " m");
-    m_cOffZ = makeSpin(-1e4f, 1e4f, 0.01f, " m");
+    m_cOffX = makeLengthSpin(-1e4f, 1e4f, 0.01f);
+    m_cOffY = makeLengthSpin(-1e4f, 1e4f, 0.01f);
+    m_cOffZ = makeLengthSpin(-1e4f, 1e4f, 0.01f);
     colvb->addLayout(xyzRow("Offset", m_cOffX, m_cOffY, m_cOffZ));
 
     m_colRemBtn = new QPushButton("Remove Collision Body");
@@ -478,7 +514,7 @@ void PropertiesPanel::buildConveyorSection() {
     pvb->setContentsMargins(0, 0, 0, 0);
     pvb->setSpacing(5);
 
-    m_cvVelocity = makeSpin(-100.f, 100.f, 0.1f, " m/s");
+    m_cvVelocity = makeLengthSpin(-100.f, 100.f, 0.1f, " m/s");
     m_cvVelocity->setValue(1.0f);
     labelRow(pvb, "Velocity", m_cvVelocity);
 
@@ -525,15 +561,32 @@ void PropertiesPanel::updateCollisionRows(int idx) {
 }
 
 void PropertiesPanel::updateJointUnits(bool isRevolute) {
-    QString limSfx = isRevolute ? "°"    : " m";
-    QString velSfx = isRevolute ? "°/s"  : " m/s";
-    QString tgtSfx = isRevolute ? "°"    : " m";
+    const bool mm = !isRevolute && m_lengthUnit == LengthUnit::Millimeters;
+    const double f = isRevolute ? 1.0 : unitFactor();
+
+    QString limSfx = isRevolute ? "°"   : scaledLengthSuffix(" m", mm);
+    QString velSfx = isRevolute ? "°/s" : scaledLengthSuffix(" m/s", mm);
+    QString tgtSfx = isRevolute ? "°"   : scaledLengthSuffix(" m", mm);
     m_jLimitMin->setSuffix(limSfx);
     m_jLimitMax->setSuffix(limSfx);
     m_jInitAngle->setSuffix(limSfx);
     m_jInitLabel->setText(isRevolute ? "Init angle" : "Init pos");
     m_mVel->setSuffix(velSfx);
     m_mTarget->setSuffix(tgtSfx);
+
+    // Prismatic limits/velocity are length quantities — rescale range for the active unit.
+    // Revolute (degree) ranges are unaffected since f == 1.0 in that case.
+    m_jLimitMin->setRange(-1e4 * f, 1e4 * f);
+    m_jLimitMax->setRange(-1e4 * f, 1e4 * f);
+    m_jInitAngle->setRange(-1e4 * f, 1e4 * f);
+    m_mVel->setRange(-9999 * f, 9999 * f);
+    m_mTarget->setRange(-9999 * f, 9999 * f);
+
+    m_jLimitMin->setSingleStep(1.0 * f);
+    m_jLimitMax->setSingleStep(1.0 * f);
+    m_jInitAngle->setSingleStep(1.0 * f);
+    m_mVel->setSingleStep(5.0 * f);
+    m_mTarget->setSingleStep(1.0 * f);
 }
 
 void PropertiesPanel::updatePhysicsUI(int objectId) {
@@ -557,14 +610,15 @@ void PropertiesPanel::updatePhysicsUI(int objectId) {
             m_colAddBtn->hide();
             m_colWidget->show();
             m_colType->setCurrentIndex(int(rb->collision.type));
-            m_cHW->setValue(rb->collision.halfW);
-            m_cHH->setValue(rb->collision.halfH);
-            m_cHD->setValue(rb->collision.halfD);
-            m_cRadius->setValue(rb->collision.radius);
-            m_cHeight->setValue(rb->collision.height);
-            m_cOffX->setValue(rb->collision.offset.x());
-            m_cOffY->setValue(rb->collision.offset.y());
-            m_cOffZ->setValue(rb->collision.offset.z());
+            const double f = unitFactor();
+            m_cHW->setValue(rb->collision.halfW * f);
+            m_cHH->setValue(rb->collision.halfH * f);
+            m_cHD->setValue(rb->collision.halfD * f);
+            m_cRadius->setValue(rb->collision.radius * f);
+            m_cHeight->setValue(rb->collision.height * f);
+            m_cOffX->setValue(rb->collision.offset.x() * f);
+            m_cOffY->setValue(rb->collision.offset.y() * f);
+            m_cOffZ->setValue(rb->collision.offset.z() * f);
             updateCollisionRows(int(rb->collision.type));
         } else {
             m_colAddBtn->show();
@@ -581,7 +635,7 @@ void PropertiesPanel::updateConveyorUI(int objectId) {
     } else {
         m_cvAddBtn->hide();
         m_cvPropsWidget->show();
-        m_cvVelocity->setValue(belt->velocity);
+        m_cvVelocity->setValue(belt->velocity * unitFactor());
         // Map direction to combo index
         QVector3D d = belt->direction;
         int idx = 0;
@@ -628,15 +682,16 @@ void PropertiesPanel::loadObject(int id) {
     m_typeLabel->setText(QString("%1  —  %2").arg(typeNames[int(obj->type)], parentInfo));
 
     // Transform
-    m_px->setValue(obj->transform.position.x());
-    m_py->setValue(obj->transform.position.y());
-    m_pz->setValue(obj->transform.position.z());
+    const double lf = unitFactor();
+    m_px->setValue(obj->transform.position.x() * lf);
+    m_py->setValue(obj->transform.position.y() * lf);
+    m_pz->setValue(obj->transform.position.z() * lf);
     m_rx->setValue(obj->transform.rotation.x());
     m_ry->setValue(obj->transform.rotation.y());
     m_rz->setValue(obj->transform.rotation.z());
-    m_sx->setValue(obj->transform.scale.x());
-    m_sy->setValue(obj->transform.scale.y());
-    m_sz->setValue(obj->transform.scale.z());
+    m_sx->setValue(obj->transform.scale.x() * lf);
+    m_sy->setValue(obj->transform.scale.y() * lf);
+    m_sz->setValue(obj->transform.scale.z() * lf);
 
     // Joint / Motor
     Joint* joint = m_scene->jointForChild(id);
@@ -647,13 +702,14 @@ void PropertiesPanel::loadObject(int id) {
         bool isRevolute = (joint->type == JointType::Revolute);
         updateJointUnits(isRevolute);
 
+        const double jf = isRevolute ? 1.0 : unitFactor();
         m_jType->setCurrentIndex(isRevolute ? 0 : 1);
         m_jAxisX->setValue(joint->axis.x());
         m_jAxisY->setValue(joint->axis.y());
         m_jAxisZ->setValue(joint->axis.z());
-        m_jLimitMin->setValue(joint->limitMin);
-        m_jLimitMax->setValue(joint->limitMax);
-        m_jInitAngle->setValue(joint->initialAngle);
+        m_jLimitMin->setValue(joint->limitMin * jf);
+        m_jLimitMax->setValue(joint->limitMax * jf);
+        m_jInitAngle->setValue(joint->initialAngle * jf);
         showJointGroup(true);
 
         Motor* motor = nullptr;
@@ -662,8 +718,8 @@ void PropertiesPanel::loadObject(int id) {
         }
         m_addMotorBtn->setVisible(!motor);
         if (motor) {
-            m_mVel->setValue(motor->velocity);
-            m_mTarget->setValue(motor->targetPosition);
+            m_mVel->setValue(motor->velocity * jf);
+            m_mTarget->setValue(motor->targetPosition * jf);
             m_mEnabled->setChecked(motor->enabled);
             showMotorGroup(true);
         } else {
@@ -687,9 +743,10 @@ void PropertiesPanel::onTransformEdited() {
     if (m_loading) return;
     SceneObject* obj = m_scene->getObject(m_currentId);
     if (!obj) return;
-    obj->transform.position = { float(m_px->value()), float(m_py->value()), float(m_pz->value()) };
+    const double f = unitFactor();
+    obj->transform.position = { float(m_px->value() / f), float(m_py->value() / f), float(m_pz->value() / f) };
     obj->transform.rotation = { float(m_rx->value()), float(m_ry->value()), float(m_rz->value()) };
-    obj->transform.scale    = { float(m_sx->value()), float(m_sy->value()), float(m_sz->value()) };
+    obj->transform.scale    = { float(m_sx->value() / f), float(m_sy->value() / f), float(m_sz->value() / f) };
     emit m_scene->objectChanged(m_currentId);
 }
 
@@ -697,11 +754,12 @@ void PropertiesPanel::onJointEdited() {
     if (m_loading) return;
     Joint* j = m_scene->jointForChild(m_currentId);
     if (!j) return;
-    j->type         = m_jType->currentIndex() == 0 ? JointType::Revolute : JointType::Prismatic;
+    j->type = m_jType->currentIndex() == 0 ? JointType::Revolute : JointType::Prismatic;
+    const double f = (j->type == JointType::Revolute) ? 1.0 : unitFactor();
     j->axis         = { float(m_jAxisX->value()), float(m_jAxisY->value()), float(m_jAxisZ->value()) };
-    j->limitMin     = float(m_jLimitMin->value());
-    j->limitMax     = float(m_jLimitMax->value());
-    j->initialAngle = float(m_jInitAngle->value());
+    j->limitMin     = float(m_jLimitMin->value() / f);
+    j->limitMax     = float(m_jLimitMax->value() / f);
+    j->initialAngle = float(m_jInitAngle->value() / f);
     updateJointUnits(j->type == JointType::Revolute);
 }
 
@@ -709,10 +767,11 @@ void PropertiesPanel::onMotorEdited() {
     if (m_loading) return;
     Joint* j = m_scene->jointForChild(m_currentId);
     if (!j) return;
+    const double f = (j->type == JointType::Revolute) ? 1.0 : unitFactor();
     for (auto& [mid, motor] : m_scene->allMotors()) {
         if (motor.jointId == j->id) {
-            const_cast<Motor&>(motor).velocity       = float(m_mVel->value());
-            const_cast<Motor&>(motor).targetPosition = float(m_mTarget->value());
+            const_cast<Motor&>(motor).velocity       = float(m_mVel->value() / f);
+            const_cast<Motor&>(motor).targetPosition = float(m_mTarget->value() / f);
             const_cast<Motor&>(motor).enabled        = m_mEnabled->isChecked();
             return;
         }
@@ -737,14 +796,15 @@ void PropertiesPanel::onCollisionEdited() {
     if (m_loading) return;
     RigidBody* rb = m_scene->getRigidBody(m_currentId);
     if (!rb || !rb->hasCollision) return;
+    const double f = unitFactor();
     auto& c  = rb->collision;
     c.type   = CollisionType(m_colType->currentIndex());
-    c.halfW  = float(m_cHW->value());
-    c.halfH  = float(m_cHH->value());
-    c.halfD  = float(m_cHD->value());
-    c.radius = float(m_cRadius->value());
-    c.height = float(m_cHeight->value());
-    c.offset = { float(m_cOffX->value()), float(m_cOffY->value()), float(m_cOffZ->value()) };
+    c.halfW  = float(m_cHW->value() / f);
+    c.halfH  = float(m_cHH->value() / f);
+    c.halfD  = float(m_cHD->value() / f);
+    c.radius = float(m_cRadius->value() / f);
+    c.height = float(m_cHeight->value() / f);
+    c.offset = { float(m_cOffX->value() / f), float(m_cOffY->value() / f), float(m_cOffZ->value() / f) };
 }
 
 // ── Joint / Motor CRUD ────────────────────────────────────────────────────────
@@ -857,7 +917,7 @@ void PropertiesPanel::onConveyorEdited() {
     if (m_loading) return;
     ConveyorBelt* belt = m_scene->getConveyorBelt(m_currentId);
     if (!belt) return;
-    belt->velocity = float(m_cvVelocity->value());
+    belt->velocity = float(m_cvVelocity->value() / unitFactor());
     belt->enabled  = m_cvEnabled->isChecked();
     static const QVector3D kDirs[] = {{1,0,0},{-1,0,0},{0,0,1},{0,0,-1}};
     belt->direction = kDirs[m_cvDir->currentIndex()];
@@ -872,7 +932,30 @@ void PropertiesPanel::snapToFloor() {
     float newY = obj->transform.scale.y() * 0.5f;
     m_loading = true;
     obj->transform.position.setY(newY);
-    m_py->setValue(newY);
+    m_py->setValue(newY * unitFactor());
     m_loading = false;
     emit m_scene->objectChanged(m_currentId);
+}
+
+// ── Units ─────────────────────────────────────────────────────────────────────
+
+void PropertiesPanel::onUnitChanged(int idx) {
+    m_lengthUnit = (idx == 1) ? LengthUnit::Millimeters : LengthUnit::Meters;
+    const bool mm = m_lengthUnit == LengthUnit::Millimeters;
+    const double f = unitFactor();
+
+    m_loading = true;
+    for (auto& lf : m_lengthFields) {
+        lf.spin->setRange(lf.baseMin * f, lf.baseMax * f);
+        lf.spin->setSingleStep(lf.baseStep * f);
+        lf.spin->setSuffix(scaledLengthSuffix(lf.baseSuffix, mm));
+    }
+    m_loading = false;
+
+    // Refresh currently displayed values (transform, joint/motor, physics, conveyor)
+    // into the newly selected unit.
+    if (m_currentId != -1) loadObject(m_currentId);
+
+    // Re-render the last picked point, if any, in the new unit.
+    if (m_pointGroup->isVisible()) showPointCoords(m_lastPointName, m_lastPointPos);
 }

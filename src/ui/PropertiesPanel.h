@@ -6,7 +6,10 @@
 #include <QCheckBox>
 #include <QLabel>
 #include <QPushButton>
+#include <vector>
 #include "../scene/SceneGraph.h"
+
+enum class LengthUnit { Meters, Millimeters };
 
 class PropertiesPanel : public QWidget {
     Q_OBJECT
@@ -36,6 +39,7 @@ private slots:
     void addConveyorBelt();
     void removeConveyorBelt();
     void onConveyorEdited();
+    void onUnitChanged(int idx);
 
 private:
     void buildNameSection();
@@ -57,10 +61,26 @@ private:
     void updateJointUnits(bool isRevolute);
 
     QDoubleSpinBox* makeSpin(float mn, float mx, float step, const QString& suffix = {});
+    QDoubleSpinBox* makeLengthSpin(float mn, float mx, float step, const QString& baseSuffix = " m");
+    double unitFactor() const { return m_lengthUnit == LengthUnit::Millimeters ? 1000.0 : 1.0; }
 
     SceneGraph* m_scene;
     int         m_currentId = -1;
     bool        m_loading   = false;
+
+    // Unit system
+    LengthUnit  m_lengthUnit = LengthUnit::Meters;
+    QComboBox*  m_unitCombo  = nullptr;
+    struct LengthField {
+        QDoubleSpinBox* spin;
+        double baseMin, baseMax, baseStep;
+        QString baseSuffix;
+    };
+    std::vector<LengthField> m_lengthFields;
+
+    // Last picked point, kept so its display can be re-rendered when units change
+    QString    m_lastPointName;
+    QVector3D  m_lastPointPos;
 
     // Name card
     QLabel*         m_nameLabel  = nullptr;
