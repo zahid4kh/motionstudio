@@ -20,7 +20,6 @@ public slots:
     void showPointCoords(const QString& name, const QVector3D& pos);
 
 signals:
-    void pickRotationOriginRequested();
     void pickAxisRequested();
 
 private slots:
@@ -120,7 +119,6 @@ private:
     // Joint — rotation origin (revolute only)
     QWidget*        m_jPivotRow      = nullptr;
     QDoubleSpinBox* m_jPivotX = nullptr, *m_jPivotY = nullptr, *m_jPivotZ = nullptr;
-    QPushButton*    m_jPickPivotBtn  = nullptr;
 
     // Motor
     QGroupBox*      m_motorGroup  = nullptr;

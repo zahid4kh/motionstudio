@@ -284,12 +284,6 @@ Viewport::Viewport(SceneGraph* scene, QWidget* parent)
         m_btnFloor->style()->polish(m_btnFloor);
     });
 
-    m_btnExitIsolate = new QPushButton("Exit Isolation  ✕", this);
-    m_btnExitIsolate->setStyleSheet(kOverlayBtnStyle);
-    m_btnExitIsolate->setFixedSize(112, 22);
-    m_btnExitIsolate->hide();
-    m_btnExitIsolate->raise();
-    connect(m_btnExitIsolate, &QPushButton::clicked, this, &Viewport::exitIsolatePick);
 }
 
 Viewport::~Viewport() {
@@ -346,7 +340,6 @@ void Viewport::repositionOverlays() {
         x += btn->width() + gap;
     }
     m_btnFloor->move(m_vpW - m_btnFloor->width() - mg, mg);
-    m_btnExitIsolate->move((m_vpW - m_btnExitIsolate->width()) / 2, mg);
 }
 
 void Viewport::paintGL() {
@@ -379,7 +372,7 @@ void Viewport::paintGL() {
     drawAxisLabels(p);
     drawKeyHints(p);
     drawKeyPoints(p);
-    drawIsolateBanner(p);
+    drawAxisPickBanner(p);
 }
 
 // ── Shader / mesh setup ──────────────────────────────────────────────────────
@@ -653,28 +646,7 @@ std::vector<Viewport::KeyPoint> Viewport::keyPointsFor(const SceneObject& obj) {
         };
     }
 
-    // Imported CAD parts: circular edges (hole rims, shaft/boss faces) come
-    // straight from the exact B-Rep curves (see StepImporter) — the correct
-    // rotation-origin candidates for hinges through a bore or round boss.
-    // Bounding-box corners are kept too, as a fallback/coordinate reference
-    // when a part has no circular features.
-    if (obj.type == PrimitiveType::ImportedMesh && obj.mesh) {
-        std::vector<KeyPoint> pts = {{"Center", c}};
-        for (const auto& circ : obj.mesh->circles) {
-            pts.push_back({QString("Hole Ø%1").arg(double(circ.radius * 2.0f), 0, 'f', 4), circ.center});
-        }
-        pts.push_back({"Bot-Front-L", {mn.x(), mn.y(), mn.z()}});
-        pts.push_back({"Bot-Front-R", {mx.x(), mn.y(), mn.z()}});
-        pts.push_back({"Bot-Back-L",  {mn.x(), mn.y(), mx.z()}});
-        pts.push_back({"Bot-Back-R",  {mx.x(), mn.y(), mx.z()}});
-        pts.push_back({"Top-Front-L", {mn.x(), mx.y(), mn.z()}});
-        pts.push_back({"Top-Front-R", {mx.x(), mx.y(), mn.z()}});
-        pts.push_back({"Top-Back-L",  {mn.x(), mx.y(), mx.z()}});
-        pts.push_back({"Top-Back-R",  {mx.x(), mx.y(), mx.z()}});
-        return pts;
-    }
-
-    // Cube/Sphere/Basket: center + 8 bounding-box corners (unchanged).
+    // Cube/Sphere/Basket/ImportedMesh: center + 8 bounding-box corners.
     return {
         {"Center",      c},
         {"Bot-Front-L", {mn.x(), mn.y(), mn.z()}},
@@ -743,7 +715,6 @@ void Viewport::drawScene(){
     m_objShader->setUniformValue("viewPos",  vpos);
 
     for(auto& [id,obj] : m_scene->allObjects()){
-        if(m_isolatedId != -1 && id != m_isolatedId) continue;
         QMatrix4x4 model=m_scene->worldTransform(id);
         m_objShader->setUniformValue("model",      model);
         m_objShader->setUniformValue("normMat",    model.normalMatrix());
@@ -800,7 +771,6 @@ void Viewport::drawPhysicsOverlays() {
     glLineWidth(1.5f);
 
     for (auto& [id, rb] : m_scene->allRigidBodies()) {
-        if (m_isolatedId != -1 && id != m_isolatedId) continue;
         const SceneObject* obj = m_scene->getObject(id);
         if (!obj) continue;
 
@@ -845,7 +815,6 @@ void Viewport::drawPhysicsOverlays() {
     // Teal direction arrows on conveyor belt surfaces
     for (auto& [id, belt] : m_scene->allConveyorBelts()) {
         if (!belt.enabled) continue;
-        if (m_isolatedId != -1 && id != m_isolatedId) continue;
         const SceneObject* obj = m_scene->getObject(id);
         if (!obj) continue;
 
@@ -1150,19 +1119,12 @@ void Viewport::drawAxisLabels(QPainter& p){
     }
 }
 
-void Viewport::drawIsolateBanner(QPainter& p){
-    if(m_isolatedId == -1 && m_axisPickId == -1) return;
+void Viewport::drawAxisPickBanner(QPainter& p){
+    if(m_axisPickId == -1) return;
 
-    QString text;
-    if(m_isolatedId != -1){
-        const SceneObject* obj = m_scene->getObject(m_isolatedId);
-        QString name = obj ? obj->name : QString("object");
-        text = QString("Isolating \"%1\" — click a point to set Rotation Origin  (Esc to cancel)").arg(name);
-    } else {
-        const SceneObject* obj = m_scene->getObject(m_axisPickId);
-        QString name = obj ? obj->name : QString("object");
-        text = QString("\"%1\" — click a gizmo arrow to set the Joint Axis  (Esc to cancel)").arg(name);
-    }
+    const SceneObject* obj = m_scene->getObject(m_axisPickId);
+    QString name = obj ? obj->name : QString("object");
+    QString text = QString("\"%1\" — click a gizmo arrow to set the Joint Axis  (Esc to cancel)").arg(name);
 
     QFont f; f.setPointSize(9); f.setBold(true);
     p.setFont(f);
@@ -1221,10 +1183,9 @@ bool Viewport::rayAABB(const QVector3D& orig,const QVector3D& dir,
     t=tMin; return tMin>=0;
 }
 
-static std::pair<int,float> pickNearest(SceneGraph* scene, const QVector3D& orig, const QVector3D& dir, int onlyId = -1){
+static std::pair<int,float> pickNearest(SceneGraph* scene, const QVector3D& orig, const QVector3D& dir){
     int bestId=-1; float bestT=std::numeric_limits<float>::max();
     for(auto& [id,obj] : scene->allObjects()){
-        if(onlyId != -1 && id != onlyId) continue;
         // Assembly group nodes have no geometry — selectable via hierarchy only
         if(obj.type==PrimitiveType::ImportedMesh && !obj.mesh) continue;
         QMatrix4x4 inv=scene->worldTransform(id).inverted();
@@ -1250,14 +1211,14 @@ static std::pair<int,float> pickNearest(SceneGraph* scene, const QVector3D& orig
 void Viewport::tryPickObject(int x, int y){
     float aspect=float(m_vpW)/float(std::max(m_vpH,1));
     float ndcX=(2.0f*x)/m_vpW-1.0f, ndcY=1.0f-(2.0f*y)/m_vpH;
-    auto [id,t]=pickNearest(m_scene, m_camera.position(), m_camera.rayFromNDC(ndcX,ndcY,aspect), m_isolatedId);
+    auto [id,t]=pickNearest(m_scene, m_camera.position(), m_camera.rayFromNDC(ndcX,ndcY,aspect));
     m_scene->selectObject(id);
 }
 
 void Viewport::updateHover(int x, int y){
     float aspect=float(m_vpW)/float(std::max(m_vpH,1));
     float ndcX=(2.0f*x)/m_vpW-1.0f, ndcY=1.0f-(2.0f*y)/m_vpH;
-    auto [id,t]=pickNearest(m_scene, m_camera.position(), m_camera.rayFromNDC(ndcX,ndcY,aspect), m_isolatedId);
+    auto [id,t]=pickNearest(m_scene, m_camera.position(), m_camera.rayFromNDC(ndcX,ndcY,aspect));
     if(id!=m_hoveredId){
         m_hoveredId=id;
         setCursor(id!=-1 ? Qt::PointingHandCursor : Qt::ArrowCursor);
@@ -1270,25 +1231,6 @@ void Viewport::updateHover(int x, int y){
 void Viewport::mousePressEvent(QMouseEvent* e){
     m_lastMouse=e->pos();
     m_dragBtn=e->button();
-
-    if(m_isolatedId != -1){
-        // Isolate-and-pick mode: the only action a left-click can take is
-        // committing a rotation origin from the isolated object's key points.
-        // No gizmo drag, no re-selection — everything else is hidden anyway.
-        if(e->button()==Qt::LeftButton && m_nearKeyPointIdx != -1 && m_hoveredId == m_isolatedId){
-            const SceneObject* obj = m_scene->getObject(m_isolatedId);
-            if(obj){
-                auto kps = keyPointsFor(*obj);
-                if(m_nearKeyPointIdx < (int)kps.size()){
-                    QVector3D localPos = kps[m_nearKeyPointIdx].localPos;
-                    int pickedId = m_isolatedId;
-                    exitIsolatePick();
-                    emit rotationOriginPicked(pickedId, localPos);
-                }
-            }
-        }
-        return;
-    }
 
     if(m_axisPickId != -1){
         // Axis-pick mode: clicking a gizmo arrow commits its world direction
@@ -1421,54 +1363,9 @@ void Viewport::wheelEvent(QWheelEvent* e){
 
 void Viewport::keyPressEvent(QKeyEvent* e){
     if(e->key() == Qt::Key_Escape){
-        if(m_isolatedId != -1){ exitIsolatePick(); return; }
         if(m_axisPickId != -1){ cancelAxisPick(); return; }
     }
     QOpenGLWidget::keyPressEvent(e);
-}
-
-// ── Isolate-and-pick mode ─────────────────────────────────────────────────────
-
-void Viewport::enterIsolatePick(int objectId){
-    const SceneObject* obj = m_scene->getObject(objectId);
-    if(!obj) return;
-
-    m_isolatedId = objectId;
-    m_hoveredId  = -1;
-    m_nearKeyPointIdx = -1;
-
-    QMatrix4x4 wt = m_scene->worldTransform(objectId);
-    QVector3D mn = obj->aabbMin(), mx = obj->aabbMax();
-    QVector3D corners[8] = {
-        {mn.x(),mn.y(),mn.z()}, {mx.x(),mn.y(),mn.z()}, {mn.x(),mx.y(),mn.z()}, {mx.x(),mx.y(),mn.z()},
-        {mn.x(),mn.y(),mx.z()}, {mx.x(),mn.y(),mx.z()}, {mn.x(),mx.y(),mx.z()}, {mx.x(),mx.y(),mx.z()},
-    };
-    QVector3D center(0,0,0);
-    float radius = 0.5f;
-    QVector3D wMin( 1e9f,  1e9f,  1e9f), wMax(-1e9f, -1e9f, -1e9f);
-    for(auto& c : corners){
-        QVector3D wc = wt.map(c);
-        wMin.setX(std::min(wMin.x(), wc.x())); wMax.setX(std::max(wMax.x(), wc.x()));
-        wMin.setY(std::min(wMin.y(), wc.y())); wMax.setY(std::max(wMax.y(), wc.y()));
-        wMin.setZ(std::min(wMin.z(), wc.z())); wMax.setZ(std::max(wMax.z(), wc.z()));
-    }
-    center = (wMin + wMax) * 0.5f;
-    radius = (wMax - wMin).length() * 0.5f;
-
-    m_camera.frame(center, radius);
-    m_btnExitIsolate->show();
-    m_btnExitIsolate->raise();
-    setFocus();
-    update();
-}
-
-void Viewport::exitIsolatePick(){
-    if(m_isolatedId == -1) return;
-    m_isolatedId = -1;
-    m_hoveredId  = -1;
-    m_nearKeyPointIdx = -1;
-    m_btnExitIsolate->hide();
-    update();
 }
 
 // ── Axis-pick mode ────────────────────────────────────────────────────────────

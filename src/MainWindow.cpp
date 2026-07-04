@@ -51,6 +51,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setAcceptDrops(true);
 
     m_scene    = new SceneGraph(this);
+    m_undo     = new UndoManager(m_scene, this);
     m_sim      = new SimulationEngine(m_scene, this);
     m_viewport = new Viewport(m_scene, this);
 
@@ -67,6 +68,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(m_scene, &SceneGraph::objectChanged, this, &MainWindow::onSceneDirtied);
     connect(m_scene, &SceneGraph::jointAdded,    this, &MainWindow::onSceneDirtied);
     connect(m_scene, &SceneGraph::motorAdded,    this, &MainWindow::onSceneDirtied);
+
+    connect(m_undo, &UndoManager::historyChanged, this, [this]{
+        m_undoAction->setEnabled(m_undo->canUndo());
+        m_redoAction->setEnabled(m_undo->canRedo());
+    });
 
     connect(m_sim, &SimulationEngine::stateChanged, this, &MainWindow::onSimStateChanged);
     connect(m_sim, &SimulationEngine::timeUpdated,  this, &MainWindow::onTimeUpdated);
@@ -133,6 +139,19 @@ void MainWindow::buildMenu() {
         connect(q, &QAction::triggered, qApp, &QApplication::quit);
         file->addAction(q);
     }
+
+    auto* edit = menuBar()->addMenu("&Edit");
+    m_undoAction = new QAction("&Undo", this);
+    m_undoAction->setShortcut(QKeySequence::Undo);
+    m_undoAction->setEnabled(false);
+    connect(m_undoAction, &QAction::triggered, m_undo, &UndoManager::undo);
+    edit->addAction(m_undoAction);
+
+    m_redoAction = new QAction("&Redo", this);
+    m_redoAction->setShortcut(QKeySequence::Redo);
+    m_redoAction->setEnabled(false);
+    connect(m_redoAction, &QAction::triggered, m_undo, &UndoManager::redo);
+    edit->addAction(m_redoAction);
 }
 
 // ── Toolbar ───────────────────────────────────────────────────────────────────
@@ -219,17 +238,6 @@ void MainWindow::buildDocks() {
     connect(m_viewport, &Viewport::keyPointSelected,
             m_properties, &PropertiesPanel::showPointCoords);
 
-    connect(m_properties, &PropertiesPanel::pickRotationOriginRequested, this, [this]{
-        int id = m_scene->selectedObjectId();
-        if (id != -1) m_viewport->enterIsolatePick(id);
-    });
-    connect(m_viewport, &Viewport::rotationOriginPicked, this, [this](int objectId, const QVector3D& localPos){
-        Joint* j = m_scene->jointForChild(objectId);
-        if (!j) return;
-        j->pivot = m_scene->localTransform(objectId).map(localPos);
-        emit m_scene->objectChanged(objectId);
-    });
-
     connect(m_properties, &PropertiesPanel::pickAxisRequested, this, [this]{
         int id = m_scene->selectedObjectId();
         if (id != -1) m_viewport->beginAxisPick(id);
@@ -262,6 +270,7 @@ void MainWindow::newProject() {
     m_currentFile.clear();
     m_dirty = false;
     updateTitle();
+    m_undo->reset();
     showStatus("New project created");
 }
 
@@ -278,6 +287,7 @@ void MainWindow::openProject() {
         m_currentFile = path;
         m_dirty = false;
         updateTitle();
+        m_undo->reset();
         showStatus("Opened: " + QFileInfo(path).fileName());
     } else {
         QMessageBox::critical(this, "Load Failed",
@@ -303,6 +313,7 @@ void MainWindow::openTemplate() {
         m_currentFile.clear();
         m_dirty = false;
         updateTitle();
+        m_undo->reset();
         showStatus("Template loaded — press Play to run the simulation");
     } else {
         showStatus("Failed to load template", false);

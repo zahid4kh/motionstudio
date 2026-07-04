@@ -29,6 +29,7 @@ private:
     void applyRigidBodyIcon(QTreeWidgetItem* item, int objectId);
     void combineSelectedIntoRigidBody(const QList<QTreeWidgetItem*>& items);
     void deleteSelectedItems(const QList<QTreeWidgetItem*>& items);
+    void setRelation(int childId, int parentId);
 
     QTreeWidget*              m_tree;
     SceneGraph*               m_scene;

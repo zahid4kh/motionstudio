@@ -339,7 +339,7 @@ void PropertiesPanel::buildJointSection() {
         vb->addLayout(row);
     }
 
-    // Rotation origin (revolute only) — direct numeric entry or visual pick
+    // Rotation origin (revolute only) — direct numeric entry
     m_jPivotRow = new QWidget;
     {
         auto* pvb = new QVBoxLayout(m_jPivotRow);
@@ -349,9 +349,6 @@ void PropertiesPanel::buildJointSection() {
         m_jPivotY = makeLengthSpin(-1e4, 1e4, 0.01f);
         m_jPivotZ = makeLengthSpin(-1e4, 1e4, 0.01f);
         pvb->addLayout(xyzRow("Rotation Origin", m_jPivotX, m_jPivotY, m_jPivotZ));
-        m_jPickPivotBtn = new QPushButton("Pick in 3D…");
-        m_jPickPivotBtn->setToolTip("Isolate this part and click a point to set its rotation origin");
-        pvb->addWidget(m_jPickPivotBtn);
     }
     vb->addWidget(m_jPivotRow);
 
@@ -376,7 +373,6 @@ void PropertiesPanel::buildJointSection() {
     connect(m_jPivotX,    &QDoubleSpinBox::valueChanged,    this, &PropertiesPanel::onJointEdited);
     connect(m_jPivotY,    &QDoubleSpinBox::valueChanged,    this, &PropertiesPanel::onJointEdited);
     connect(m_jPivotZ,    &QDoubleSpinBox::valueChanged,    this, &PropertiesPanel::onJointEdited);
-    connect(m_jPickPivotBtn, &QPushButton::clicked, this, &PropertiesPanel::pickRotationOriginRequested);
     connect(m_addMotorBtn, &QPushButton::clicked,           this, &PropertiesPanel::addMotor);
     connect(rmBtn,        &QPushButton::clicked,            this, &PropertiesPanel::removeJoint);
 }
@@ -794,6 +790,7 @@ void PropertiesPanel::onJointEdited() {
     bool isRevolute = (j->type == JointType::Revolute);
     m_jPivotRow->setVisible(isRevolute);
     updateJointUnits(isRevolute);
+    emit m_scene->objectChanged(m_currentId);
 }
 
 void PropertiesPanel::onMotorEdited() {
@@ -806,6 +803,7 @@ void PropertiesPanel::onMotorEdited() {
             const_cast<Motor&>(motor).velocity       = float(m_mVel->value() / f);
             const_cast<Motor&>(motor).targetPosition = float(m_mTarget->value() / f);
             const_cast<Motor&>(motor).enabled        = m_mEnabled->isChecked();
+            emit m_scene->objectChanged(m_currentId);
             return;
         }
     }

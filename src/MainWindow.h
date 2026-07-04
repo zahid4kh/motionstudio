@@ -5,11 +5,14 @@
 #include <QProgressDialog>
 #include <QFutureWatcher>
 #include "scene/SceneGraph.h"
+#include "scene/UndoManager.h"
 #include "viewport/Viewport.h"
 #include "physics/SimulationEngine.h"
 #include "ui/HierarchyPanel.h"
 #include "ui/PropertiesPanel.h"
 #include "import/StepImporter.h"
+
+class QAction;
 
 // Result of a background StepImporter::importFile() call (see importStepFile)
 struct StepImportResult {
@@ -59,10 +62,14 @@ private:
     void showStatus(const QString& msg, bool success = true);
 
     SceneGraph*       m_scene      = nullptr;
+    UndoManager*      m_undo       = nullptr;
     Viewport*         m_viewport   = nullptr;
     SimulationEngine* m_sim        = nullptr;
     HierarchyPanel*   m_hierarchy  = nullptr;
     PropertiesPanel*  m_properties = nullptr;
+
+    QAction* m_undoAction = nullptr;
+    QAction* m_redoAction = nullptr;
 
     QLabel*  m_timeLabel   = nullptr;
     QTimer   m_statusTimer;

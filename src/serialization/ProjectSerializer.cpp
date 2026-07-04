@@ -61,14 +61,6 @@ static QJsonObject meshToJson(const MeshGeometry& m) {
     o["vertexData"] = QString::fromLatin1(raw.toBase64());
     o["aabbMin"]    = vec3ToJson(m.aabbMin);
     o["aabbMax"]    = vec3ToJson(m.aabbMax);
-    QJsonArray circles;
-    for (const auto& c : m.circles) {
-        QJsonObject co;
-        co["center"] = vec3ToJson(c.center);
-        co["radius"] = c.radius;
-        circles.append(co);
-    }
-    o["circles"] = circles;
     return o;
 }
 static std::shared_ptr<MeshGeometry> meshFromJson(const QJsonObject& o) {
@@ -79,10 +71,6 @@ static std::shared_ptr<MeshGeometry> meshFromJson(const QJsonObject& o) {
         memcpy(m->interleaved.data(), raw.constData(), size_t(raw.size()));
     m->aabbMin = vec3FromJson(o["aabbMin"].toObject());
     m->aabbMax = vec3FromJson(o["aabbMax"].toObject());
-    for (auto v : o["circles"].toArray()) {
-        auto co = v.toObject();
-        m->circles.push_back({ vec3FromJson(co["center"].toObject()), float(co["radius"].toDouble()) });
-    }
     return m;
 }
 
@@ -104,7 +92,7 @@ static CollisionType collisionTypeFromStr(const QString& s) {
 
 // ── save ─────────────────────────────────────────────────────────────────────
 
-bool ProjectSerializer::save(const SceneGraph& scene, const QString& filePath) {
+QJsonObject ProjectSerializer::toJson(const SceneGraph& scene) {
     QJsonArray objects, joints, motors, rigidBodies, conveyorBelts, meshes;
 
     // De-dupe by MeshGeometry identity so shared assembly parts serialize once
@@ -195,23 +183,20 @@ bool ProjectSerializer::save(const SceneGraph& scene, const QString& filePath) {
     root["rigidBodies"]   = rigidBodies;
     root["conveyorBelts"] = conveyorBelts;
     root["meshes"]        = meshes;
+    return root;
+}
 
+bool ProjectSerializer::save(const SceneGraph& scene, const QString& filePath) {
     QFile f(filePath);
     if (!f.open(QIODevice::WriteOnly)) return false;
-    f.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+    f.write(QJsonDocument(toJson(scene)).toJson(QJsonDocument::Indented));
     return true;
 }
 
 // ── load ─────────────────────────────────────────────────────────────────────
 
-bool ProjectSerializer::load(SceneGraph& scene, const QString& filePath) {
-    QFile f(filePath);
-    if (!f.open(QIODevice::ReadOnly)) return false;
-    QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
-    if (!doc.isObject()) return false;
-
+bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root) {
     scene.clear();
-    QJsonObject root = doc.object();
 
     // Shared mesh geometry, indexed as written by save()
     std::vector<std::shared_ptr<MeshGeometry>> meshList;
@@ -326,4 +311,12 @@ bool ProjectSerializer::load(SceneGraph& scene, const QString& filePath) {
     }
 
     return true;
+}
+
+bool ProjectSerializer::load(SceneGraph& scene, const QString& filePath) {
+    QFile f(filePath);
+    if (!f.open(QIODevice::ReadOnly)) return false;
+    QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
+    if (!doc.isObject()) return false;
+    return fromJson(scene, doc.object());
 }

@@ -325,6 +325,42 @@ void SceneGraph::reparentObject(int id, int newParentId) {
     }
 }
 
+SceneGraph::ReparentResult SceneGraph::setParent(int childId, int newParentId) {
+    if (childId == newParentId) return ReparentResult::SameObject;
+    SceneObject* child = getObject(childId);
+    if (!child) return ReparentResult::SameObject;
+
+    for (int p = newParentId; p != -1; ) {
+        if (p == childId) return ReparentResult::WouldCreateCycle;
+        const SceneObject* po = getObject(p);
+        p = po ? po->parentId : -1;
+    }
+
+    if (child->parentId == newParentId) return ReparentResult::Ok;
+
+    QMatrix4x4 childWorld = worldTransform(childId);
+
+    if (Joint* j = jointForChild(childId)) removeJoint(j->id);
+
+    reparentObject(childId, newParentId);
+
+    QMatrix4x4 newParentWorld = newParentId != -1 ? worldTransform(newParentId) : QMatrix4x4();
+    QMatrix4x4 newLocal = newParentWorld.inverted() * childWorld;
+
+    QVector3D pos, eulerDeg, scale;
+    decomposeMatrix(newLocal, pos, eulerDeg, scale);
+    child->transform.position = pos;
+    child->transform.rotation = eulerDeg;
+    child->transform.scale    = scale;
+
+    emit objectChanged(childId);
+    // Structure changed (moved to a new place in the tree) — reuse the same
+    // "please rebuild" signal combineIntoRigidBody() uses for the same reason.
+    emit objectAdded(childId);
+
+    return ReparentResult::Ok;
+}
+
 SceneGraph::CombineResult SceneGraph::combineIntoRigidBody(const std::vector<int>& objectIds,
                                                              const QString& groupName, int& outGroupId) {
     outGroupId = -1;

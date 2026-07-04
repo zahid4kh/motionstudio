@@ -7,6 +7,7 @@
 #include <QMessageBox>
 #include <QPainter>
 #include <QPixmap>
+#include <QShortcut>
 
 // Small filled-circle icon marking objects that carry a RigidBody, drawn once
 // and reused for every tree item (see applyRigidBodyIcon).
@@ -66,6 +67,14 @@ HierarchyPanel::HierarchyPanel(SceneGraph* scene, QWidget* parent)
             this, &HierarchyPanel::onItemDoubleClicked);
     connect(m_tree, &QTreeWidget::customContextMenuRequested,
             this, &HierarchyPanel::showContextMenu);
+
+    auto* renameShortcut = new QShortcut(QKeySequence(Qt::Key_F2), m_tree);
+    renameShortcut->setContext(Qt::WidgetShortcut);
+    connect(renameShortcut, &QShortcut::activated, this, [this](){
+        auto selected = m_tree->selectedItems();
+        if(selected.size() == 1)
+            onItemDoubleClicked(selected.first(), 0);
+    });
 
     connect(scene, &SceneGraph::objectAdded,      this, &HierarchyPanel::onObjectAdded);
     connect(scene, &SceneGraph::objectRemoved,     this, &HierarchyPanel::onObjectRemoved);
@@ -198,6 +207,28 @@ void HierarchyPanel::showContextMenu(const QPoint& pos) {
         menu.addAction("Delete", [this, selected](){
             deleteSelectedItems(selected);
         });
+    } else if(selected.size() == 2){
+        int idA = selected[0]->data(0, Qt::UserRole).toInt();
+        int idB = selected[1]->data(0, Qt::UserRole).toInt();
+        const SceneObject* a = m_scene->getObject(idA);
+        const SceneObject* b = m_scene->getObject(idB);
+        QString nameA = a ? a->name : "?";
+        QString nameB = b ? b->name : "?";
+
+        menu.addAction(QString("Make \"%1\" the parent of \"%2\"").arg(nameA, nameB), [this, idA, idB](){
+            setRelation(/*child=*/idB, /*parent=*/idA);
+        });
+        menu.addAction(QString("Make \"%1\" the parent of \"%2\"").arg(nameB, nameA), [this, idA, idB](){
+            setRelation(/*child=*/idA, /*parent=*/idB);
+        });
+        menu.addSeparator();
+        menu.addAction("No relation \xE2\x80\x94 just combine", [this, selected](){
+            combineSelectedIntoRigidBody(selected);
+        });
+        menu.addSeparator();
+        menu.addAction("Delete Selected (2)", [this, selected](){
+            deleteSelectedItems(selected);
+        });
     } else {
         menu.addAction(QString("Combine into Rigid Body (%1)").arg(selected.size()), [this, selected](){
             combineSelectedIntoRigidBody(selected);
@@ -213,6 +244,19 @@ void HierarchyPanel::showContextMenu(const QPoint& pos) {
 void HierarchyPanel::deleteSelectedItems(const QList<QTreeWidgetItem*>& items) {
     for(QTreeWidgetItem* item : items)
         m_scene->removeObject(item->data(0, Qt::UserRole).toInt());
+}
+
+void HierarchyPanel::setRelation(int childId, int parentId) {
+    auto result = m_scene->setParent(childId, parentId);
+    switch(result){
+        case SceneGraph::ReparentResult::WouldCreateCycle:
+            QMessageBox::warning(this, "Cannot Set Relation",
+                "That would make an object its own ancestor — pick the other direction instead.");
+            break;
+        case SceneGraph::ReparentResult::SameObject:
+        case SceneGraph::ReparentResult::Ok:
+            break;
+    }
 }
 
 void HierarchyPanel::combineSelectedIntoRigidBody(const QList<QTreeWidgetItem*>& items) {
