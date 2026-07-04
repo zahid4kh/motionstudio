@@ -24,8 +24,25 @@ public:
 
     Camera& camera() { return m_camera; }
 
+    // Isolate-and-pick workflow (see PropertiesPanel's "Pick in 3D…" rotation
+    // origin button): hides every other object, frames the camera on this
+    // one, and restricts hover/pick to it until a key point is clicked
+    // (emits rotationOriginPicked and auto-exits) or exitIsolatePick()/Escape
+    // cancels.
+    void enterIsolatePick(int objectId);
+    void exitIsolatePick();
+
+    // Axis-pick mode: click one of the translate gizmo's arrows (drawn along
+    // world X/Y/Z at the object's origin) to set a joint's rotation axis
+    // instead of dragging. No isolation needed — the gizmo is already shown
+    // for the selected object.
+    void beginAxisPick(int objectId);
+    void cancelAxisPick();
+
 signals:
     void keyPointSelected(const QString& name, const QVector3D& worldPos);
+    void rotationOriginPicked(int objectId, const QVector3D& localPos);
+    void axisPicked(int objectId, const QVector3D& localAxis);
 
 protected:
     void initializeGL()          override;
@@ -35,6 +52,7 @@ protected:
     void mouseMoveEvent   (QMouseEvent*)  override;
     void mouseReleaseEvent(QMouseEvent*)  override;
     void wheelEvent       (QWheelEvent*)  override;
+    void keyPressEvent    (QKeyEvent*)    override;
 
 private:
     struct KeyPoint { QString name; QVector3D localPos; };
@@ -61,6 +79,7 @@ private:
     void drawKeyHints  (QPainter& p);
     void drawPhysicsOverlays();
     void drawKeyPoints (QPainter& p);
+    void drawIsolateBanner(QPainter& p);
     void drawWireLines(const std::vector<float>& verts, const QVector3D& color,
                        const QMatrix4x4& model, float alpha = 1.0f);
     void repositionOverlays();
@@ -95,6 +114,13 @@ private:
     QPushButton* m_btnTop    = nullptr;
     QPushButton* m_btnSide   = nullptr;
     QPushButton* m_btnFloor  = nullptr;
+
+    // Isolate-and-pick mode (see enterIsolatePick/exitIsolatePick)
+    int          m_isolatedId     = -1;
+    QPushButton* m_btnExitIsolate = nullptr;
+
+    // Axis-pick mode (see beginAxisPick/cancelAxisPick)
+    int          m_axisPickId     = -1;
 
     // Gizmo: set in drawAxisGizmo(), read in drawAxisLabels()
     QMatrix4x4 m_gizmoView, m_gizmoProj;

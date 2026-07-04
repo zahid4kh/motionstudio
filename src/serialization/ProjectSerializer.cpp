@@ -61,6 +61,14 @@ static QJsonObject meshToJson(const MeshGeometry& m) {
     o["vertexData"] = QString::fromLatin1(raw.toBase64());
     o["aabbMin"]    = vec3ToJson(m.aabbMin);
     o["aabbMax"]    = vec3ToJson(m.aabbMax);
+    QJsonArray circles;
+    for (const auto& c : m.circles) {
+        QJsonObject co;
+        co["center"] = vec3ToJson(c.center);
+        co["radius"] = c.radius;
+        circles.append(co);
+    }
+    o["circles"] = circles;
     return o;
 }
 static std::shared_ptr<MeshGeometry> meshFromJson(const QJsonObject& o) {
@@ -71,6 +79,10 @@ static std::shared_ptr<MeshGeometry> meshFromJson(const QJsonObject& o) {
         memcpy(m->interleaved.data(), raw.constData(), size_t(raw.size()));
     m->aabbMin = vec3FromJson(o["aabbMin"].toObject());
     m->aabbMax = vec3FromJson(o["aabbMax"].toObject());
+    for (auto v : o["circles"].toArray()) {
+        auto co = v.toObject();
+        m->circles.push_back({ vec3FromJson(co["center"].toObject()), float(co["radius"].toDouble()) });
+    }
     return m;
 }
 
@@ -127,6 +139,7 @@ bool ProjectSerializer::save(const SceneGraph& scene, const QString& filePath) {
         o["name"]         = j.name;
         o["type"]         = (j.type == JointType::Revolute ? "Revolute" : "Prismatic");
         o["axis"]         = vec3ToJson(j.axis);
+        o["pivot"]        = vec3ToJson(j.pivot);
         o["limitMin"]     = j.limitMin;
         o["limitMax"]     = j.limitMax;
         o["initialAngle"] = j.initialAngle;
@@ -246,6 +259,7 @@ bool ProjectSerializer::load(SceneGraph& scene, const QString& filePath) {
         j.name         = o["name"].toString();
         j.type         = (o["type"].toString() == "Revolute" ? JointType::Revolute : JointType::Prismatic);
         j.axis         = vec3FromJson(o["axis"].toObject());
+        j.pivot        = vec3FromJson(o["pivot"].toObject());
         j.limitMin     = float(o["limitMin"].toDouble(-180));
         j.limitMax     = float(o["limitMax"].toDouble(180));
         j.initialAngle = float(o["initialAngle"].toDouble());

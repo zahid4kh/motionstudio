@@ -36,6 +36,13 @@ void Camera::setView(float az, float el) {
     m_elevation = std::clamp(el, -89.0f, 89.0f);
 }
 
+void Camera::frame(const QVector3D& center, float radius) {
+    m_target   = center;
+    radius     = std::max(radius, 0.05f);
+    // Distance so the bounding sphere fits comfortably within the vertical FOV.
+    m_distance = (radius / qSin(qDegreesToRadians(m_fov * 0.5f))) * 1.35f;
+}
+
 QVector3D Camera::position() const {
     float el = qDegreesToRadians(m_elevation);
     float az = qDegreesToRadians(m_azimuth);

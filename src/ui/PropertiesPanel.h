@@ -19,6 +19,10 @@ public:
 public slots:
     void showPointCoords(const QString& name, const QVector3D& pos);
 
+signals:
+    void pickRotationOriginRequested();
+    void pickAxisRequested();
+
 private slots:
     void onSelectionChanged(int id);
     void onTransformEdited();
@@ -106,11 +110,17 @@ private:
     QGroupBox*      m_jointGroup  = nullptr;
     QComboBox*      m_jType       = nullptr;
     QDoubleSpinBox* m_jAxisX = nullptr, *m_jAxisY = nullptr, *m_jAxisZ = nullptr;
+    QPushButton*    m_jPickAxisBtn = nullptr;
     QDoubleSpinBox* m_jLimitMin   = nullptr;
     QDoubleSpinBox* m_jLimitMax   = nullptr;
     QDoubleSpinBox* m_jInitAngle  = nullptr;
     QLabel*         m_jInitLabel  = nullptr;
     QPushButton*    m_addMotorBtn = nullptr;
+
+    // Joint — rotation origin (revolute only)
+    QWidget*        m_jPivotRow      = nullptr;
+    QDoubleSpinBox* m_jPivotX = nullptr, *m_jPivotY = nullptr, *m_jPivotZ = nullptr;
+    QPushButton*    m_jPickPivotBtn  = nullptr;
 
     // Motor
     QGroupBox*      m_motorGroup  = nullptr;

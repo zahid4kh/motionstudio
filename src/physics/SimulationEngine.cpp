@@ -277,10 +277,21 @@ void SimulationEngine::writeBodyXML(QString& xml, int oid, int indent) const {
     // Joint connecting this body to its parent (lives inside the child body in MJCF)
     if (jnt) {
         QString jType = (jnt->type == JointType::Revolute) ? "hinge" : "slide";
-        xml += pad + QString("  <joint name=\"joint_%1\" type=\"%2\" axis=\"%3 %4 %5\""
-                             " range=\"%6 %7\" damping=\"1.0\"/>\n")
+
+        // Joint::pivot is stored in the parent's local frame; MJCF's <joint
+        // pos> is defined in this (child) body's own local frame, so convert.
+        QString posAttr;
+        if (jnt->type == JointType::Revolute && !jnt->pivot.isNull()) {
+            QVector3D pivotLocal = m_scene->localTransform(oid).inverted().map(jnt->pivot);
+            posAttr = QString(" pos=\"%1 %2 %3\"")
+                .arg(flt(pivotLocal.x())).arg(flt(pivotLocal.y())).arg(flt(pivotLocal.z()));
+        }
+
+        xml += pad + QString("  <joint name=\"joint_%1\" type=\"%2\" axis=\"%3 %4 %5\"%6"
+                             " range=\"%7 %8\" damping=\"1.0\"/>\n")
             .arg(jnt->id).arg(jType)
             .arg(flt(jnt->axis.x())).arg(flt(jnt->axis.y())).arg(flt(jnt->axis.z()))
+            .arg(posAttr)
             .arg(flt(jnt->limitMin)).arg(flt(jnt->limitMax));
     } else if (obj->parentId == -1 && rb) {
         // Root body with RigidBody: free joint so it can move dynamically

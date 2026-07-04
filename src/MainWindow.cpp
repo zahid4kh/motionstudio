@@ -218,6 +218,28 @@ void MainWindow::buildDocks() {
 
     connect(m_viewport, &Viewport::keyPointSelected,
             m_properties, &PropertiesPanel::showPointCoords);
+
+    connect(m_properties, &PropertiesPanel::pickRotationOriginRequested, this, [this]{
+        int id = m_scene->selectedObjectId();
+        if (id != -1) m_viewport->enterIsolatePick(id);
+    });
+    connect(m_viewport, &Viewport::rotationOriginPicked, this, [this](int objectId, const QVector3D& localPos){
+        Joint* j = m_scene->jointForChild(objectId);
+        if (!j) return;
+        j->pivot = m_scene->localTransform(objectId).map(localPos);
+        emit m_scene->objectChanged(objectId);
+    });
+
+    connect(m_properties, &PropertiesPanel::pickAxisRequested, this, [this]{
+        int id = m_scene->selectedObjectId();
+        if (id != -1) m_viewport->beginAxisPick(id);
+    });
+    connect(m_viewport, &Viewport::axisPicked, this, [this](int objectId, const QVector3D& localAxis){
+        Joint* j = m_scene->jointForChild(objectId);
+        if (!j) return;
+        j->axis = localAxis;
+        emit m_scene->objectChanged(objectId);
+    });
 }
 
 // ── Status bar ────────────────────────────────────────────────────────────────

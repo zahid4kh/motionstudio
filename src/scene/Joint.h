@@ -15,6 +15,11 @@ struct Joint {
     int       parentBodyId  = -1;
     int       childBodyId   = -1;
 
+    // Rotation origin (revolute only), expressed in the parent body's local
+    // frame. (0,0,0) reproduces the original behavior of rotating about the
+    // parent's own origin.
+    QVector3D pivot         = {0.0f, 0.0f, 0.0f};
+
     // Runtime state (not persisted directly; restored from motor)
     float     currentValue  = 0.0f;    // degrees for revolute, units for prismatic
 };

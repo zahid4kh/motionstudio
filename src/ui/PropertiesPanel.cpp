@@ -316,6 +316,10 @@ void PropertiesPanel::buildJointSection() {
     m_jAxisY->setValue(1);
     vb->addLayout(xyzRow("Axis", m_jAxisX, m_jAxisY, m_jAxisZ));
 
+    m_jPickAxisBtn = new QPushButton("Pick Axis in 3D…");
+    m_jPickAxisBtn->setToolTip("Click one of the gizmo's arrows on the selected part to set this axis");
+    vb->addWidget(m_jPickAxisBtn);
+
     // Suffix "°" for revolute, " m" for prismatic — set in updateJointUnits()
     m_jLimitMin  = makeSpin(-1e4, 1e4, 1.0f, "°"); m_jLimitMin->setValue(-180);
     m_jLimitMax  = makeSpin(-1e4, 1e4, 1.0f, "°"); m_jLimitMax->setValue(180);
@@ -335,6 +339,22 @@ void PropertiesPanel::buildJointSection() {
         vb->addLayout(row);
     }
 
+    // Rotation origin (revolute only) — direct numeric entry or visual pick
+    m_jPivotRow = new QWidget;
+    {
+        auto* pvb = new QVBoxLayout(m_jPivotRow);
+        pvb->setContentsMargins(0, 0, 0, 0);
+        pvb->setSpacing(5);
+        m_jPivotX = makeLengthSpin(-1e4, 1e4, 0.01f);
+        m_jPivotY = makeLengthSpin(-1e4, 1e4, 0.01f);
+        m_jPivotZ = makeLengthSpin(-1e4, 1e4, 0.01f);
+        pvb->addLayout(xyzRow("Rotation Origin", m_jPivotX, m_jPivotY, m_jPivotZ));
+        m_jPickPivotBtn = new QPushButton("Pick in 3D…");
+        m_jPickPivotBtn->setToolTip("Isolate this part and click a point to set its rotation origin");
+        pvb->addWidget(m_jPickPivotBtn);
+    }
+    vb->addWidget(m_jPivotRow);
+
     m_addMotorBtn = new QPushButton("Add Motor to this Joint");
     m_addMotorBtn->setToolTip("Attach a motor so this joint can be driven during simulation");
     vb->addWidget(m_addMotorBtn);
@@ -349,9 +369,14 @@ void PropertiesPanel::buildJointSection() {
     connect(m_jAxisX,     &QDoubleSpinBox::valueChanged,    this, &PropertiesPanel::onJointEdited);
     connect(m_jAxisY,     &QDoubleSpinBox::valueChanged,    this, &PropertiesPanel::onJointEdited);
     connect(m_jAxisZ,     &QDoubleSpinBox::valueChanged,    this, &PropertiesPanel::onJointEdited);
+    connect(m_jPickAxisBtn, &QPushButton::clicked, this, &PropertiesPanel::pickAxisRequested);
     connect(m_jLimitMin,  &QDoubleSpinBox::valueChanged,    this, &PropertiesPanel::onJointEdited);
     connect(m_jLimitMax,  &QDoubleSpinBox::valueChanged,    this, &PropertiesPanel::onJointEdited);
     connect(m_jInitAngle, &QDoubleSpinBox::valueChanged,    this, &PropertiesPanel::onJointEdited);
+    connect(m_jPivotX,    &QDoubleSpinBox::valueChanged,    this, &PropertiesPanel::onJointEdited);
+    connect(m_jPivotY,    &QDoubleSpinBox::valueChanged,    this, &PropertiesPanel::onJointEdited);
+    connect(m_jPivotZ,    &QDoubleSpinBox::valueChanged,    this, &PropertiesPanel::onJointEdited);
+    connect(m_jPickPivotBtn, &QPushButton::clicked, this, &PropertiesPanel::pickRotationOriginRequested);
     connect(m_addMotorBtn, &QPushButton::clicked,           this, &PropertiesPanel::addMotor);
     connect(rmBtn,        &QPushButton::clicked,            this, &PropertiesPanel::removeJoint);
 }
@@ -710,6 +735,10 @@ void PropertiesPanel::loadObject(int id) {
         m_jLimitMin->setValue(joint->limitMin * jf);
         m_jLimitMax->setValue(joint->limitMax * jf);
         m_jInitAngle->setValue(joint->initialAngle * jf);
+        m_jPivotX->setValue(joint->pivot.x() * lf);
+        m_jPivotY->setValue(joint->pivot.y() * lf);
+        m_jPivotZ->setValue(joint->pivot.z() * lf);
+        m_jPivotRow->setVisible(isRevolute);
         showJointGroup(true);
 
         Motor* motor = nullptr;
@@ -760,7 +789,11 @@ void PropertiesPanel::onJointEdited() {
     j->limitMin     = float(m_jLimitMin->value() / f);
     j->limitMax     = float(m_jLimitMax->value() / f);
     j->initialAngle = float(m_jInitAngle->value() / f);
-    updateJointUnits(j->type == JointType::Revolute);
+    const double lf = unitFactor();  // pivot is always a length quantity, regardless of joint type
+    j->pivot        = { float(m_jPivotX->value() / lf), float(m_jPivotY->value() / lf), float(m_jPivotZ->value() / lf) };
+    bool isRevolute = (j->type == JointType::Revolute);
+    m_jPivotRow->setVisible(isRevolute);
+    updateJointUnits(isRevolute);
 }
 
 void PropertiesPanel::onMotorEdited() {

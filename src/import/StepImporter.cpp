@@ -18,10 +18,14 @@
 #include <TopExp_Explorer.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Face.hxx>
+#include <TopoDS_Edge.hxx>
 #include <TopLoc_Location.hxx>
 #include <Poly_Triangulation.hxx>
 #include <Bnd_Box.hxx>
 #include <BRepBndLib.hxx>
+#include <BRepAdaptor_Curve.hxx>
+#include <GeomAbs_CurveType.hxx>
+#include <gp_Circ.hxx>
 #include <gp_Quaternion.hxx>
 #include <gp_Trsf.hxx>
 
@@ -110,6 +114,22 @@ std::shared_ptr<MeshGeometry> triangulateShape(const TopoDS_Shape& shape) {
     if (geo->interleaved.empty()) return nullptr;
     geo->aabbMin = mn;
     geo->aabbMax = mx;
+
+    // Circular edges (hole rims, cylindrical boss/shaft faces) — exact
+    // rotation-origin candidates from the real B-Rep curve, not guessed from
+    // the tessellated mesh. TopExp_Explorer visits each unique edge once.
+    for (TopExp_Explorer ex(shape, TopAbs_EDGE); ex.More(); ex.Next()) {
+        const TopoDS_Edge& edge = TopoDS::Edge(ex.Current());
+        BRepAdaptor_Curve curve(edge);
+        if (curve.GetType() != GeomAbs_Circle) continue;
+        gp_Circ circ = curve.Circle();
+        gp_Pnt  c    = circ.Location();
+        geo->circles.push_back({
+            QVector3D(float(c.X()), float(c.Y()), float(c.Z())),
+            float(circ.Radius())
+        });
+    }
+
     return geo;
 }
 

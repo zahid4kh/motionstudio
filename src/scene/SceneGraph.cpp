@@ -216,7 +216,9 @@ QMatrix4x4 SceneGraph::worldTransform(int id) const {
     for (auto& [jid, joint] : m_joints) {
         if (joint.childBodyId == id) {
             if (joint.type == JointType::Revolute) {
+                jointT.translate(joint.pivot);
                 jointT.rotate(joint.currentValue, joint.axis);
+                jointT.translate(-joint.pivot);
             } else {
                 jointT.translate(joint.axis * joint.currentValue);
             }

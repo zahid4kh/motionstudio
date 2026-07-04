@@ -11,6 +11,9 @@ public:
     void zoom(float delta);
     void reset();
     void setView(float azimuth, float elevation);
+    // Centers the target on `center` and picks a distance so a sphere of the
+    // given radius fits within the vertical field of view.
+    void frame(const QVector3D& center, float radius);
 
     QMatrix4x4 viewMatrix()                   const;
     QMatrix4x4 projectionMatrix(float aspect) const;
