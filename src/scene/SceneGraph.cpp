@@ -1,6 +1,38 @@
 #include "SceneGraph.h"
 #include <QtMath>
 #include <algorithm>
+#include <cmath>
+
+// Decomposes an affine TRS matrix (built the same way as localTransform():
+// T * Rx(a) * Ry(b) * Rz(c) * S) back into position / Euler-XYZ-degrees /
+// per-axis scale. Mirrors the rotation-matrix-to-Euler formula used for
+// MuJoCo quaternions in SimulationEngine::quatToEulerXYZ.
+static void decomposeMatrix(const QMatrix4x4& m, QVector3D& pos, QVector3D& eulerDeg, QVector3D& scale) {
+    pos = m.column(3).toVector3D();
+    QVector3D c0 = m.column(0).toVector3D();
+    QVector3D c1 = m.column(1).toVector3D();
+    QVector3D c2 = m.column(2).toVector3D();
+    scale = { c0.length(), c1.length(), c2.length() };
+    QVector3D r0 = scale.x() > 1e-8f ? c0 / scale.x() : QVector3D(1, 0, 0);
+    QVector3D r1 = scale.y() > 1e-8f ? c1 / scale.y() : QVector3D(0, 1, 0);
+    QVector3D r2 = scale.z() > 1e-8f ? c2 / scale.z() : QVector3D(0, 0, 1);
+
+    float r00 = r0.x();
+    float r01 = r1.x(), r11 = r1.y(), r21 = r1.z();
+    float r02 = r2.x(), r12 = r2.y(), r22 = r2.z();
+
+    float b = asinf(std::clamp(r02, -1.0f, 1.0f));
+    float a, c;
+    if (fabsf(cosf(b)) > 1e-6f) {
+        a = atan2f(-r12, r22);
+        c = atan2f(-r01, r00);
+    } else {
+        a = atan2f(r21, r11);
+        c = 0.0f;
+    }
+    const float kR2D = 180.0f / float(M_PI);
+    eulerDeg = { a * kR2D, b * kR2D, c * kR2D };
+}
 
 SceneGraph::SceneGraph(QObject* parent) : QObject(parent) {}
 
@@ -30,9 +62,30 @@ void SceneGraph::removeObject(int id) {
 
     SceneObject& obj = it->second;
 
-    // Recursively remove children
-    auto childsCopy = obj.childIds;
-    for (int cid : childsCopy) removeObject(cid);
+    if (m_rigidBodies.count(id) && !obj.childIds.empty()) {
+        // Rigid body group: this object only exists to bundle its children
+        // under one RigidBody, so deleting it should ungroup them back into
+        // the surrounding hierarchy rather than deleting them too. Bake this
+        // group's own transform into each child first, so if the merged unit
+        // was moved as a whole, the children keep their current world
+        // position/orientation instead of snapping back to pre-merge values.
+        QMatrix4x4 groupLocal = localTransform(id);
+        auto childrenCopy = obj.childIds;
+        for (int cid : childrenCopy) {
+            if (SceneObject* child = getObject(cid)) {
+                QVector3D pos, eulerDeg, scale;
+                decomposeMatrix(groupLocal * localTransform(cid), pos, eulerDeg, scale);
+                child->transform.position = pos;
+                child->transform.rotation = eulerDeg;
+                child->transform.scale    = scale;
+            }
+            reparentObject(cid, obj.parentId);
+        }
+    } else {
+        // Recursively remove children
+        auto childsCopy = obj.childIds;
+        for (int cid : childsCopy) removeObject(cid);
+    }
 
     // Detach from parent
     if (obj.parentId != -1) {
