@@ -3,6 +3,9 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QByteArray>
+#include <cstring>
+#include <map>
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -30,20 +33,45 @@ static Transform transformFromJson(const QJsonObject& o) {
 
 static QString primitiveToStr(PrimitiveType t) {
     switch (t) {
-        case PrimitiveType::Cube:     return "Cube";
-        case PrimitiveType::Cylinder: return "Cylinder";
-        case PrimitiveType::Sphere:   return "Sphere";
-        case PrimitiveType::Capsule:  return "Capsule";
-        case PrimitiveType::Basket:   return "Basket";
+        case PrimitiveType::Cube:         return "Cube";
+        case PrimitiveType::Cylinder:     return "Cylinder";
+        case PrimitiveType::Sphere:       return "Sphere";
+        case PrimitiveType::Capsule:      return "Capsule";
+        case PrimitiveType::Basket:       return "Basket";
+        case PrimitiveType::ImportedMesh: return "ImportedMesh";
     }
     return "Cube";
 }
 static PrimitiveType primitiveFromStr(const QString& s) {
-    if (s == "Cylinder") return PrimitiveType::Cylinder;
-    if (s == "Sphere")   return PrimitiveType::Sphere;
-    if (s == "Capsule")  return PrimitiveType::Capsule;
-    if (s == "Basket")   return PrimitiveType::Basket;
+    if (s == "Cylinder")     return PrimitiveType::Cylinder;
+    if (s == "Sphere")       return PrimitiveType::Sphere;
+    if (s == "Capsule")      return PrimitiveType::Capsule;
+    if (s == "Basket")       return PrimitiveType::Basket;
+    if (s == "ImportedMesh") return PrimitiveType::ImportedMesh;
     return PrimitiveType::Cube;
+}
+
+// Mesh geometry is stored once per unique MeshGeometry (shared_ptr identity)
+// in a top-level "meshes" array; objects with the same imported part reference
+// it by index so repeated assembly instances don't duplicate triangle data.
+static QJsonObject meshToJson(const MeshGeometry& m) {
+    QByteArray raw(reinterpret_cast<const char*>(m.interleaved.data()),
+                   int(m.interleaved.size() * sizeof(float)));
+    QJsonObject o;
+    o["vertexData"] = QString::fromLatin1(raw.toBase64());
+    o["aabbMin"]    = vec3ToJson(m.aabbMin);
+    o["aabbMax"]    = vec3ToJson(m.aabbMax);
+    return o;
+}
+static std::shared_ptr<MeshGeometry> meshFromJson(const QJsonObject& o) {
+    auto m = std::make_shared<MeshGeometry>();
+    QByteArray raw = QByteArray::fromBase64(o["vertexData"].toString().toLatin1());
+    m->interleaved.resize(size_t(raw.size()) / sizeof(float));
+    if (!m->interleaved.empty())
+        memcpy(m->interleaved.data(), raw.constData(), size_t(raw.size()));
+    m->aabbMin = vec3FromJson(o["aabbMin"].toObject());
+    m->aabbMax = vec3FromJson(o["aabbMax"].toObject());
+    return m;
 }
 
 static QString collisionTypeToStr(CollisionType t) {
@@ -65,7 +93,10 @@ static CollisionType collisionTypeFromStr(const QString& s) {
 // ── save ─────────────────────────────────────────────────────────────────────
 
 bool ProjectSerializer::save(const SceneGraph& scene, const QString& filePath) {
-    QJsonArray objects, joints, motors, rigidBodies, conveyorBelts;
+    QJsonArray objects, joints, motors, rigidBodies, conveyorBelts, meshes;
+
+    // De-dupe by MeshGeometry identity so shared assembly parts serialize once
+    std::map<const MeshGeometry*, int> meshIndex;
 
     for (auto& [id, obj] : scene.allObjects()) {
         QJsonObject o;
@@ -74,6 +105,19 @@ bool ProjectSerializer::save(const SceneGraph& scene, const QString& filePath) {
         o["type"]      = primitiveToStr(obj.type);
         o["parentId"]  = obj.parentId;
         o["transform"] = transformToJson(obj.transform);
+
+        if (obj.mesh) {
+            auto it = meshIndex.find(obj.mesh.get());
+            int idx;
+            if (it != meshIndex.end()) {
+                idx = it->second;
+            } else {
+                idx = meshes.size();
+                meshes.append(meshToJson(*obj.mesh));
+                meshIndex[obj.mesh.get()] = idx;
+            }
+            o["meshId"] = idx;
+        }
         objects.append(o);
     }
 
@@ -137,6 +181,7 @@ bool ProjectSerializer::save(const SceneGraph& scene, const QString& filePath) {
     root["motors"]        = motors;
     root["rigidBodies"]   = rigidBodies;
     root["conveyorBelts"] = conveyorBelts;
+    root["meshes"]        = meshes;
 
     QFile f(filePath);
     if (!f.open(QIODevice::WriteOnly)) return false;
@@ -155,8 +200,14 @@ bool ProjectSerializer::load(SceneGraph& scene, const QString& filePath) {
     scene.clear();
     QJsonObject root = doc.object();
 
+    // Shared mesh geometry, indexed as written by save()
+    std::vector<std::shared_ptr<MeshGeometry>> meshList;
+    for (auto v : root["meshes"].toArray())
+        meshList.push_back(meshFromJson(v.toObject()));
+
     struct ObjData {
         int id; QString name; PrimitiveType type; int parentId; Transform transform;
+        int meshId = -1;
     };
     QList<ObjData> objList;
     for (auto v : root["objects"].toArray()) {
@@ -167,6 +218,7 @@ bool ProjectSerializer::load(SceneGraph& scene, const QString& filePath) {
         d.type      = primitiveFromStr(o["type"].toString());
         d.parentId  = o["parentId"].toInt(-1);
         d.transform = transformFromJson(o["transform"].toObject());
+        d.meshId    = o.contains("meshId") ? o["meshId"].toInt(-1) : -1;
         objList.append(d);
     }
 
@@ -180,8 +232,11 @@ bool ProjectSerializer::load(SceneGraph& scene, const QString& filePath) {
         int mappedParent = (d.parentId == -1) ? -1 : idMap.value(d.parentId, -1);
         int newId = scene.addObject(d.name, d.type, mappedParent);
         idMap[d.id] = newId;
-        if (SceneObject* obj = scene.getObject(newId))
+        if (SceneObject* obj = scene.getObject(newId)) {
             obj->transform = d.transform;
+            if (d.meshId >= 0 && d.meshId < int(meshList.size()))
+                obj->mesh = meshList[size_t(d.meshId)];
+        }
     }
 
     // Joints

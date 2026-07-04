@@ -235,6 +235,16 @@ void SimulationEngine::writeGeomXML(QString& xml, const SceneObject* obj,
                     .arg(flt(0.025f*sy)).arg(flt(-0.475f*sz)).arg(ma5).arg(noCol);
                 break;
             }
+            case PrimitiveType::ImportedMesh: {
+                // No convex-hull collision yet — approximate with an AABB box
+                QVector3D he = (obj->aabbMax() - obj->aabbMin()) * 0.5f * s;
+                QVector3D c2 = (obj->aabbMax() + obj->aabbMin()) * 0.5f * s;
+                QString posAttr = c2.isNull() ? QString() : pos3(c2);
+                xml += pad + QString("<geom type=\"box\" size=\"%1 %2 %3\"%4%5%6/>\n")
+                    .arg(flt(he.x())).arg(flt(he.y())).arg(flt(he.z()))
+                    .arg(posAttr).arg(massAttr).arg(noCol);
+                break;
+            }
         }
     }
 }

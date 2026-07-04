@@ -202,6 +202,15 @@ void SceneGraph::addRigidBody(int objectId) {
                 c.radius = obj->transform.scale.x() / 2.0f;
                 c.height = obj->transform.scale.y();
                 break;
+            case PrimitiveType::ImportedMesh: {
+                QVector3D he = (obj->aabbMax() - obj->aabbMin()) * 0.5f * obj->transform.scale;
+                c.type   = CollisionType::Box;
+                c.halfW  = he.x();
+                c.halfH  = he.y();
+                c.halfD  = he.z();
+                c.offset = (obj->aabbMax() + obj->aabbMin()) * 0.5f * obj->transform.scale;
+                break;
+            }
         }
     }
     m_rigidBodies[objectId] = rb;
@@ -240,6 +249,73 @@ void SceneGraph::removeRigidBody(int objectId) {
 RigidBody* SceneGraph::getRigidBody(int objectId) {
     auto it = m_rigidBodies.find(objectId);
     return it != m_rigidBodies.end() ? &it->second : nullptr;
+}
+
+void SceneGraph::reparentObject(int id, int newParentId) {
+    SceneObject* obj = getObject(id);
+    if (!obj) return;
+
+    if (obj->parentId == -1) {
+        m_roots.erase(std::remove(m_roots.begin(), m_roots.end(), id), m_roots.end());
+    } else if (auto* oldParent = getObject(obj->parentId)) {
+        auto& c = oldParent->childIds;
+        c.erase(std::remove(c.begin(), c.end(), id), c.end());
+    }
+
+    obj->parentId = newParentId;
+    if (newParentId == -1) {
+        m_roots.push_back(id);
+    } else if (auto* newParent = getObject(newParentId)) {
+        newParent->childIds.push_back(id);
+    }
+}
+
+SceneGraph::CombineResult SceneGraph::combineIntoRigidBody(const std::vector<int>& objectIds,
+                                                             const QString& groupName, int& outGroupId) {
+    outGroupId = -1;
+
+    // Only motionless parts (no incoming joint) are eligible for merging.
+    std::vector<int> eligible;
+    for (int id : objectIds) {
+        if (!getObject(id)) continue;
+        if (jointForChild(id)) continue;
+        eligible.push_back(id);
+    }
+    if (eligible.size() < 2) return CombineResult::TooFewEligible;
+
+    int commonParent = getObject(eligible.front())->parentId;
+    for (int id : eligible) {
+        if (getObject(id)->parentId != commonParent) return CombineResult::MixedParents;
+    }
+
+    int groupId = addObject(groupName, PrimitiveType::ImportedMesh, commonParent);
+
+    float totalMass = 0.0f;
+    bool  hadRigidBody = false;
+    for (int id : eligible) {
+        if (RigidBody* rb = getRigidBody(id)) {
+            totalMass += rb->mass;
+            hadRigidBody = true;
+            removeRigidBody(id);
+        }
+    }
+
+    for (int id : eligible) reparentObject(id, groupId);
+
+    addRigidBody(groupId);
+    if (hadRigidBody) {
+        if (RigidBody* rb = getRigidBody(groupId)) rb->mass = totalMass;
+        emit rigidBodyChanged(groupId);
+    }
+
+    selectObject(groupId);
+    // Re-announce the group now that its children are attached, so listeners
+    // that rebuild their view from the tree (e.g. HierarchyPanel) pick up the
+    // final structure rather than the empty group emitted by addObject().
+    emit objectAdded(groupId);
+
+    outGroupId = groupId;
+    return CombineResult::Ok;
 }
 
 void SceneGraph::clear() {

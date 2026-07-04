@@ -232,7 +232,11 @@ Viewport::Viewport(SceneGraph* scene, QWidget* parent)
         m_gizmoDragAxis    = -1;
         update();
     });
-    connect(scene, &SceneGraph::sceneCleared,     this, [this]{ m_hoveredId = -1; update(); });
+    connect(scene, &SceneGraph::sceneCleared,     this, [this]{
+        m_hoveredId = -1;
+        releaseImportedMeshes();
+        update();
+    });
     connect(scene, &SceneGraph::rigidBodyAdded,      this, [this](int){ update(); });
     connect(scene, &SceneGraph::rigidBodyRemoved,   this, [this](int){ update(); });
     connect(scene, &SceneGraph::rigidBodyChanged,   this, [this](int){ update(); });
@@ -286,6 +290,11 @@ Viewport::~Viewport() {
         if(m.vbo) glDeleteBuffers(1, &m.vbo);
     };
     del(m_cube); del(m_cylinder); del(m_sphere); del(m_capsule); del(m_basket);
+    for (auto& [geo, m] : m_importedMeshes) {
+        if (m.vao) glDeleteVertexArrays(1, &m.vao);
+        if (m.vbo) glDeleteBuffers(1, &m.vbo);
+    }
+    m_importedMeshes.clear();
     if(m_gridVao)  glDeleteVertexArrays(1, &m_gridVao);
     if(m_gridVbo)  glDeleteBuffers(1, &m_gridVbo);
     if(m_axisVao)  glDeleteVertexArrays(1, &m_axisVao);
@@ -426,6 +435,28 @@ void Viewport::buildMeshes() {
     m_sphere   = makeSphere();
     m_capsule  = makeCapsule();
     m_basket   = makeBasket();
+}
+
+// Lazy GPU upload for imported CAD meshes. Must be called with the GL
+// context current (drawScene). Group nodes (null mesh) return nullptr.
+const MeshData* Viewport::meshFor(const SceneObject& obj) {
+    if (!obj.mesh || obj.mesh->interleaved.empty()) return nullptr;
+    auto it = m_importedMeshes.find(obj.mesh.get());
+    if (it != m_importedMeshes.end()) return &it->second;
+    MeshData m;
+    uploadMesh(m, obj.mesh->interleaved);
+    return &(m_importedMeshes[obj.mesh.get()] = m);
+}
+
+void Viewport::releaseImportedMeshes() {
+    if (m_importedMeshes.empty()) return;
+    makeCurrent();
+    for (auto& [geo, m] : m_importedMeshes) {
+        if (m.vao) glDeleteVertexArrays(1, &m.vao);
+        if (m.vbo) glDeleteBuffers(1, &m.vbo);
+    }
+    m_importedMeshes.clear();
+    doneCurrent();
 }
 
 void Viewport::buildAxisGizmo() {
@@ -590,22 +621,26 @@ static QVector3D primitiveColor(PrimitiveType t){
         case PrimitiveType::Sphere:   return {1.00f,0.45f,0.15f};
         case PrimitiveType::Capsule:  return {0.72f,0.25f,1.00f};
         case PrimitiveType::Basket:   return {0.72f,0.50f,0.18f};
+        case PrimitiveType::ImportedMesh: return {0.62f,0.66f,0.72f};   // machined steel
     }
     return {0.6f,0.6f,0.6f};
 }
 
-std::vector<Viewport::KeyPoint> Viewport::keyPointsFor(PrimitiveType) {
-    // 9 points: center + 8 bounding-box corners — uniform for all shapes
+std::vector<Viewport::KeyPoint> Viewport::keyPointsFor(const SceneObject& obj) {
+    // 9 points: center + 8 bounding-box corners.
+    // Primitives span ±0.5; imported meshes use their real AABB.
+    const QVector3D mn = obj.aabbMin(), mx = obj.aabbMax();
+    const QVector3D c  = (mn + mx) * 0.5f;
     return {
-        {"Center",      { 0.0f,  0.0f,  0.0f}},
-        {"Bot-Front-L", {-0.5f, -0.5f, -0.5f}},
-        {"Bot-Front-R", { 0.5f, -0.5f, -0.5f}},
-        {"Bot-Back-L",  {-0.5f, -0.5f,  0.5f}},
-        {"Bot-Back-R",  { 0.5f, -0.5f,  0.5f}},
-        {"Top-Front-L", {-0.5f,  0.5f, -0.5f}},
-        {"Top-Front-R", { 0.5f,  0.5f, -0.5f}},
-        {"Top-Back-L",  {-0.5f,  0.5f,  0.5f}},
-        {"Top-Back-R",  { 0.5f,  0.5f,  0.5f}},
+        {"Center",      c},
+        {"Bot-Front-L", {mn.x(), mn.y(), mn.z()}},
+        {"Bot-Front-R", {mx.x(), mn.y(), mn.z()}},
+        {"Bot-Back-L",  {mn.x(), mn.y(), mx.z()}},
+        {"Bot-Back-R",  {mx.x(), mn.y(), mx.z()}},
+        {"Top-Front-L", {mn.x(), mx.y(), mn.z()}},
+        {"Top-Front-R", {mx.x(), mx.y(), mn.z()}},
+        {"Top-Back-L",  {mn.x(), mx.y(), mx.z()}},
+        {"Top-Back-R",  {mx.x(), mx.y(), mx.z()}},
     };
 }
 
@@ -676,6 +711,9 @@ void Viewport::drawScene(){
             case PrimitiveType::Sphere:   drawMesh(m_sphere);   break;
             case PrimitiveType::Capsule:  drawMesh(m_capsule);  break;
             case PrimitiveType::Basket:   drawMesh(m_basket);   break;
+            case PrimitiveType::ImportedMesh:
+                if (const MeshData* md = meshFor(obj)) drawMesh(*md);
+                break;
         }
     }
     m_objShader->release();
@@ -730,6 +768,13 @@ void Viewport::drawPhysicsOverlays() {
             case PrimitiveType::Sphere:   rbWire = wireSphere(0.5f);                break;
             case PrimitiveType::Capsule:  rbWire = wireCapsule(0.25f, 0.5f);        break;
             case PrimitiveType::Basket:   rbWire = wireBasket();                    break;
+            case PrimitiveType::ImportedMesh: {
+                // AABB outline; the box is not origin-centred, so shift the model
+                QVector3D he = (obj->aabbMax() - obj->aabbMin()) * 0.5f;
+                rbModel.translate((obj->aabbMax() + obj->aabbMin()) * 0.5f);
+                rbWire = wireBox(he.x(), he.y(), he.z());
+                break;
+            }
         }
         drawWireLines(rbWire, {1.0f, 0.55f, 0.05f}, rbModel);
 
@@ -791,7 +836,7 @@ void Viewport::drawKeyPoints(QPainter& p) {
     const SceneObject* obj = m_scene->getObject(m_hoveredId);
     if (!obj) { m_nearKeyPointIdx = -1; return; }
 
-    auto kps = keyPointsFor(obj->type);
+    auto kps = keyPointsFor(*obj);
     if (kps.empty()) return;
 
     QMatrix4x4 wt = m_scene->worldTransform(m_hoveredId);
@@ -852,9 +897,11 @@ void Viewport::drawKeyPoints(QPainter& p) {
 float Viewport::gizmoArrowLength(int objectId) const {
     const SceneObject* obj = m_scene->getObject(objectId);
     if (!obj) return 1.0f;
-    float sx = std::abs(obj->transform.scale.x());
-    float sy = std::abs(obj->transform.scale.y());
-    float sz = std::abs(obj->transform.scale.z());
+    // Extent = scale × local AABB size (unit box for primitives, real AABB for meshes)
+    QVector3D ext = obj->aabbMax() - obj->aabbMin();
+    float sx = std::abs(obj->transform.scale.x() * ext.x());
+    float sy = std::abs(obj->transform.scale.y() * ext.y());
+    float sz = std::abs(obj->transform.scale.z() * ext.z());
     return std::max({sx, sy, sz}) * 0.5f + 0.8f;
 }
 
@@ -1103,16 +1150,18 @@ bool Viewport::rayAABB(const QVector3D& orig,const QVector3D& dir,
 static std::pair<int,float> pickNearest(SceneGraph* scene, const QVector3D& orig, const QVector3D& dir){
     int bestId=-1; float bestT=std::numeric_limits<float>::max();
     for(auto& [id,obj] : scene->allObjects()){
+        // Assembly group nodes have no geometry — selectable via hierarchy only
+        if(obj.type==PrimitiveType::ImportedMesh && !obj.mesh) continue;
         QMatrix4x4 inv=scene->worldTransform(id).inverted();
         QVector3D lo=inv.map(orig), ld(inv*QVector4D(dir,0.0f));
-        float t; QVector3D he(0.5f,0.5f,0.5f);
+        float t; QVector3D bmn=obj.aabbMin(), bmx=obj.aabbMax();
         if(true){
             float tMn=-1e9f,tMx=1e9f;
             for(int i=0;i<3;i++){
                 float d=(i==0)?ld.x():(i==1)?ld.y():ld.z();
                 float o2=(i==0)?lo.x():(i==1)?lo.y():lo.z();
-                float mn2=(i==0)?-he.x():(i==1)?-he.y():-he.z();
-                float mx2=(i==0)?he.x():(i==1)?he.y():he.z();
+                float mn2=(i==0)?bmn.x():(i==1)?bmn.y():bmn.z();
+                float mx2=(i==0)?bmx.x():(i==1)?bmx.y():bmx.z();
                 if(std::abs(d)<1e-8f){ if(o2<mn2||o2>mx2){ tMn=1e9f; break; } }
                 else { float t1=(mn2-o2)/d,t2=(mx2-o2)/d; if(t1>t2) std::swap(t1,t2); tMn=std::max(tMn,t1); tMx=std::min(tMx,t2); if(tMn>tMx){ tMn=1e9f; break; } }
             }
@@ -1168,7 +1217,7 @@ void Viewport::mousePressEvent(QMouseEvent* e){
         if (m_nearKeyPointIdx != -1 && m_hoveredId != -1) {
             const SceneObject* obj = m_scene->getObject(m_hoveredId);
             if (obj) {
-                auto kps = keyPointsFor(obj->type);
+                auto kps = keyPointsFor(*obj);
                 if (m_nearKeyPointIdx < (int)kps.size()) {
                     QVector3D wp = m_scene->worldTransform(m_hoveredId).map(kps[m_nearKeyPointIdx].localPos);
                     emit keyPointSelected(kps[m_nearKeyPointIdx].name, wp);

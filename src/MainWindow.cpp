@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 #include "serialization/ProjectSerializer.h"
+#include "import/StepImporter.h"
 #include "ui/TemplateDialog.h"
 #include <QApplication>
 #include <QMenuBar>
@@ -11,6 +12,14 @@
 #include <QMessageBox>
 #include <QKeySequence>
 #include <QFileInfo>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
+#include <QGuiApplication>
+#include <QCursor>
+#include <QUrl>
+#include <QtConcurrent/QtConcurrentRun>
+#include <functional>
 
 // ── Style constants ───────────────────────────────────────────────────────────
 
@@ -39,6 +48,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle("MotionStudio — New Project");
     resize(1280, 800);
     setStyleSheet(kWinStyle);
+    setAcceptDrops(true);
 
     m_scene    = new SceneGraph(this);
     m_sim      = new SimulationEngine(m_scene, this);
@@ -111,6 +121,8 @@ void MainWindow::buildMenu() {
     mkA(file, "&New Project",    &MainWindow::newProject,   QKeySequence::New);
     mkA(file, "&Open Project…", &MainWindow::openProject,  QKeySequence::Open);
     mkA(file, "Open &Template…",&MainWindow::openTemplate);
+    file->addSeparator();
+    mkA(file, "&Import STEP…",  &MainWindow::importStep);
     file->addSeparator();
     mkA(file, "&Save",          &MainWindow::saveProject,  QKeySequence::Save);
     mkA(file, "Save &As…",      &MainWindow::saveProjectAs);
@@ -294,6 +306,122 @@ void MainWindow::saveProjectAs() {
     if(path.isEmpty()) return;
     m_currentFile = path;
     saveProject();
+}
+
+// ── STEP import ───────────────────────────────────────────────────────────────
+
+static bool isStepPath(const QString& path) {
+    QString s = QFileInfo(path).suffix().toLower();
+    return s == "step" || s == "stp";
+}
+
+void MainWindow::importStep() {
+    QString path = QFileDialog::getOpenFileName(this, "Import STEP", {},
+        "STEP Files (*.step *.stp *.STEP *.STP);;All Files (*)");
+    if(path.isEmpty()) return;
+    importStepFile(path);
+}
+
+int MainWindow::addImportedPart(const StepImporter::Part& part, int parentId) {
+    QString name = part.name.isEmpty() ? "Part" : part.name;
+    int id = m_scene->addObject(name, PrimitiveType::ImportedMesh, parentId);
+    if(SceneObject* obj = m_scene->getObject(id)){
+        obj->transform.position = part.position;
+        obj->transform.rotation = part.rotationDeg;
+        obj->transform.scale    = {1, 1, 1};
+        obj->mesh               = part.mesh;
+    }
+    for(const auto& child : part.children)
+        addImportedPart(child, id);
+    return id;
+}
+
+void MainWindow::importStepFile(const QString& path) {
+    if(!StepImporter::available()){
+        QMessageBox::warning(this, "STEP Import Unavailable",
+            "MotionStudio was built without OpenCASCADE.\n"
+            "Install the libocct-*-dev packages and rebuild to enable STEP import.");
+        return;
+    }
+    if(m_stepWatcher){
+        showStatus("A STEP import is already in progress", false);
+        return;
+    }
+
+    m_stepImportName = QFileInfo(path).fileName();
+
+    // Large assemblies can take a minute-plus to triangulate (OCCT is CPU-bound
+    // and single-threaded per shape) — run it off the GUI thread so the window
+    // doesn't appear to hang, with a modal progress dialog since there's nothing
+    // useful to do until it finishes.
+    m_stepProgress = new QProgressDialog("Importing " + m_stepImportName + "…", QString(), 0, 0, this);
+    m_stepProgress->setWindowTitle("STEP Import");
+    m_stepProgress->setWindowModality(Qt::WindowModal);
+    m_stepProgress->setMinimumDuration(0);
+    m_stepProgress->setCancelButton(nullptr);  // OCCT translation can't be safely interrupted mid-flight
+    m_stepProgress->setValue(0);
+    m_stepProgress->show();
+
+    m_stepWatcher = new QFutureWatcher<StepImportResult>(this);
+    connect(m_stepWatcher, &QFutureWatcher<StepImportResult>::finished,
+            this, &MainWindow::onStepImportFinished);
+
+    QFuture<StepImportResult> future = QtConcurrent::run([path]() -> StepImportResult {
+        StepImportResult r;
+        r.ok = StepImporter::importFile(path, r.root, r.error);
+        return r;
+    });
+    m_stepWatcher->setFuture(future);
+}
+
+void MainWindow::onStepImportFinished() {
+    StepImportResult result = m_stepWatcher->result();
+
+    m_stepProgress->close();
+    m_stepProgress->deleteLater();
+    m_stepProgress = nullptr;
+    m_stepWatcher->deleteLater();
+    m_stepWatcher = nullptr;
+
+    if(!result.ok){
+        QMessageBox::critical(this, "STEP Import Failed",
+            "Could not import:\n" + m_stepImportName + "\n\n" + result.error);
+        showStatus("STEP import failed", false);
+        return;
+    }
+
+    int rootId = addImportedPart(result.root, -1);
+    m_scene->selectObject(rootId);
+
+    // Count leaf parts for the status message
+    int partCount = 0;
+    std::function<void(const StepImporter::Part&)> count = [&](const StepImporter::Part& p){
+        if(p.mesh) partCount++;
+        for(const auto& c : p.children) count(c);
+    };
+    count(result.root);
+    showStatus(QString("Imported %1  —  %2 part%3")
+        .arg(m_stepImportName).arg(partCount).arg(partCount == 1 ? "" : "s"));
+}
+
+// ── Drag & drop ───────────────────────────────────────────────────────────────
+
+void MainWindow::dragEnterEvent(QDragEnterEvent* e) {
+    if(!e->mimeData()->hasUrls()) return;
+    for(const QUrl& url : e->mimeData()->urls()){
+        if(url.isLocalFile() && isStepPath(url.toLocalFile())){
+            e->acceptProposedAction();
+            return;
+        }
+    }
+}
+
+void MainWindow::dropEvent(QDropEvent* e) {
+    for(const QUrl& url : e->mimeData()->urls()){
+        if(url.isLocalFile() && isStepPath(url.toLocalFile()))
+            importStepFile(url.toLocalFile());
+    }
+    e->acceptProposedAction();
 }
 
 // ── Object actions ────────────────────────────────────────────────────────────

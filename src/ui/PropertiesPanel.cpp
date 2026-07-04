@@ -676,7 +676,7 @@ void PropertiesPanel::loadObject(int id) {
 
     // Name card
     m_nameLabel->setText(obj->name);
-    static const char* typeNames[] = {"Cube", "Cylinder", "Sphere", "Capsule", "Basket"};
+    static const char* typeNames[] = {"Cube", "Cylinder", "Sphere", "Capsule", "Basket", "Imported Mesh"};
     QString parentInfo = obj->parentId == -1 ? "Root object" :
         "Child of: " + (m_scene->getObject(obj->parentId) ? m_scene->getObject(obj->parentId)->name : "?");
     m_typeLabel->setText(QString("%1  —  %2").arg(typeNames[int(obj->type)], parentInfo));
@@ -890,6 +890,16 @@ void PropertiesPanel::addCollision() {
                 c.halfH = obj->transform.scale.y() / 2.0f;
                 c.halfD = obj->transform.scale.z() / 2.0f;
                 break;
+            case PrimitiveType::ImportedMesh: {
+                // Box around the mesh AABB (world half extents, offset to AABB centre)
+                QVector3D he = (obj->aabbMax() - obj->aabbMin()) * 0.5f * obj->transform.scale;
+                c.type   = CollisionType::Box;
+                c.halfW  = he.x();
+                c.halfH  = he.y();
+                c.halfD  = he.z();
+                c.offset = (obj->aabbMax() + obj->aabbMin()) * 0.5f * obj->transform.scale;
+                break;
+            }
         }
     }
     rb->hasCollision = true;
@@ -928,8 +938,8 @@ void PropertiesPanel::snapToFloor() {
     if (m_currentId == -1) return;
     SceneObject* obj = m_scene->getObject(m_currentId);
     if (!obj) return;
-    // All primitives span ±0.5 in local Y before scale, so bottom = -scale.y/2
-    float newY = obj->transform.scale.y() * 0.5f;
+    // Primitives span ±0.5 in local Y before scale; imported meshes use their real AABB
+    float newY = -obj->aabbMin().y() * obj->transform.scale.y();
     m_loading = true;
     obj->transform.position.setY(newY);
     m_py->setValue(newY * unitFactor());

@@ -2,16 +2,30 @@
 #include <QMainWindow>
 #include <QLabel>
 #include <QTimer>
+#include <QProgressDialog>
+#include <QFutureWatcher>
 #include "scene/SceneGraph.h"
 #include "viewport/Viewport.h"
 #include "physics/SimulationEngine.h"
 #include "ui/HierarchyPanel.h"
 #include "ui/PropertiesPanel.h"
+#include "import/StepImporter.h"
+
+// Result of a background StepImporter::importFile() call (see importStepFile)
+struct StepImportResult {
+    bool               ok = false;
+    StepImporter::Part root;
+    QString            error;
+};
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
     explicit MainWindow(QWidget* parent = nullptr);
+
+protected:
+    void dragEnterEvent(QDragEnterEvent* e) override;
+    void dropEvent(QDropEvent* e) override;
 
 private slots:
     void newProject();
@@ -19,6 +33,7 @@ private slots:
     void openTemplate();
     void saveProject();
     void saveProjectAs();
+    void importStep();
 
     void addObject(PrimitiveType type);
     void addJointToSelected();
@@ -28,6 +43,7 @@ private slots:
     void onSimStateChanged(bool running);
     void onTimeUpdated(double seconds);
     void onSceneDirtied();
+    void onStepImportFinished();
 
 private:
     void buildMenu();
@@ -35,6 +51,9 @@ private:
     void buildDocks();
     void buildStatusBar();
     void updateTitle();
+
+    void importStepFile(const QString& path);
+    int  addImportedPart(const StepImporter::Part& part, int parentId);
 
     // "success" = green feedback, default = error (red)
     void showStatus(const QString& msg, bool success = true);
@@ -49,4 +68,11 @@ private:
     QTimer   m_statusTimer;
     QString  m_currentFile;
     bool     m_dirty = false;
+
+    // STEP import runs on a worker thread (large assemblies can take a
+    // minute-plus to triangulate); a modal progress dialog blocks further
+    // interaction until it completes.
+    QFutureWatcher<StepImportResult>* m_stepWatcher  = nullptr;
+    QProgressDialog*                  m_stepProgress = nullptr;
+    QString                           m_stepImportName;
 };

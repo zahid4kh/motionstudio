@@ -17,12 +17,12 @@
     ],
     "objects": [
         {
-            "id": 4,
+            "id": 3,
             "name": "Basket",
             "parentId": -1,
             "transform": {
                 "position": {
-                    "x": 3.2171242237091064,
+                    "x": 3.3135735988616943,
                     "y": 0.5,
                     "z": 0
                 },

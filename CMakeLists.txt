@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets Concurrent)
 
 # nlohmann/json via FetchContent
 include(FetchContent)
@@ -35,6 +35,20 @@ else()
     set(MUJOCO_FOUND FALSE)
 endif()
 
+# OpenCASCADE (OCCT) — STEP import. Optional, same pattern as MuJoCo:
+# without it, STEP import is compiled out (no OCCT_ENABLED define).
+find_path(OCCT_INCLUDE_DIR NAMES opencascade/STEPCAFControl_Reader.hxx)
+find_library(OCCT_TKXDESTEP_LIB NAMES TKXDESTEP)
+if(OCCT_INCLUDE_DIR AND OCCT_TKXDESTEP_LIB)
+    message(STATUS "OpenCASCADE found (${OCCT_TKXDESTEP_LIB}) — STEP import enabled")
+    set(OCCT_FOUND TRUE)
+else()
+    message(WARNING "OpenCASCADE not found. STEP import will be disabled. "
+                    "Install libocct-data-exchange-dev, libocct-ocaf-dev, "
+                    "libocct-modeling-algorithms-dev to enable it.")
+    set(OCCT_FOUND FALSE)
+endif()
+
 set(SOURCES
     src/main.cpp
     src/MainWindow.cpp
@@ -46,6 +60,7 @@ set(SOURCES
     src/ui/PropertiesPanel.cpp
     src/ui/TemplateDialog.cpp
     src/serialization/ProjectSerializer.cpp
+    src/import/StepImporter.cpp
     resources.qrc
 )
 
@@ -60,10 +75,24 @@ target_link_libraries(MotionStudio
     Qt6::Widgets
     Qt6::OpenGL
     Qt6::OpenGLWidgets
+    Qt6::Concurrent
     nlohmann_json::nlohmann_json
 )
 
 if(MUJOCO_FOUND)
     target_link_libraries(MotionStudio PRIVATE mujoco)
     target_compile_definitions(MotionStudio PRIVATE MUJOCO_ENABLED)
+endif()
+
+if(OCCT_FOUND)
+    target_include_directories(MotionStudio PRIVATE "${OCCT_INCLUDE_DIR}/opencascade")
+    get_filename_component(OCCT_LIB_DIR "${OCCT_TKXDESTEP_LIB}" DIRECTORY)
+    target_link_directories(MotionStudio PRIVATE "${OCCT_LIB_DIR}")
+    target_link_libraries(MotionStudio PRIVATE
+        TKernel TKMath TKG2d TKG3d TKGeomBase TKBRep
+        TKGeomAlgo TKTopAlgo TKShHealing TKMesh
+        TKXSBase TKSTEPBase TKSTEPAttr TKSTEP209 TKSTEP
+        TKCDF TKLCAF TKCAF TKXCAF TKXDESTEP
+    )
+    target_compile_definitions(MotionStudio PRIVATE OCCT_ENABLED)
 endif()

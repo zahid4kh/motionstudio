@@ -6,6 +6,7 @@
 #include <QPushButton>
 #include <QPoint>
 #include <vector>
+#include <unordered_map>
 #include "Camera.h"
 #include "../scene/SceneGraph.h"
 
@@ -37,7 +38,7 @@ protected:
 
 private:
     struct KeyPoint { QString name; QVector3D localPos; };
-    static std::vector<KeyPoint> keyPointsFor(PrimitiveType t);
+    static std::vector<KeyPoint> keyPointsFor(const SceneObject& obj);
 
     void buildShaders();
     void buildMeshes();
@@ -76,6 +77,13 @@ private:
     QOpenGLShaderProgram*  m_wireShader = nullptr;
 
     MeshData m_cube, m_cylinder, m_sphere, m_capsule, m_basket;
+
+    // GPU meshes for ImportedMesh objects, keyed by MeshGeometry pointer so
+    // assembly instances sharing one geometry also share one VBO.
+    // Uploaded lazily in drawScene (GL context current), freed on scene clear.
+    std::unordered_map<const MeshGeometry*, MeshData> m_importedMeshes;
+    const MeshData* meshFor(const SceneObject& obj);
+    void releaseImportedMeshes();
     GLuint   m_gridVao = 0, m_gridVbo = 0;
     GLuint   m_axisVao = 0, m_axisVbo = 0;
     GLuint   m_wireVao = 0, m_wireVbo = 0;

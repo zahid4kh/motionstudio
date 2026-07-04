@@ -42,6 +42,12 @@ public:
     RigidBody*  getRigidBody(int objectId);
     const std::unordered_map<int, RigidBody>& allRigidBodies() const { return m_rigidBodies; }
 
+    // Combine multiple motionless (no incoming joint) objects sharing the
+    // same parent into a new group object carrying a single RigidBody.
+    enum class CombineResult { Ok, TooFewEligible, MixedParents };
+    CombineResult combineIntoRigidBody(const std::vector<int>& objectIds,
+                                        const QString& groupName, int& outGroupId);
+
     // Conveyor belts
     void           addConveyorBelt(int objectId);
     void           removeConveyorBelt(int objectId);
@@ -62,6 +68,9 @@ public:
     QMatrix4x4 localTransform(int id) const;
 
     void clear();
+
+private:
+    void reparentObject(int id, int newParentId);
 
 signals:
     void objectAdded(int id);
