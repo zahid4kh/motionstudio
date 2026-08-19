@@ -152,9 +152,17 @@ void SimulationEngine::writeGeomXML(QString& xml, const SceneObject* obj,
     bool hasColl = rb && rb->hasCollision;
     QString massAttr = rb ? QString(" mass=\"%1\"").arg(flt(rb->mass))
                           : QString(" mass=\"0.001\"");
-    // No-RigidBody bodies are static (no freejoint) and still need collision so other
-    // objects can rest on them (e.g. a conveyor belt platform).
-    QString noCol;
+    // Collision is opt-in: a body only participates in contact physics if it has a
+    // RigidBody (dynamic — needs to fall/rest/interact) or a ConveyorBelt (static
+    // platform other objects rest on). Everything else — plain structural links,
+    // most STEP-imported parts — is excluded from collision entirely. Without this,
+    // every body defaults to collidable, and CAD assemblies routinely have parts
+    // that touch/overlap at mating faces by design, which reads as interpenetration
+    // to MuJoCo and blows up the solver the moment a joint gives them relative motion.
+    bool isStaticCollider = !rb && m_scene->getConveyorBelt(obj->id) != nullptr;
+    QString noCol = (rb || isStaticCollider)
+        ? QString()
+        : QString(" contype=\"0\" conaffinity=\"0\"");
 
     auto pos3 = [](QVector3D v) {
         return QString(" pos=\"%1 %2 %3\"").arg(flt(v.x())).arg(flt(v.y())).arg(flt(v.z()));
@@ -310,8 +318,14 @@ QString SimulationEngine::buildMJCF() const {
     QString xml;
     xml += "<mujoco model=\"MotionStudio\">\n";
     xml += "  <compiler autolimits=\"true\"/>\n";
-    // Y-up coordinate system: gravity in -Y
-    xml += "  <option gravity=\"0 -9.81 0\" timestep=\"0.002\"/>\n";
+    // Y-up coordinate system: gravity in -Y.
+    // implicitfast: handles velocity-dependent forces (joint damping, our
+    // velocity actuators) implicitly. Small imported parts get a near-zero
+    // placeholder mass/inertia when they have no RigidBody, which makes the
+    // damping+actuator system numerically stiff -- explicit Euler diverges to
+    // NaN within a handful of steps; implicitfast stays stable without
+    // requiring per-part mass/gain tuning.
+    xml += "  <option gravity=\"0 -9.81 0\" timestep=\"0.002\" integrator=\"implicitfast\"/>\n";
     xml += "  <worldbody>\n";
 
     // Floor plane at Y=0 (euler rotates MuJoCo's default Z-normal to +Y)

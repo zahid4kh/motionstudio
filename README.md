@@ -8,6 +8,10 @@
   A desktop app for building mechanical assemblies — joints, motors, conveyors — and running real-time 3D kinematic and physics simulations.
 </p>
 
+<p align="center">
+  <a href="https://buymeacoffee.com/zahidkh"><img src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me A Coffee"></a>
+</p>
+
 ---
 
 MotionStudio lets you assemble simple machines out of primitive bodies, wire up revolute/prismatic joints and motors, and press Play to watch them move. It targets the workflow of a mechanical or automation engineer sketching out motion — conveyors, robot arms, linear actuators, pick-and-place cells — without needing a full CAD suite.
