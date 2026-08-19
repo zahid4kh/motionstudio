@@ -5,3 +5,4 @@ packaging/staging_motionstd/
 packaging/*.deb
 *.mstudio
 CLAUDE.md
+packaging
