@@ -56,12 +56,6 @@ LD_LIBRARY_PATH=~/mujoco-3.10.0/lib ./build/MotionStudio
 
 Override the MuJoCo location with `-DMUJOCO_ROOT=<path>` or the `MUJOCO_ROOT` env var.
 
-### Debian package
-
-```bash
-./packaging/build-deb.sh [version] [architecture]
-```
-
 ## Quick start
 
 Objects added while something is selected become children of it — parent-child relationships are what joints connect.
