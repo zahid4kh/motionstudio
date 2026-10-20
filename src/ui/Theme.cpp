@@ -189,8 +189,13 @@ QAbstractSpinBox::up-arrow:disabled, QAbstractSpinBox::down-arrow:disabled { ima
 QComboBox { padding-right: 24px; }
 QComboBox::drop-down { border: none; width: 24px; }
 QComboBox::down-arrow { image: url(@ui@/chevron-down.svg); width: 12px; height: 12px; }
-QComboBox QAbstractItemView { background: @panel@; color: @fg@; border: 1px solid @handle@; border-radius: 8px;
+QComboBox { combobox-popup: 0; }
+QComboBoxPrivateContainer { background: @panel@; border: 1px solid @handle@; border-radius: 0; padding: 0; }
+QComboBox QAbstractItemView { background: @panel@; color: @fg@; border: none; border-radius: 0;
     padding: 4px; outline: 0; selection-background-color: @sel@; selection-color: @fg@; }
+QComboBox QAbstractItemView::item { min-height: 24px; padding: 0 10px; border-radius: 6px; color: @fg@; }
+QComboBox QAbstractItemView::item:hover { background: @hover@; }
+QComboBox QAbstractItemView::item:selected { background: @sel@; color: @fg@; }
 QTableView QLineEdit, QTableView QComboBox, QTableView QAbstractSpinBox {
     border: none; border-radius: 0; background: transparent; padding: 0 4px; min-height: 0; }
 QTableView QComboBox { padding: 0 2px; padding-right: 16px; }
@@ -218,6 +223,7 @@ QPushButton#viewButton { background: @overlay@; color: @fg@; border: 1px solid @
 QPushButton#viewButton:hover { background: @hoverstrong@; border-color: @handle@; }
 QPushButton#viewButton:pressed { background: @sel@; }
 QPushButton#viewButton[active="true"] { background: @accent@; color: @onaccent@; border-color: @accent@; }
+QFrame#lightingPanel { background: @panel@; border: 1px solid @handle@; }
 QLabel#viewOverlay { background: @overlay@; color: @fg@; border: 1px solid @border@; border-radius: 10px;
     padding: 6px 10px; font-size: 11px; }
 

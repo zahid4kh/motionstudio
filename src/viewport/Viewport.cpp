@@ -37,7 +37,12 @@ static const char* kObjFrag = R"(
 in vec3 fragPos;
 in vec3 normal;
 uniform vec3  objColor;
-uniform vec3  lightDir;
+uniform vec3  keyDir;
+uniform vec3  fillDir;
+uniform float ambient;
+uniform float keyLight;
+uniform float fillLight;
+uniform float specular;
 uniform vec3  viewPos;
 uniform bool  isSelected;
 uniform bool  isHovered;
@@ -45,12 +50,13 @@ uniform bool  isActive;
 out vec4 fragColor;
 void main(){
     vec3 n = normalize(normal);
-    vec3 l = normalize(-lightDir);
+    vec3 l = normalize(keyDir);
     float diff = max(dot(n,l), 0.0);
+    float fillDiff = max(dot(n,normalize(fillDir)), 0.0);
     vec3 v = normalize(viewPos - fragPos);
     vec3 h = normalize(l + v);
     float spec = pow(max(dot(n,h), 0.0), 48.0);
-    vec3 col = objColor * (0.18 + 0.72*diff) + vec3(0.4)*spec;
+    vec3 col = objColor * (ambient + keyLight*diff + fillLight*fillDiff) + vec3(specular)*spec;
     if(isActive)   col = mix(col, vec3(0.15, 0.80, 0.45), 0.30);
     if(isHovered)  col = mix(col, vec3(0.45, 0.72, 1.0), 0.28);
     if(isSelected) col = mix(col, vec3(1.0, 0.75, 0.1),  0.40);
@@ -284,6 +290,34 @@ Viewport::Viewport(SceneGraph* scene, QWidget* parent)
         Theme::repolish(m_btnFloor);
     });
 
+    // Lighting: each theme remembers its own settings
+    m_light = ViewportLighting::load(Theme::mode());
+    m_lightPanel = new LightingPanel(this);
+    m_lightPanel->setLighting(m_light);
+    connect(m_lightPanel, &LightingPanel::lightingChanged, this, [this](const ViewportLighting& l){
+        m_light = l;
+        m_light.save(Theme::mode());
+        update();
+    });
+    connect(Theme::notifier(), &Theme::Notifier::changed, this, [this]{
+        m_light = ViewportLighting::load(Theme::mode());
+        m_lightPanel->setLighting(m_light);
+        update();
+    });
+
+    m_btnLight = new QPushButton(Theme::icon("lightbulb"), "Lighting", this);
+    m_btnLight->setObjectName("viewButton");
+    m_btnLight->setToolTip("Adjust the viewport lighting for the current theme");
+    m_btnLight->setFixedSize(90, 26);
+    m_btnLight->setCursor(Qt::PointingHandCursor);
+    m_btnLight->raise();
+    connect(m_btnLight, &QPushButton::clicked, this, [this]{
+        m_lightPanel->adjustSize();
+        QPoint pos = m_btnLight->mapToGlobal(QPoint(m_btnLight->width() - m_lightPanel->width(),
+                                                    m_btnLight->height() + 6));
+        m_lightPanel->move(pos);
+        m_lightPanel->show();
+    });
 }
 
 Viewport::~Viewport() {
@@ -339,6 +373,7 @@ void Viewport::repositionOverlays() {
         x += btn->width() + gap;
     }
     m_btnFloor->move(m_vpW - m_btnFloor->width() - mg, mg);
+    m_btnLight->move(m_btnFloor->x() - m_btnLight->width() - gap, mg);
 }
 
 void Viewport::paintGL() {
@@ -725,12 +760,16 @@ void Viewport::drawScene(){
     float aspect=float(m_vpW)/float(std::max(m_vpH,1));
     QMatrix4x4 view=m_camera.viewMatrix(), proj=m_camera.projectionMatrix(aspect);
     QVector3D vpos=m_camera.position();
-    QVector3D lightDir=QVector3D(-0.5f,-1.0f,-0.7f).normalized();
 
     m_objShader->bind();
     m_objShader->setUniformValue("view",     view);
     m_objShader->setUniformValue("proj",     proj);
-    m_objShader->setUniformValue("lightDir", lightDir);
+    m_objShader->setUniformValue("keyDir",    m_light.keyDirection());
+    m_objShader->setUniformValue("fillDir",   m_light.fillDirection());
+    m_objShader->setUniformValue("ambient",   m_light.ambient);
+    m_objShader->setUniformValue("keyLight",  m_light.key);
+    m_objShader->setUniformValue("fillLight", m_light.fill);
+    m_objShader->setUniformValue("specular",  m_light.specular);
     m_objShader->setUniformValue("viewPos",  vpos);
 
     for(auto& [id,obj] : m_scene->allObjects()){

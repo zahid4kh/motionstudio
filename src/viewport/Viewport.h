@@ -10,6 +10,7 @@
 #include <QStringList>
 #include <unordered_map>
 #include "Camera.h"
+#include "LightingPanel.h"
 #include "../scene/SceneGraph.h"
 
 struct MeshData {
@@ -112,6 +113,11 @@ private:
     QPushButton* m_btnTop    = nullptr;
     QPushButton* m_btnSide   = nullptr;
     QPushButton* m_btnFloor  = nullptr;
+    QPushButton* m_btnLight  = nullptr;
+
+    // Shading settings for the active theme, edited in m_lightPanel
+    ViewportLighting m_light;
+    LightingPanel*   m_lightPanel = nullptr;
 
     // Axis-pick mode (see beginAxisPick/cancelAxisPick)
     int          m_axisPickId     = -1;

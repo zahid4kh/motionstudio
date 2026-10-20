@@ -79,6 +79,7 @@
         <file alias="icons/square-dashed.svg">resources/icons/square-dashed.svg</file>
         <file alias="icons/step-forward.svg">resources/icons/step-forward.svg</file>
         <file alias="icons/sun-moon.svg">resources/icons/sun-moon.svg</file>
+        <file alias="icons/lightbulb.svg">resources/icons/lightbulb.svg</file>
         <file alias="icons/timer.svg">resources/icons/timer.svg</file>
         <file alias="icons/toggle-right.svg">resources/icons/toggle-right.svg</file>
         <file alias="icons/trash-2.svg">resources/icons/trash-2.svg</file>

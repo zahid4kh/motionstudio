@@ -54,6 +54,7 @@ set(SOURCES
     src/MainWindow.cpp
     src/viewport/Camera.cpp
     src/viewport/Viewport.cpp
+    src/viewport/LightingPanel.cpp
     src/scene/SceneGraph.cpp
     src/scene/UndoManager.cpp
     src/physics/SimulationEngine.cpp
