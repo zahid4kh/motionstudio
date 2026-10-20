@@ -1,4 +1,6 @@
 #include "SceneGraph.h"
+#include "../automation/Expression.h"
+#include <QRegularExpression>
 #include <QtMath>
 #include <algorithm>
 #include <cmath>
@@ -140,6 +142,7 @@ void SceneGraph::removeJoint(int id) {
     }
     for (int mid : motorsToRemove) removeMotor(mid);
     m_joints.erase(id);
+    for (auto& [pid, pose] : m_poses) pose.jointValues.erase(id);
 }
 
 Joint* SceneGraph::getJoint(int id) {
@@ -162,18 +165,164 @@ Joint* SceneGraph::jointForChild(int childBodyId) {
 int SceneGraph::addMotor(Motor motor) {
     motor.id = m_nextId++;
     int id = motor.id;
+    if (!expr::isValidName(motor.name) || isSymbolNameTaken(motor.name, id))
+        motor.name = makeSymbolName(motor.name.isEmpty() ? QString("Actuator") : motor.name, id);
     m_motors[id] = motor;
     emit motorAdded(id);
+    emit automationChanged();
     return id;
 }
 
 void SceneGraph::removeMotor(int id) {
-    m_motors.erase(id);
+    if (!m_motors.erase(id)) return;
+    emit automationChanged();
 }
 
 Motor* SceneGraph::getMotor(int id) {
     auto it = m_motors.find(id);
     return it != m_motors.end() ? &it->second : nullptr;
+}
+
+const Motor* SceneGraph::getMotor(int id) const {
+    auto it = m_motors.find(id);
+    return it != m_motors.end() ? &it->second : nullptr;
+}
+
+int SceneGraph::addActuatorForJoint(int jointId) {
+    const Joint* j = getJoint(jointId);
+    if (!j) return -1;
+    if (Motor* existing = motorForJoint(jointId)) return existing->id;
+    int n = 1;
+    while (isSymbolNameTaken(QString("J%1").arg(n))) ++n;
+    Motor m;
+    m.name     = QString("J%1").arg(n);
+    m.jointId  = jointId;
+    m.velocity = j->type == JointType::Prismatic ? 0.1f : 45.0f;
+    return addMotor(m);
+}
+
+Motor* SceneGraph::motorForJoint(int jointId) {
+    for (auto& [id, m] : m_motors)
+        if (m.jointId == jointId) return &m;
+    return nullptr;
+}
+
+const Motor* SceneGraph::motorForJoint(int jointId) const {
+    for (auto& [id, m] : m_motors)
+        if (m.jointId == jointId) return &m;
+    return nullptr;
+}
+
+std::vector<int> SceneGraph::motorIdsSorted() const {
+    std::vector<int> ids;
+    for (auto& [id, _] : m_motors) ids.push_back(id);
+    std::sort(ids.begin(), ids.end());
+    return ids;
+}
+
+// ── Automation definitions ───────────────────────────────────────────────────
+
+int SceneGraph::addSignal(Signal sig) {
+    sig.id = m_nextId++;
+    if (!expr::isValidName(sig.name) || isSymbolNameTaken(sig.name, sig.id))
+        sig.name = makeSymbolName(sig.name.isEmpty() ? QString("Signal") : sig.name, sig.id);
+    sig.initialValue = coerceSignal(sig.type, sig.initialValue);
+    m_signals[sig.id] = sig;
+    emit automationChanged();
+    return sig.id;
+}
+
+void SceneGraph::removeSignal(int id) {
+    if (!m_signals.erase(id)) return;
+    emit automationChanged();
+}
+
+Signal* SceneGraph::getSignal(int id) {
+    auto it = m_signals.find(id);
+    return it != m_signals.end() ? &it->second : nullptr;
+}
+
+Signal* SceneGraph::findSignal(const QString& name) {
+    for (auto& [id, s] : m_signals)
+        if (s.name == name) return &s;
+    return nullptr;
+}
+
+int SceneGraph::addSequence(Sequence seq) {
+    seq.id = m_nextId++;
+    if (!expr::isValidName(seq.name) || isSymbolNameTaken(seq.name, seq.id))
+        seq.name = makeSymbolName(seq.name.isEmpty() ? QString("Sequence") : seq.name, seq.id);
+    for (auto& op : seq.operations)
+        if (op.id == -1) op.id = m_nextId++;
+    m_sequences[seq.id] = seq;
+    emit automationChanged();
+    return seq.id;
+}
+
+void SceneGraph::removeSequence(int id) {
+    if (!m_sequences.erase(id)) return;
+    emit automationChanged();
+}
+
+Sequence* SceneGraph::getSequence(int id) {
+    auto it = m_sequences.find(id);
+    return it != m_sequences.end() ? &it->second : nullptr;
+}
+
+int SceneGraph::addPose(Pose pose) {
+    pose.id = m_nextId++;
+    m_poses[pose.id] = pose;
+    emit automationChanged();
+    return pose.id;
+}
+
+void SceneGraph::removePose(int id) {
+    if (!m_poses.erase(id)) return;
+    emit automationChanged();
+}
+
+Pose* SceneGraph::getPose(int id) {
+    auto it = m_poses.find(id);
+    return it != m_poses.end() ? &it->second : nullptr;
+}
+
+const Pose* SceneGraph::getPose(int id) const {
+    auto it = m_poses.find(id);
+    return it != m_poses.end() ? &it->second : nullptr;
+}
+
+bool SceneGraph::isSymbolNameTaken(const QString& name, int exceptId) const {
+    for (auto& [id, s] : m_signals)   if (id != exceptId && s.name == name) return true;
+    for (auto& [id, m] : m_motors)    if (id != exceptId && m.name == name) return true;
+    for (auto& [id, q] : m_sequences) if (id != exceptId && q.name == name) return true;
+    return false;
+}
+
+QString SceneGraph::makeSymbolName(const QString& base, int exceptId) const {
+    QString n = base;
+    n.replace(QRegularExpression("[^A-Za-z0-9_]"), "_");
+    if (n.isEmpty() || n[0].isDigit()) n.prepend('_');
+    if (!expr::isValidName(n)) n += "_";
+    if (!isSymbolNameTaken(n, exceptId)) return n;
+    for (int i = 2;; ++i) {
+        QString c = QString("%1_%2").arg(n).arg(i);
+        if (!isSymbolNameTaken(c, exceptId)) return c;
+    }
+}
+
+void SceneGraph::renameSymbolReferences(const QString& oldName, const QString& newName) {
+    auto fix = [&](QString& s) { s = expr::renameIdentifier(s, oldName, newName); };
+    for (auto& [id, s] : m_signals) fix(s.expression);
+    for (auto& [id, m] : m_motors) { fix(m.targetExpr); fix(m.velocityExpr); fix(m.activeExpr); }
+    for (auto& [id, q] : m_sequences) {
+        fix(q.enableCondition);
+        fix(q.startCondition);
+        for (auto& op : q.operations) {
+            fix(op.target); fix(op.velocity); fix(op.duration); fix(op.condition);
+            fix(op.startCondition); fix(op.onStart); fix(op.onFinish);
+        }
+    }
+    emit automationChanged();
 }
 
 void SceneGraph::selectObject(int id) {
@@ -415,6 +564,9 @@ void SceneGraph::clear() {
     m_motors.clear();
     m_rigidBodies.clear();
     m_conveyorBelts.clear();
+    m_signals.clear();
+    m_sequences.clear();
+    m_poses.clear();
     m_roots.clear();
     m_selectedId = -1;
     m_nextId     = 1;

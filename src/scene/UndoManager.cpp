@@ -23,6 +23,7 @@ UndoManager::UndoManager(SceneGraph* scene, QObject* parent)
     connect(scene, &SceneGraph::conveyorBeltRemoved,this, &UndoManager::onSceneMutated);
     connect(scene, &SceneGraph::conveyorBeltChanged,this, &UndoManager::onSceneMutated);
     connect(scene, &SceneGraph::floorChanged,       this, &UndoManager::onSceneMutated);
+    connect(scene, &SceneGraph::automationChanged,  this, &UndoManager::onSceneMutated);
 
     m_baseline = ProjectSerializer::toJson(*m_scene);
 }

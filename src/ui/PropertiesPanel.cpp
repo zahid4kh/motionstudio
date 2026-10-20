@@ -174,6 +174,14 @@ PropertiesPanel::PropertiesPanel(SceneGraph* scene, QWidget* parent)
     });
     connect(scene, &SceneGraph::jointAdded,  this, [this](int){ if (m_currentId != -1) loadObject(m_currentId); });
     connect(scene, &SceneGraph::motorAdded,  this, [this](int){ if (m_currentId != -1) loadObject(m_currentId); });
+    connect(scene, &SceneGraph::automationChanged, this, [this]{ if (m_currentId != -1) loadObject(m_currentId); });
+    connect(scene, &SceneGraph::jointsMoved, this, [this]{
+        Joint* j = m_scene->jointForChild(m_currentId);
+        if (!j || m_jPosition->hasFocus()) return;
+        const double f = (j->type == JointType::Revolute) ? 1.0 : unitFactor();
+        QSignalBlocker b(m_jPosition);
+        m_jPosition->setValue(j->currentValue * f);
+    });
     connect(scene, &SceneGraph::rigidBodyAdded,   this, [this](int id){
         if (id == m_currentId) { m_loading = true; updatePhysicsUI(id); m_loading = false; }
     });
@@ -329,6 +337,9 @@ void PropertiesPanel::buildJointSection() {
     m_jInitLabel->setFixedWidth(70);
     m_jInitLabel->setStyleSheet("color:#555; font-size:11px; background:transparent;");
 
+    m_jContinuous = new QCheckBox("Continuous (no limits)");
+    m_jContinuous->setToolTip("Revolute only: allow unlimited rotation (wheels, turntables)");
+    vb->addWidget(m_jContinuous);
     labelRow(vb, "Limit min",  m_jLimitMin);
     labelRow(vb, "Limit max",  m_jLimitMax);
     {
@@ -352,8 +363,23 @@ void PropertiesPanel::buildJointSection() {
     }
     vb->addWidget(m_jPivotRow);
 
-    m_addMotorBtn = new QPushButton("Add Motor to this Joint");
-    m_addMotorBtn->setToolTip("Attach a motor so this joint can be driven during simulation");
+    // Live joint value — jogging here poses the mechanism (not saved; see Init angle)
+    m_jPosition = makeSpin(-1e4, 1e4, 1.0f, "°");
+    m_jPosition->setKeyboardTracking(true);
+    m_jPosition->setToolTip("Current joint value. Jog to pose the mechanism; the simulation starts from here.");
+    m_jPosLabel = new QLabel("Position");
+    m_jPosLabel->setFixedWidth(70);
+    m_jPosLabel->setStyleSheet("color:#555; font-size:11px; background:transparent;");
+    {
+        auto* row = new QHBoxLayout;
+        row->addWidget(m_jPosLabel);
+        row->addWidget(m_jPosition);
+        row->addStretch();
+        vb->addLayout(row);
+    }
+
+    m_addMotorBtn = new QPushButton("Add Actuator to this Joint");
+    m_addMotorBtn->setToolTip("Attach an actuator so automation logic can drive this joint");
     vb->addWidget(m_addMotorBtn);
 
     auto* btnRow = new QHBoxLayout;
@@ -373,36 +399,69 @@ void PropertiesPanel::buildJointSection() {
     connect(m_jPivotX,    &QDoubleSpinBox::valueChanged,    this, &PropertiesPanel::onJointEdited);
     connect(m_jPivotY,    &QDoubleSpinBox::valueChanged,    this, &PropertiesPanel::onJointEdited);
     connect(m_jPivotZ,    &QDoubleSpinBox::valueChanged,    this, &PropertiesPanel::onJointEdited);
+    connect(m_jContinuous, &QCheckBox::toggled,             this, &PropertiesPanel::onJointEdited);
+    connect(m_jPosition,  &QDoubleSpinBox::valueChanged,    this, [this](double v){
+        if (m_loading) return;
+        Joint* j = m_scene->jointForChild(m_currentId);
+        if (!j || m_simActive) return;
+        const double f = (j->type == JointType::Revolute) ? 1.0 : unitFactor();
+        j->currentValue = float(v / f);
+        m_scene->notifyJointsMoved();
+    });
     connect(m_addMotorBtn, &QPushButton::clicked,           this, &PropertiesPanel::addMotor);
     connect(rmBtn,        &QPushButton::clicked,            this, &PropertiesPanel::removeJoint);
 }
 
 void PropertiesPanel::buildMotorSection() {
-    m_motorGroup = new QGroupBox("Motor");
+    m_motorGroup = new QGroupBox("Actuator");
     auto* vb = new QVBoxLayout(m_motorGroup);
     vb->setSpacing(5);
 
+    m_mName = new QLabel;
+    m_mName->setStyleSheet("font-family:monospace; font-weight:bold; color:#1a3a7a; background:transparent;");
+    m_mName->setToolTip("Name used in expressions (rename it in the Automation panel)");
+    labelRow(vb, "Name", m_mName);
+
+    m_mMode = new QComboBox;
+    m_mMode->addItems({"Position", "Speed"});
+    m_mMode->setToolTip("Position: holds still until logic commands a target.\n"
+                        "Speed: runs continuously at the speed below (when active).");
+    labelRow(vb, "Mode", m_mMode);
+
     // Suffix "°/s" or " m/s" — updated in updateJointUnits()
-    m_mVel    = makeSpin(-9999, 9999, 5.0f, "°/s");
-    m_mTarget = makeSpin(-9999, 9999, 1.0f, "°");
-    m_mEnabled = new QCheckBox("Motor enabled");
+    m_mVel   = makeSpin(-9999, 9999, 5.0f, "°/s");
+    m_mAccel = makeSpin(0, 1e6, 10.0f, "°/s²");
+    m_mAccel->setSpecialValueText("instant");
+    m_mEnabled = new QCheckBox("Active at start");
     m_mEnabled->setChecked(true);
     m_mVel->setValue(45);
 
-    labelRow(vb, "Velocity", m_mVel);
-    labelRow(vb, "Target",   m_mTarget);
+    labelRow(vb, "Speed", m_mVel);
+    labelRow(vb, "Accel", m_mAccel);
     vb->addWidget(m_mEnabled);
 
+    m_mBindings = new QLabel;
+    m_mBindings->setWordWrap(true);
+    m_mBindings->setStyleSheet("font-family:monospace; font-size:10px; color:#556; background:transparent;");
+    vb->addWidget(m_mBindings);
+
+    auto* openBtn = new QPushButton("Edit Logic in Automation Panel…");
+    vb->addWidget(openBtn);
+
     auto* btnRow = new QHBoxLayout;
-    auto* rmBtn = new QPushButton("Remove Motor");
+    auto* rmBtn = new QPushButton("Remove Actuator");
     rmBtn->setProperty("danger", true);
     btnRow->addStretch(); btnRow->addWidget(rmBtn);
     vb->addLayout(btnRow);
 
+    connect(m_mMode,   &QComboBox::currentIndexChanged, this, &PropertiesPanel::onMotorEdited);
     connect(m_mVel,    &QDoubleSpinBox::valueChanged, this, &PropertiesPanel::onMotorEdited);
-    connect(m_mTarget, &QDoubleSpinBox::valueChanged, this, &PropertiesPanel::onMotorEdited);
+    connect(m_mAccel,  &QDoubleSpinBox::valueChanged, this, &PropertiesPanel::onMotorEdited);
     connect(m_mEnabled, &QCheckBox::toggled,          this, &PropertiesPanel::onMotorEdited);
     connect(rmBtn,     &QPushButton::clicked,         this, &PropertiesPanel::removeMotor);
+    connect(openBtn,   &QPushButton::clicked,         this, [this]{
+        if (Joint* j = m_scene->jointForChild(m_currentId)) emit openActuatorRequested(j->id);
+    });
 }
 
 void PropertiesPanel::buildPhysicsSection() {
@@ -593,7 +652,9 @@ void PropertiesPanel::updateJointUnits(bool isRevolute) {
     m_jInitAngle->setSuffix(limSfx);
     m_jInitLabel->setText(isRevolute ? "Init angle" : "Init pos");
     m_mVel->setSuffix(velSfx);
-    m_mTarget->setSuffix(tgtSfx);
+    m_mAccel->setSuffix(isRevolute ? "°/s²" : scaledLengthSuffix(" m", mm) + "/s²");
+    m_jPosition->setSuffix(tgtSfx);
+    m_jContinuous->setVisible(isRevolute);
 
     // Prismatic limits/velocity are length quantities — rescale range for the active unit.
     // Revolute (degree) ranges are unaffected since f == 1.0 in that case.
@@ -601,13 +662,15 @@ void PropertiesPanel::updateJointUnits(bool isRevolute) {
     m_jLimitMax->setRange(-1e4 * f, 1e4 * f);
     m_jInitAngle->setRange(-1e4 * f, 1e4 * f);
     m_mVel->setRange(-9999 * f, 9999 * f);
-    m_mTarget->setRange(-9999 * f, 9999 * f);
+    m_mAccel->setRange(0, 1e6 * f);
+    m_jPosition->setRange(-1e4 * f, 1e4 * f);
 
     m_jLimitMin->setSingleStep(1.0 * f);
     m_jLimitMax->setSingleStep(1.0 * f);
     m_jInitAngle->setSingleStep(1.0 * f);
     m_mVel->setSingleStep(5.0 * f);
-    m_mTarget->setSingleStep(1.0 * f);
+    m_mAccel->setSingleStep(10.0 * f);
+    m_jPosition->setSingleStep(1.0 * f);
 }
 
 void PropertiesPanel::updatePhysicsUI(int objectId) {
@@ -735,17 +798,27 @@ void PropertiesPanel::loadObject(int id) {
         m_jPivotY->setValue(joint->pivot.y() * lf);
         m_jPivotZ->setValue(joint->pivot.z() * lf);
         m_jPivotRow->setVisible(isRevolute);
+        m_jContinuous->setChecked(joint->continuous);
+        bool limited = !(isRevolute && joint->continuous);
+        m_jLimitMin->setEnabled(limited);
+        m_jLimitMax->setEnabled(limited);
+        m_jPosition->setValue(joint->currentValue * jf);
         showJointGroup(true);
 
-        Motor* motor = nullptr;
-        for (auto& [mid, m] : m_scene->allMotors()) {
-            if (m.jointId == joint->id) { motor = &const_cast<Motor&>(m); break; }
-        }
+        Motor* motor = m_scene->motorForJoint(joint->id);
         m_addMotorBtn->setVisible(!motor);
         if (motor) {
+            m_mName->setText(motor->name);
+            m_mMode->setCurrentIndex(motor->mode == ActuatorMode::Speed ? 1 : 0);
             m_mVel->setValue(motor->velocity * jf);
-            m_mTarget->setValue(motor->targetPosition * jf);
+            m_mAccel->setValue(motor->acceleration * jf);
             m_mEnabled->setChecked(motor->enabled);
+            QStringList b;
+            if (!motor->targetExpr.trimmed().isEmpty())   b << "target = " + motor->targetExpr.trimmed();
+            if (!motor->velocityExpr.trimmed().isEmpty()) b << "speed = " + motor->velocityExpr.trimmed();
+            if (!motor->activeExpr.trimmed().isEmpty())   b << "active = " + motor->activeExpr.trimmed();
+            m_mBindings->setText(b.isEmpty() ? QString("No bindings — driven by sequence operations.")
+                                             : "Bindings:\n" + b.join("\n"));
             showMotorGroup(true);
         } else {
             showMotorGroup(false);
@@ -787,7 +860,10 @@ void PropertiesPanel::onJointEdited() {
     j->initialAngle = float(m_jInitAngle->value() / f);
     const double lf = unitFactor();  // pivot is always a length quantity, regardless of joint type
     j->pivot        = { float(m_jPivotX->value() / lf), float(m_jPivotY->value() / lf), float(m_jPivotZ->value() / lf) };
+    j->continuous   = m_jContinuous->isChecked();
     bool isRevolute = (j->type == JointType::Revolute);
+    m_jLimitMin->setEnabled(!(isRevolute && j->continuous));
+    m_jLimitMax->setEnabled(!(isRevolute && j->continuous));
     m_jPivotRow->setVisible(isRevolute);
     updateJointUnits(isRevolute);
     emit m_scene->objectChanged(m_currentId);
@@ -797,16 +873,14 @@ void PropertiesPanel::onMotorEdited() {
     if (m_loading) return;
     Joint* j = m_scene->jointForChild(m_currentId);
     if (!j) return;
+    Motor* motor = m_scene->motorForJoint(j->id);
+    if (!motor) return;
     const double f = (j->type == JointType::Revolute) ? 1.0 : unitFactor();
-    for (auto& [mid, motor] : m_scene->allMotors()) {
-        if (motor.jointId == j->id) {
-            const_cast<Motor&>(motor).velocity       = float(m_mVel->value() / f);
-            const_cast<Motor&>(motor).targetPosition = float(m_mTarget->value() / f);
-            const_cast<Motor&>(motor).enabled        = m_mEnabled->isChecked();
-            emit m_scene->objectChanged(m_currentId);
-            return;
-        }
-    }
+    motor->mode         = m_mMode->currentIndex() == 1 ? ActuatorMode::Speed : ActuatorMode::Position;
+    motor->velocity     = float(m_mVel->value() / f);
+    motor->acceleration = float(m_mAccel->value() / f);
+    motor->enabled      = m_mEnabled->isChecked();
+    m_scene->notifyAutomationChanged();
 }
 
 void PropertiesPanel::onRigidBodyEdited() {
@@ -861,18 +935,13 @@ void PropertiesPanel::removeJoint() {
 void PropertiesPanel::addMotor() {
     Joint* j = m_scene->jointForChild(m_currentId);
     if (!j) return;
-    Motor m;
-    m.name    = "Motor_" + j->name;
-    m.jointId = j->id;
-    m_scene->addMotor(m);
+    m_scene->addActuatorForJoint(j->id);
 }
 
 void PropertiesPanel::removeMotor() {
     Joint* j = m_scene->jointForChild(m_currentId);
     if (!j) return;
-    for (auto& [mid, motor] : m_scene->allMotors()) {
-        if (motor.jointId == j->id) { m_scene->removeMotor(mid); break; }
-    }
+    if (Motor* m = m_scene->motorForJoint(j->id)) m_scene->removeMotor(m->id);
     showMotorGroup(false);
     m_addMotorBtn->setVisible(true);
 }
@@ -999,4 +1068,13 @@ void PropertiesPanel::onUnitChanged(int idx) {
 
     // Re-render the last picked point, if any, in the new unit.
     if (m_pointGroup->isVisible()) showPointCoords(m_lastPointName, m_lastPointPos);
+}
+
+// ── Simulation lock ───────────────────────────────────────────────────────────
+
+void PropertiesPanel::setSimulationActive(bool active) {
+    m_simActive = active;
+    m_jointGroup->setEnabled(!active);
+    m_motorGroup->setEnabled(!active);
+    m_connectionsGroup->setEnabled(!active);
 }

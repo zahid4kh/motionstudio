@@ -10,9 +10,11 @@
 #include "physics/SimulationEngine.h"
 #include "ui/HierarchyPanel.h"
 #include "ui/PropertiesPanel.h"
+#include "ui/automation/AutomationPanel.h"
 #include "import/StepImporter.h"
 
 class QAction;
+class QDockWidget;
 
 // Result of a background StepImporter::importFile() call (see importStepFile)
 struct StepImportResult {
@@ -25,6 +27,9 @@ class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
     explicit MainWindow(QWidget* parent = nullptr);
+
+    // Opens a .mstudio project (e.g. passed on the command line)
+    bool openFile(const QString& path);
 
 protected:
     void dragEnterEvent(QDragEnterEvent* e) override;
@@ -44,6 +49,9 @@ private slots:
     void deleteSelected();
 
     void onSimStateChanged(bool running);
+    void onSimActiveChanged(bool active);
+    void onSimStartFailed(const QStringList& errors);
+    void updateSimulationOverlay();
     void onTimeUpdated(double seconds);
     void onSceneDirtied();
     void onStepImportFinished();
@@ -54,6 +62,7 @@ private:
     void buildDocks();
     void buildStatusBar();
     void updateTitle();
+    void updateUndoActions();
 
     void importStepFile(const QString& path);
     int  addImportedPart(const StepImporter::Part& part, int parentId);
@@ -67,6 +76,8 @@ private:
     SimulationEngine* m_sim        = nullptr;
     HierarchyPanel*   m_hierarchy  = nullptr;
     PropertiesPanel*  m_properties = nullptr;
+    AutomationPanel*  m_automation = nullptr;
+    QDockWidget*      m_automationDock = nullptr;
 
     QAction* m_undoAction = nullptr;
     QAction* m_redoAction = nullptr;

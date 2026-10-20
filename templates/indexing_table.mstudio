@@ -1,0 +1,479 @@
+{
+    "objects": [
+        {
+            "id": 1,
+            "name": "Station",
+            "type": "ImportedMesh",
+            "parentId": -1,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            }
+        },
+        {
+            "id": 2,
+            "name": "Base",
+            "type": "Cube",
+            "parentId": 1,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0.1,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.3,
+                    "y": 0.2,
+                    "z": 1.3
+                }
+            }
+        },
+        {
+            "id": 3,
+            "name": "Turntable",
+            "type": "ImportedMesh",
+            "parentId": 1,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0.2,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            }
+        },
+        {
+            "id": 4,
+            "name": "Plate",
+            "type": "Cylinder",
+            "parentId": 3,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0.03,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 0.06,
+                    "z": 1.0
+                }
+            }
+        },
+        {
+            "id": 5,
+            "name": "Part1",
+            "type": "Cube",
+            "parentId": 3,
+            "transform": {
+                "position": {
+                    "x": 0.35,
+                    "y": 0.12,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.12,
+                    "y": 0.12,
+                    "z": 0.12
+                }
+            }
+        },
+        {
+            "id": 6,
+            "name": "Part2",
+            "type": "Cylinder",
+            "parentId": 3,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0.12,
+                    "z": 0.35
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.12,
+                    "y": 0.12,
+                    "z": 0.12
+                }
+            }
+        },
+        {
+            "id": 7,
+            "name": "Part3",
+            "type": "Cube",
+            "parentId": 3,
+            "transform": {
+                "position": {
+                    "x": -0.35,
+                    "y": 0.12,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.12,
+                    "y": 0.12,
+                    "z": 0.12
+                }
+            }
+        },
+        {
+            "id": 8,
+            "name": "Part4",
+            "type": "Cylinder",
+            "parentId": 3,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0.12,
+                    "z": -0.35
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.12,
+                    "y": 0.12,
+                    "z": 0.12
+                }
+            }
+        },
+        {
+            "id": 9,
+            "name": "Column",
+            "type": "Cube",
+            "parentId": 1,
+            "transform": {
+                "position": {
+                    "x": 0.75,
+                    "y": 0.65,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.1,
+                    "y": 0.9,
+                    "z": 0.1
+                }
+            }
+        },
+        {
+            "id": 10,
+            "name": "Beam",
+            "type": "Cube",
+            "parentId": 1,
+            "transform": {
+                "position": {
+                    "x": 0.55,
+                    "y": 1.06,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.5,
+                    "y": 0.08,
+                    "z": 0.08
+                }
+            }
+        },
+        {
+            "id": 11,
+            "name": "RamSlide",
+            "type": "ImportedMesh",
+            "parentId": 1,
+            "transform": {
+                "position": {
+                    "x": 0.35,
+                    "y": 1.0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            }
+        },
+        {
+            "id": 12,
+            "name": "Ram",
+            "type": "Cylinder",
+            "parentId": 11,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.12,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.1,
+                    "y": 0.24,
+                    "z": 0.1
+                }
+            }
+        }
+    ],
+    "joints": [
+        {
+            "id": 13,
+            "name": "table_joint",
+            "type": "Revolute",
+            "axis": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "pivot": {
+                "x": 0,
+                "y": 0.2,
+                "z": 0
+            },
+            "limitMin": -180,
+            "limitMax": 180,
+            "initialAngle": 0,
+            "continuous": true,
+            "parentBodyId": 1,
+            "childBodyId": 3
+        },
+        {
+            "id": 14,
+            "name": "press_joint",
+            "type": "Prismatic",
+            "axis": {
+                "x": 0,
+                "y": -1,
+                "z": 0
+            },
+            "pivot": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "limitMin": 0,
+            "limitMax": 0.38,
+            "initialAngle": 0,
+            "continuous": false,
+            "parentBodyId": 1,
+            "childBodyId": 11
+        }
+    ],
+    "motors": [
+        {
+            "id": 15,
+            "name": "Table",
+            "jointId": 13,
+            "mode": "Position",
+            "velocity": 120,
+            "acceleration": 360,
+            "enabled": true,
+            "targetExpr": "",
+            "velocityExpr": "",
+            "activeExpr": ""
+        },
+        {
+            "id": 16,
+            "name": "Press",
+            "jointId": 14,
+            "mode": "Position",
+            "velocity": 0.4,
+            "acceleration": 2.0,
+            "enabled": true,
+            "targetExpr": "",
+            "velocityExpr": "",
+            "activeExpr": ""
+        }
+    ],
+    "signals": [
+        {
+            "id": 17,
+            "name": "Start",
+            "kind": "Input",
+            "type": "Bool",
+            "initialValue": 0,
+            "expression": "",
+            "description": "Latch ON to keep indexing"
+        },
+        {
+            "id": 18,
+            "name": "Stop",
+            "kind": "Input",
+            "type": "Bool",
+            "initialValue": 0,
+            "expression": "",
+            "description": "Hold after the current operation"
+        },
+        {
+            "id": 19,
+            "name": "PressDepth",
+            "kind": "Input",
+            "type": "Real",
+            "initialValue": 0.36,
+            "expression": "",
+            "description": "Press stroke in metres (max 0.38)"
+        },
+        {
+            "id": 20,
+            "name": "Parts",
+            "kind": "Internal",
+            "type": "Int",
+            "initialValue": 0,
+            "expression": "",
+            "description": "Pressed parts"
+        },
+        {
+            "id": 21,
+            "name": "Safe",
+            "kind": "Derived",
+            "type": "Bool",
+            "initialValue": 0,
+            "expression": "Press.pos < 0.005",
+            "description": "Interlock: ram fully retracted"
+        }
+    ],
+    "sequences": [
+        {
+            "id": 26,
+            "name": "Indexing",
+            "enableCondition": "!Stop",
+            "startCondition": "Start",
+            "loop": true,
+            "operations": [
+                {
+                    "id": 22,
+                    "name": "Index 90\u00b0",
+                    "type": "Move",
+                    "actuatorId": 15,
+                    "poseId": -1,
+                    "target": "Table.target + 90",
+                    "velocity": "",
+                    "duration": "",
+                    "condition": "",
+                    "startCondition": "Safe",
+                    "onStart": "",
+                    "onFinish": "",
+                    "predecessors": []
+                },
+                {
+                    "id": 23,
+                    "name": "Press down",
+                    "type": "Move",
+                    "actuatorId": 16,
+                    "poseId": -1,
+                    "target": "PressDepth",
+                    "velocity": "",
+                    "duration": "",
+                    "condition": "",
+                    "startCondition": "",
+                    "onStart": "",
+                    "onFinish": "",
+                    "predecessors": [
+                        22
+                    ]
+                },
+                {
+                    "id": 24,
+                    "name": "Dwell",
+                    "type": "Wait",
+                    "actuatorId": -1,
+                    "poseId": -1,
+                    "target": "",
+                    "velocity": "",
+                    "duration": "0.3",
+                    "condition": "",
+                    "startCondition": "",
+                    "onStart": "",
+                    "onFinish": "",
+                    "predecessors": [
+                        23
+                    ]
+                },
+                {
+                    "id": 25,
+                    "name": "Retract",
+                    "type": "Move",
+                    "actuatorId": 16,
+                    "poseId": -1,
+                    "target": "0",
+                    "velocity": "",
+                    "duration": "",
+                    "condition": "",
+                    "startCondition": "",
+                    "onStart": "",
+                    "onFinish": "Parts = Parts + 1",
+                    "predecessors": [
+                        24
+                    ]
+                }
+            ]
+        }
+    ],
+    "poses": [],
+    "version": 2,
+    "rigidBodies": [],
+    "conveyorBelts": [],
+    "meshes": []
+}

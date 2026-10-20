@@ -1,0 +1,188 @@
+#pragma once
+#include <QObject>
+#include <QHash>
+#include <QStringList>
+#include <deque>
+#include <map>
+#include <vector>
+#include "Automation.h"
+#include "Expression.h"
+#include "MotionProfile.h"
+#include "../scene/Motor.h"
+
+class SceneGraph;
+
+// Runs the automation logic defined in the SceneGraph (signals, actuators,
+// sequences, poses) as a deterministic PLC-style scan cycle:
+//
+//   0. apply operation action writes from the previous scan + queued user inputs
+//   1. publish actuator / sequence status signals
+//   2. evaluate derived signals (dependency order)
+//   3. advance sequences (finish / start operations, issue actuator commands)
+//   4. evaluate actuator expression bindings
+//   5. integrate actuator motion profiles, write Joint::currentValue
+//
+// Joints without an actuator are never touched (in MuJoCo mode they stay
+// physics-driven). Definitions are compiled once by start(); editing them
+// while the engine is active has no effect until the next start().
+class AutomationEngine : public QObject {
+    Q_OBJECT
+public:
+    enum class SymbolKind { Signal, Actuator, Sequence };
+    struct Symbol {
+        QString    name;
+        SymbolKind kind      = SymbolKind::Signal;
+        int        ownerId   = -1;        // Signal / Motor / Sequence id
+        bool       writable  = false;     // Input / Internal signals
+        bool       isBool    = false;
+        SignalType type      = SignalType::Real;
+        QString    help;                  // short description for completion/tooltips
+    };
+
+    // ── Edit-time helpers (no runtime needed) ───────────────────────────────
+    static std::vector<Symbol> buildSymbols(const SceneGraph& scene);
+    static QStringList symbolNames(const SceneGraph& scene);
+    // Returns an empty string when `source` compiles, else the error message.
+    static QString validateExpression(const SceneGraph& scene, const QString& source);
+    static QString validateAssignments(const SceneGraph& scene, const QString& source);
+    // Compiles every definition; returns "Where: problem" lines.
+    static QStringList validateAll(const SceneGraph& scene);
+
+    explicit AutomationEngine(SceneGraph* scene, QObject* parent = nullptr);
+
+    // ── Lifecycle ───────────────────────────────────────────────────────────
+    bool start(QStringList* errors);   // compile + initialize runtime state
+    void stop();                       // drop runtime state
+    bool isActive() const { return m_active; }
+    void scan(double dt);
+
+    // ── Runtime queries ─────────────────────────────────────────────────────
+    double time() const { return m_time; }
+    long   scanCount() const { return m_scanCount; }
+    const std::vector<Symbol>& symbols() const { return m_symbols; }
+    int    slotOf(const QString& name) const { return m_slotIndex.value(name, -1); }
+    double value(int slot) const { return (slot >= 0 && slot < int(m_cur.size())) ? m_cur[size_t(slot)] : 0.0; }
+    double value(const QString& name) const { return value(slotOf(name)); }
+
+    // Queues a write to an Input/Internal signal; applied at the start of
+    // the next scan. Writes are applied one per scan per signal, so a quick
+    // press+release is still seen by exactly one scan.
+    void setInput(const QString& name, double v);
+    // Latest value written by setInput() that is still waiting for a scan,
+    // else the current value — what an input control should display.
+    double displayValue(const QString& name) const;
+
+    enum class OpState { Waiting, Running, Done };
+    struct OpStatus {
+        OpState state = OpState::Waiting;
+        QString detail;           // why it is waiting / what it is doing / error
+        double  startTime = -1;   // this cycle
+        double  endTime   = -1;
+        double  prevStart = -1;   // previous completed cycle (for Gantt)
+        double  prevEnd   = -1;
+        double  progress  = 0;    // 0..1 while running, when estimable
+    };
+    OpStatus opStatus(int sequenceId, int operationId) const;
+
+    enum class SeqState { Idle, Running, Finished };
+    struct SeqStatus {
+        SeqState state      = SeqState::Idle;
+        bool     enabled    = true;
+        int      cycles     = 0;
+        double   cycleStart = 0;
+        double   lastCycleTime = 0;
+        QString  detail;
+    };
+    SeqStatus seqStatus(int sequenceId) const;
+
+    // Motors whose actuator is moving this scan (for viewport highlighting)
+    std::vector<int> movingMotors() const;
+    // Velocity of an actuated joint this scan (deg/s or m/s)
+    bool actuatedJointState(int jointId, double& pos, double& vel) const;
+    // Names of currently running operations ("Seq: op, op")
+    QStringList activeOperationLabels() const;
+    // Runtime warnings collected during scans (e.g. move to an unreachable target)
+    const QStringList& warnings() const { return m_warnings; }
+
+signals:
+    void scanned();
+
+private:
+    struct ActuatorRt {
+        int    motorId = -1;
+        int    jointId = -1;
+        QString name;
+        bool   limited = true;
+        double limMin = -180, limMax = 180;
+        double defVelocity = 45, defAccel = 0;
+        // Current command
+        ActuatorMode mode = ActuatorMode::Position;
+        double target = 0, velocity = 45, accel = 0;
+        bool   active = true;
+        motion::State st;
+        expr::Expression bindTarget, bindVelocity, bindActive;
+        int    slotBase = -1;   // pos, vel, target, inPosition, moving, atMin, atMax, active
+    };
+
+    struct OpRt {
+        Operation def;
+        expr::Expression target, velocity, duration, condition, startCond;
+        std::vector<expr::Assignment> onStart, onFinish;
+        std::vector<int> predIdx;       // indices into SeqRt::ops
+        int    actIdx = -1;
+        OpStatus status;
+        // Running-command bookkeeping
+        double moveTarget = 0;
+        double waitUntil  = 0;
+        double moveFrom   = 0;
+        std::vector<std::pair<int, double>> poseTargets;   // (actIdx, target)
+        std::vector<double>                  poseFrom;
+    };
+
+    struct SeqRt {
+        int     id = -1;
+        QString name;
+        bool    loop = false;
+        expr::Expression enable, startCond;
+        std::vector<OpRt> ops;
+        SeqStatus status;
+        int     slotBase = -1;      // running, done, cycles
+    };
+
+    struct DerivedRt {
+        int slot = -1;
+        SignalType type = SignalType::Real;
+        expr::Expression ex;
+    };
+
+    expr::EvalContext ctx() const;
+    void queueWrite(const std::vector<expr::Assignment>& actions);
+    void publishStatus();
+    void advanceSequence(SeqRt& seq);
+    void startOperation(SeqRt& seq, OpRt& op);
+    bool operationFinished(OpRt& op);
+    void finishOperation(OpRt& op);
+    void applyBindings();
+    void integrate(double dt);
+    double clampToLimits(const ActuatorRt& a, double v) const;
+    bool inPosition(const ActuatorRt& a, double target) const;
+
+    SceneGraph* m_scene;
+    bool        m_active = false;
+    double      m_time = 0, m_dt = 0;
+    long        m_scanCount = 0;
+
+    std::vector<Symbol>   m_symbols;
+    QHash<QString, int>   m_slotIndex;
+    std::vector<double>   m_cur, m_prev;
+    std::vector<SignalType> m_slotType;
+
+    std::vector<DerivedRt>  m_derived;
+    std::vector<ActuatorRt> m_actuators;
+    std::vector<SeqRt>      m_sequences;
+    std::map<int, int>      m_actIndexByMotor;
+
+    std::vector<std::pair<int, double>>   m_pendingWrites;
+    std::map<int, std::deque<double>>     m_inputQueue;
+    QStringList                           m_warnings;
+};

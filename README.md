@@ -5,7 +5,7 @@
 <h1 align="center">MotionStudio</h1>
 
 <p align="center">
-  A desktop app for building mechanical assemblies — joints, motors, conveyors — and running real-time 3D kinematic and physics simulations.
+  A desktop app for building mechanical assemblies — joints, actuators, conveyors — and running signal-driven, sequenced 3D kinematic and physics simulations.
 </p>
 
 <p align="center">
@@ -14,7 +14,7 @@
 
 ---
 
-MotionStudio lets you assemble simple machines out of primitive bodies, wire up revolute/prismatic joints and motors, and press Play to watch them move. It targets the workflow of a mechanical or automation engineer sketching out motion — conveyors, robot arms, linear actuators, pick-and-place cells — without needing a full CAD suite.
+MotionStudio lets you assemble machines out of primitive bodies or imported CAD parts and add revolute/prismatic joints and actuators. You then program how they move with signals, expressions and operation sequences, and press Play to run the logic. It targets the workflow of a mechanical or automation engineer sketching out motion — conveyors, robot arms, linear actuators, pick-and-place cells — without needing a full CAD suite.
 
 Born out of an interest in robotics, automation, and digital twins — a place to prototype how a machine moves before it exists anywhere else.
 
@@ -22,13 +22,15 @@ Born out of an interest in robotics, automation, and digital twins — a place t
 
 - **3D scene editor** — orbit/pan/zoom camera, grid floor, click-to-select, translate gizmo
 - **Primitives** — Cube, Cylinder, Sphere, Capsule, parented by selection to build hierarchies
-- **Joints** — Revolute and Prismatic, with axis, limits, and initial angle; objects ping-pong at their limits
-- **Motors** — drive a joint at a target velocity, toggle on/off
+- **Joints** — Revolute (optionally continuous) and Prismatic, with axis, limits, pivot and initial value, jog-able at edit time
+- **Actuators** — position or speed control with trapezoidal motion profiles; properties can be bound to expressions
+- **Automation environment** — signals (inputs, internal flags, derived formulas), MCD-style operation sequences with predecessors, parallel branches, start conditions and signal actions, teach-point poses with synchronized moves, plus a runtime HMI (buttons, watch list, operation status, signal trace, Gantt timing)
+- **Deterministic scan cycle** — PLC-style 16 ms scans with Play / Pause / Step / Reset and speed control
 - **Rigid bodies & conveyor belts** — opt in per-object to real MuJoCo physics (mass, gravity, collisions, surface velocity)
 - **STEP import** — bring in CAD assemblies (`.step`/`.stp`) via OpenCASCADE, preserving the part hierarchy for rigid-body grouping
 - **Undo/redo** — full history across every kind of scene edit
 - **Hierarchy & Properties panels** — Unity-style tree view and inspector
-- **Templates** — starter projects (crank arm, robotic arm, solar system, pendulum, spinning top)
+- **Templates** — working automation examples (pick & place arm, indexing table with press, pendulum, solar system, spinning top, crank arm)
 - **Save/Load** — JSON-based `.mstudio` project files
 
 MotionStudio runs fully kinematically out of the box. Installing [MuJoCo](https://mujoco.org/) unlocks real rigid-body physics (gravity, collisions, forces); installing [OpenCASCADE](https://dev.opencascade.org/) unlocks STEP import. Both are optional, detected at build time.
@@ -60,28 +62,27 @@ Override the MuJoCo location with `-DMUJOCO_ROOT=<path>` or the `MUJOCO_ROOT` en
 
 Objects added while something is selected become children of it — parent-child relationships are what joints connect.
 
-**Spinning roller:**
+**Sequenced 2-axis arm:**
 
-1. `+ Cube` → machine frame at origin
-2. Cube selected → `+ Cylinder` → roller added as a child
-3. In Properties, set the roller's Position Y to lift it above the base
-4. Roller still selected → `Add Joint`, then `Add Motor` (set Velocity)
-5. `▶ Play`
+1. `+ Cube` → Base; select Base → `+ Cylinder` → Arm1; select Arm1 → `+ Cylinder` → Arm2 (lift each with Position Y)
+2. Select Arm1 → `Add Joint` → `Add Actuator` (**J1**); select Arm2 → `Add Joint` → `Add Actuator` (**J2**)
+3. **Automation › Signals** → `+ Input` → `Start`
+4. **Automation › Sequences** → `+`, set *Start when* = `Start`, tick *Loop*
+5. `+ Operation › Move` J1 → `60`, then `Move` J2 → `-45`, then `Move` J1 → `0`
+6. `▶ Play`, then switch **Start** ON in **Automation › Runtime**
 
-**2-segment robot arm:**
-
-1. `+ Cube` → Base
-2. Select Base → `+ Cylinder` → Arm1
-3. Select Arm1 → `+ Cylinder` → Arm2
-4. Select Arm1 → `Add Joint` → `Add Motor`
-5. Select Arm2 → `Add Joint` → `Add Motor` (different velocity/direction)
-6. `▶ Play`
+Or open a template (**File › Open Template…**), press Play and switch Start ON.
 
 See [USAGE.md](USAGE.md) for the full toolbar reference, camera controls, and joint axis cheat sheet.
 
 ## Architecture
 
-`MainWindow` owns a shared `SceneGraph` (the single source of truth for all scene data) and wires it up to a `Viewport` (OpenGL 3.3 renderer), a `SimulationEngine` (kinematic by default, MuJoCo-backed when available), `HierarchyPanel`/`PropertiesPanel` (Qt UI), and an `UndoManager` (whole-scene snapshot undo/redo). Projects round-trip to `.mstudio` JSON files via `ProjectSerializer`.
+`MainWindow` owns a shared `SceneGraph`, the single source of truth for all scene data, including the automation definitions. It wires the scene up to:
+
+- a `Viewport` (OpenGL 3.3 renderer)
+- a `SimulationEngine`, which runs the `AutomationEngine` scan cycle and adds MuJoCo physics when rigid bodies are present
+- `HierarchyPanel`, `PropertiesPanel` and `AutomationPanel` (the Qt UI)
+- an `UndoManager` (whole-scene snapshot undo/redo) Projects round-trip to `.mstudio` JSON files via `ProjectSerializer`.
 
 ## Status
 

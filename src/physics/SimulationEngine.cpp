@@ -6,7 +6,7 @@
 // ── Constructor / Destructor ─────────────────────────────────────────────────
 
 SimulationEngine::SimulationEngine(SceneGraph* scene, QObject* parent)
-    : QObject(parent), m_scene(scene)
+    : QObject(parent), m_scene(scene), m_auto(new AutomationEngine(scene, this))
 {
     m_timer.setInterval(kTickMs);
     connect(&m_timer, &QTimer::timeout, this, &SimulationEngine::tick);
@@ -18,26 +18,44 @@ SimulationEngine::~SimulationEngine() {
 
 // ── Public control ────────────────────────────────────────────────────────────
 
-void SimulationEngine::play() {
-    if (m_running) return;
+bool SimulationEngine::activate() {
+    if (m_active) return true;
 
-    // Save initial state once (before first play of this session)
-    if (m_savedTransforms.empty()) {
-        for (auto& [id, obj] : m_scene->allObjects())
-            m_savedTransforms[id] = obj.transform;
-        for (auto& [jid, j] : m_scene->allJoints())
-            m_savedJointAngles[jid] = j.currentValue;
+    QStringList errors;
+    if (!m_auto->start(&errors)) {
+        emit startFailed(errors);
+        return false;
     }
 
+    // Snapshot the edit-time state so Reset can return to it
+    m_savedTransforms.clear();
+    m_savedJointAngles.clear();
+    for (auto& [id, obj] : m_scene->allObjects())
+        m_savedTransforms[id] = obj.transform;
+    for (auto& [jid, j] : m_scene->allJoints())
+        m_savedJointAngles[jid] = j.currentValue;
+
 #ifdef MUJOCO_ENABLED
-    // Switch to MuJoCo when any object has a rigid body
+    // Physics only matters when something is a free/dynamic rigid body
     if (!m_scene->allRigidBodies().empty()) {
         if (!buildMuJoCoModel()) {
-            return; // model build failed, stay stopped
+            m_auto->stop();
+            emit startFailed({"MuJoCo could not build a physics model for this scene (see console output)."});
+            return false;
         }
     }
 #endif
 
+    m_elapsed = 0.0;
+    m_accum   = 0.0;
+    m_active  = true;
+    emit activeChanged(true);
+    return true;
+}
+
+void SimulationEngine::play() {
+    if (m_running) return;
+    if (!activate()) return;
     m_running = true;
     m_timer.start();
     emit stateChanged(true);
@@ -50,13 +68,21 @@ void SimulationEngine::pause() {
     emit stateChanged(false);
 }
 
+void SimulationEngine::step() {
+    pause();
+    if (!activate()) return;
+    runScan();
+    emit timeUpdated(m_elapsed);
+    emit stepped();
+}
+
 void SimulationEngine::reset() {
     pause();
     teardownMuJoCo();
+    m_auto->stop();
     m_elapsed = 0.0;
-    m_motorDirs.clear();
+    m_accum   = 0.0;
 
-    // Restore saved transforms and joint angles
     for (auto& [id, t] : m_savedTransforms) {
         if (SceneObject* obj = m_scene->getObject(id))
             obj->transform = t;
@@ -68,57 +94,67 @@ void SimulationEngine::reset() {
     m_savedTransforms.clear();
     m_savedJointAngles.clear();
 
+    bool wasActive = m_active;
+    m_active = false;
+    if (wasActive) emit activeChanged(false);
     emit timeUpdated(0.0);
     emit stepped();
+}
+
+void SimulationEngine::setSpeedFactor(double f) {
+    m_speed = std::clamp(f, 0.05, 20.0);
 }
 
 // ── Simulation tick ───────────────────────────────────────────────────────────
 
 void SimulationEngine::tick() {
+    // Scans always advance by the fixed kDt so results don't depend on the
+    // playback speed; the speed factor only changes how many run per frame.
+    m_accum += m_speed;
+    int n = 0;
+    while (m_accum >= 1.0 - 1e-9 && n < 64) {
+        m_accum -= 1.0;
+        runScan();
+        ++n;
+    }
+    if (n > 0) {
+        emit timeUpdated(m_elapsed);
+        emit stepped();
+    }
+}
+
+void SimulationEngine::runScan() {
 #ifdef MUJOCO_ENABLED
     if (m_mjModel && m_mjData) {
-        setMuJoCoActuators();
+        m_prescribed.clear();
+        for (auto& [jid, _] : m_jointQposAddr) {
+            double pos, vel;
+            if (m_auto->actuatedJointState(jid, pos, vel)) m_prescribed[jid].first = pos;
+        }
+    }
+#endif
+
+    m_auto->scan(kDt);
+
+#ifdef MUJOCO_ENABLED
+    if (m_mjModel && m_mjData) {
+        for (auto& [jid, fromTo] : m_prescribed) {
+            double pos, vel;
+            if (m_auto->actuatedJointState(jid, pos, vel)) fromTo.second = pos;
+        }
+        applyConveyorBelts();
         // Run multiple sub-steps for stability (16ms frame / 2ms MuJoCo dt = 8 steps)
         int nSteps = qMax(1, int(kDt / m_mjModel->opt.timestep + 0.5));
-        for (int i = 0; i < nSteps; i++)
+        for (int i = 0; i < nSteps; i++) {
+            prescribeActuatedJoints(double(i + 1) / nSteps);
             mj_step(m_mjModel, m_mjData);
+        }
+        prescribeActuatedJoints(1.0);
+        mj_forward(m_mjModel, m_mjData);
         syncFromMuJoCo();
-    } else {
-        applyMotors(kDt);
     }
-#else
-    applyMotors(kDt);
 #endif
     m_elapsed += kDt;
-    emit timeUpdated(m_elapsed);
-    emit stepped();
-}
-
-// ── Kinematic engine ──────────────────────────────────────────────────────────
-
-void SimulationEngine::applyMotors(double dt) {
-    for (auto& [mid, motor] : m_scene->allMotors()) {
-        if (!motor.enabled) continue;
-        Joint* joint = m_scene->getJoint(motor.jointId);
-        if (!joint) continue;
-
-        if (m_motorDirs.find(mid) == m_motorDirs.end())
-            m_motorDirs[mid] = 1.0f;
-
-        float step = motor.velocity * m_motorDirs[mid] * float(dt);
-        joint->currentValue += step;
-        joint->currentValue  = std::clamp(joint->currentValue, joint->limitMin, joint->limitMax);
-
-        if (joint->currentValue >= joint->limitMax || joint->currentValue <= joint->limitMin)
-            m_motorDirs[mid] *= -1.0f;
-    }
-}
-
-void SimulationEngine::resetJoints() {
-    for (auto& [jid, _] : m_scene->allJoints()) {
-        if (Joint* j = m_scene->getJoint(jid))
-            j->currentValue = j->initialAngle;
-    }
 }
 
 // ── MuJoCo backend ────────────────────────────────────────────────────────────
@@ -295,12 +331,15 @@ void SimulationEngine::writeBodyXML(QString& xml, int oid, int indent) const {
                 .arg(flt(pivotLocal.x())).arg(flt(pivotLocal.y())).arg(flt(pivotLocal.z()));
         }
 
-        xml += pad + QString("  <joint name=\"joint_%1\" type=\"%2\" axis=\"%3 %4 %5\"%6"
-                             " range=\"%7 %8\" damping=\"1.0\"/>\n")
+        // Continuous revolute joints get no range (autolimits → unlimited)
+        QString rangeAttr = (jnt->type == JointType::Revolute && jnt->continuous)
+            ? QString()
+            : QString(" range=\"%1 %2\"").arg(flt(jnt->limitMin)).arg(flt(jnt->limitMax));
+        xml += pad + QString("  <joint name=\"joint_%1\" type=\"%2\" axis=\"%3 %4 %5\"%6%7"
+                             " damping=\"1.0\"/>\n")
             .arg(jnt->id).arg(jType)
             .arg(flt(jnt->axis.x())).arg(flt(jnt->axis.y())).arg(flt(jnt->axis.z()))
-            .arg(posAttr)
-            .arg(flt(jnt->limitMin)).arg(flt(jnt->limitMax));
+            .arg(posAttr, rangeAttr);
     } else if (obj->parentId == -1 && rb) {
         // Root body with RigidBody: free joint so it can move dynamically
         xml += pad + QString("  <freejoint name=\"free_%1\"/>\n").arg(oid);
@@ -336,18 +375,10 @@ QString SimulationEngine::buildMJCF() const {
     for (int rootId : m_scene->rootObjects())
         writeBodyXML(xml, rootId, 2);
 
+    // Actuated joints are not driven by MuJoCo actuators: the automation
+    // engine prescribes their position every sub-step (kinematic drive), so
+    // MuJoCo only simulates free rigid bodies and unactuated joints.
     xml += "  </worldbody>\n";
-    xml += "  <actuator>\n";
-
-    for (auto& [mid, motor] : m_scene->allMotors()) {
-        if (!motor.enabled) continue;
-        const Joint* j = m_scene->getJoint(motor.jointId);
-        if (!j) continue;
-        xml += QString("    <velocity name=\"motor_%1\" joint=\"joint_%2\" kv=\"100\"/>\n")
-            .arg(mid).arg(j->id);
-    }
-
-    xml += "  </actuator>\n";
     xml += "</mujoco>\n";
     return xml;
 }
@@ -377,13 +408,13 @@ bool SimulationEngine::buildMuJoCoModel() {
     m_mjData = mj_makeData(m_mjModel);
     buildIdMappings();
 
-    // Set initial joint angles from scene (MuJoCo starts at ref=0 radians)
+    // Start from the joints' current (edit-time) values (MuJoCo starts at ref=0 radians)
     for (auto& [jid, qposadr] : m_jointQposAddr) {
         const Joint* j = m_scene->getJoint(jid);
         if (!j) continue;
         double initVal = (j->type == JointType::Revolute)
-            ? j->initialAngle * M_PI / 180.0
-            : j->initialAngle;
+            ? j->currentValue * M_PI / 180.0
+            : j->currentValue;
         m_mjData->qpos[qposadr] = initVal;
     }
 
@@ -394,16 +425,17 @@ bool SimulationEngine::buildMuJoCoModel() {
 void SimulationEngine::buildIdMappings() {
     m_jointQposAddr.clear();
     m_bodyMjId.clear();
-    m_motorActuatorId.clear();
+    m_jointDofAddr.clear();
     m_freeJointQposAddr.clear();
-    m_freeJointDofAddr.clear();
     m_freeJointDofAddr.clear();
 
     for (auto& [jid, _] : m_scene->allJoints()) {
         QString name = QString("joint_%1").arg(jid);
         int mjId = mj_name2id(m_mjModel, mjOBJ_JOINT, name.toStdString().c_str());
-        if (mjId >= 0)
+        if (mjId >= 0) {
             m_jointQposAddr[jid] = m_mjModel->jnt_qposadr[mjId];
+            m_jointDofAddr[jid]  = m_mjModel->jnt_dofadr[mjId];
+        }
     }
 
     for (auto& [oid, _] : m_scene->allObjects()) {
@@ -419,13 +451,6 @@ void SimulationEngine::buildIdMappings() {
             m_freeJointQposAddr[oid] = m_mjModel->jnt_qposadr[fjId];
             m_freeJointDofAddr[oid]  = m_mjModel->jnt_dofadr[fjId];
         }
-    }
-
-    for (auto& [mid, _] : m_scene->allMotors()) {
-        QString name = QString("motor_%1").arg(mid);
-        int mjId = mj_name2id(m_mjModel, mjOBJ_ACTUATOR, name.toStdString().c_str());
-        if (mjId >= 0)
-            m_motorActuatorId[mid] = mjId;
     }
 }
 
@@ -470,35 +495,19 @@ void SimulationEngine::applyConveyorBelts() {
     }
 }
 
-void SimulationEngine::setMuJoCoActuators() {
-    applyConveyorBelts();
-
-    for (auto& [mid, actuatorId] : m_motorActuatorId) {
-        const Motor* motor = nullptr;
-        for (auto& [motId, m] : m_scene->allMotors()) {
-            if (motId == mid) { motor = &m; break; }
-        }
-        if (!motor || !motor->enabled) {
-            m_mjData->ctrl[actuatorId] = 0.0;
-            continue;
-        }
-
-        if (m_motorDirs.find(mid) == m_motorDirs.end())
-            m_motorDirs[mid] = 1.0f;
-
-        // Bounce at joint limits (mirror kinematic engine behaviour)
-        const Joint* j = m_scene->getJoint(motor->jointId);
-        if (j) {
-            bool atMax = j->currentValue >= j->limitMax;
-            bool atMin = j->currentValue <= j->limitMin;
-            if ((atMax && m_motorDirs[mid] > 0) || (atMin && m_motorDirs[mid] < 0))
-                m_motorDirs[mid] *= -1.0f;
-        }
-
-        double vel = motor->velocity * double(m_motorDirs[mid]);
-        if (j && j->type == JointType::Revolute)
-            vel *= M_PI / 180.0;  // deg/s → rad/s
-        m_mjData->ctrl[actuatorId] = vel;
+void SimulationEngine::prescribeActuatedJoints(double alpha) {
+    // Kinematic drive: actuated joints follow the automation engine's motion
+    // profile exactly, interpolated across the sub-steps of one scan.
+    const double inv = 1.0 / kDt;
+    for (auto& [jid, fromTo] : m_prescribed) {
+        const Joint* j = m_scene->getJoint(jid);
+        auto qa = m_jointQposAddr.find(jid);
+        auto da = m_jointDofAddr.find(jid);
+        if (!j || qa == m_jointQposAddr.end() || da == m_jointDofAddr.end()) continue;
+        double k   = (j->type == JointType::Revolute) ? M_PI / 180.0 : 1.0;
+        double pos = fromTo.first + (fromTo.second - fromTo.first) * alpha;
+        m_mjData->qpos[qa->second] = pos * k;
+        m_mjData->qvel[da->second] = (fromTo.second - fromTo.first) * inv * k;
     }
 }
 
@@ -506,7 +515,7 @@ void SimulationEngine::syncFromMuJoCo() {
     // Sync regular joint angles from qpos
     for (auto& [jid, qposadr] : m_jointQposAddr) {
         Joint* j = m_scene->getJoint(jid);
-        if (!j) continue;
+        if (!j || m_prescribed.count(jid)) continue;   // actuated: already set by automation
         double raw = m_mjData->qpos[qposadr];
         j->currentValue = (j->type == JointType::Revolute)
             ? float(raw * 180.0 / M_PI)
@@ -534,7 +543,8 @@ void SimulationEngine::teardownMuJoCo() {
     if (m_mjModel) { mj_deleteModel(m_mjModel); m_mjModel = nullptr; }
     m_jointQposAddr.clear();
     m_bodyMjId.clear();
-    m_motorActuatorId.clear();
+    m_jointDofAddr.clear();
+    m_prescribed.clear();
     m_freeJointQposAddr.clear();
     m_freeJointDofAddr.clear();
 }

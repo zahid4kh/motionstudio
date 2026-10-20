@@ -20,6 +20,10 @@ struct Joint {
     // parent's own origin.
     QVector3D pivot         = {0.0f, 0.0f, 0.0f};
 
+    // Revolute only: ignore limitMin/limitMax and allow unlimited rotation
+    // (wheels, turntables, orbits).
+    bool      continuous    = false;
+
     // Runtime state (not persisted directly; restored from motor)
     float     currentValue  = 0.0f;    // degrees for revolute, units for prismatic
 };

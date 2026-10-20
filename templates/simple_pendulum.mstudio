@@ -6,9 +6,21 @@
             "type": "Cylinder",
             "parentId": -1,
             "transform": {
-                "position": {"x": 0, "y": 0.25, "z": 0},
-                "rotation": {"x": 0, "y": 0, "z": 0},
-                "scale":    {"x": 0.3, "y": 0.5, "z": 0.3}
+                "position": {
+                    "x": 0,
+                    "y": 0.25,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.3,
+                    "y": 0.5,
+                    "z": 0.3
+                }
             }
         },
         {
@@ -17,9 +29,21 @@
             "type": "Sphere",
             "parentId": 1,
             "transform": {
-                "position": {"x": 0, "y": -1.6, "z": 0},
-                "rotation": {"x": 0, "y": 0, "z": 0},
-                "scale":    {"x": 0.35, "y": 0.35, "z": 0.35}
+                "position": {
+                    "x": 0,
+                    "y": -1.6,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.35,
+                    "y": 0.35,
+                    "z": 0.35
+                }
             }
         }
     ],
@@ -28,22 +52,95 @@
             "id": 3,
             "name": "Pendulum_joint",
             "type": "Revolute",
-            "axis": {"x": 1, "y": 0, "z": 0},
+            "axis": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
             "limitMin": -150,
             "limitMax": 150,
             "initialAngle": 0,
             "parentBodyId": 1,
-            "childBodyId": 2
+            "childBodyId": 2,
+            "pivot": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "continuous": false
         }
     ],
     "motors": [
         {
-            "id": 4,
-            "name": "Motor_Pendulum_joint",
-            "velocity": 30,
-            "targetPosition": 0,
+            "id": 105,
+            "name": "Swing",
             "jointId": 3,
-            "enabled": true
+            "mode": "Position",
+            "velocity": 90,
+            "acceleration": 120,
+            "enabled": true,
+            "targetExpr": "",
+            "velocityExpr": "",
+            "activeExpr": ""
         }
-    ]
+    ],
+    "signals": [
+        {
+            "id": 108,
+            "name": "Amplitude",
+            "kind": "Input",
+            "type": "Real",
+            "initialValue": 60,
+            "expression": "",
+            "description": "Swing amplitude in degrees"
+        }
+    ],
+    "sequences": [
+        {
+            "id": 109,
+            "name": "Pendulum",
+            "enableCondition": "",
+            "startCondition": "",
+            "loop": true,
+            "operations": [
+                {
+                    "id": 106,
+                    "name": "Swing right",
+                    "type": "Move",
+                    "actuatorId": 105,
+                    "poseId": -1,
+                    "target": "Amplitude",
+                    "velocity": "",
+                    "duration": "",
+                    "condition": "",
+                    "startCondition": "",
+                    "onStart": "",
+                    "onFinish": "",
+                    "predecessors": []
+                },
+                {
+                    "id": 107,
+                    "name": "Swing left",
+                    "type": "Move",
+                    "actuatorId": 105,
+                    "poseId": -1,
+                    "target": "-Amplitude",
+                    "velocity": "",
+                    "duration": "",
+                    "condition": "",
+                    "startCondition": "",
+                    "onStart": "",
+                    "onFinish": "",
+                    "predecessors": [
+                        106
+                    ]
+                }
+            ]
+        }
+    ],
+    "version": 2,
+    "rigidBodies": [],
+    "conveyorBelts": [],
+    "meshes": [],
+    "poses": []
 }

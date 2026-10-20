@@ -6,6 +6,8 @@
 #include <QByteArray>
 #include <cstring>
 #include <map>
+#include <algorithm>
+#include <vector>
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -98,7 +100,17 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene) {
     // De-dupe by MeshGeometry identity so shared assembly parts serialize once
     std::map<const MeshGeometry*, int> meshIndex;
 
-    for (auto& [id, obj] : scene.allObjects()) {
+    // Iterate in id order so a save → load → save round trip is stable (ids
+    // are reallocated in this order on load; undo relies on stable snapshots).
+    auto sortedKeys = [](const auto& map) {
+        std::vector<int> keys;
+        for (auto& kv : map) keys.push_back(kv.first);
+        std::sort(keys.begin(), keys.end());
+        return keys;
+    };
+
+    for (int oid : sortedKeys(scene.allObjects())) {
+        const SceneObject& obj = scene.allObjects().at(oid);
         QJsonObject o;
         o["id"]        = obj.id;
         o["name"]      = obj.name;
@@ -121,7 +133,8 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene) {
         objects.append(o);
     }
 
-    for (auto& [id, j] : scene.allJoints()) {
+    for (int jid : sortedKeys(scene.allJoints())) {
+        const Joint& j = scene.allJoints().at(jid);
         QJsonObject o;
         o["id"]           = j.id;
         o["name"]         = j.name;
@@ -131,23 +144,83 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene) {
         o["limitMin"]     = j.limitMin;
         o["limitMax"]     = j.limitMax;
         o["initialAngle"] = j.initialAngle;
+        o["continuous"]   = j.continuous;
         o["parentBodyId"] = j.parentBodyId;
         o["childBodyId"]  = j.childBodyId;
         joints.append(o);
     }
 
-    for (auto& [id, m] : scene.allMotors()) {
+    for (int mid : scene.motorIdsSorted()) {
+        const Motor& m = *scene.getMotor(mid);
         QJsonObject o;
-        o["id"]             = m.id;
-        o["name"]           = m.name;
-        o["velocity"]       = m.velocity;
-        o["targetPosition"] = m.targetPosition;
-        o["jointId"]        = m.jointId;
-        o["enabled"]        = m.enabled;
+        o["id"]           = m.id;
+        o["name"]         = m.name;
+        o["jointId"]      = m.jointId;
+        o["mode"]         = m.mode == ActuatorMode::Speed ? "Speed" : "Position";
+        o["velocity"]     = m.velocity;
+        o["acceleration"] = m.acceleration;
+        o["enabled"]      = m.enabled;
+        o["targetExpr"]   = m.targetExpr;
+        o["velocityExpr"] = m.velocityExpr;
+        o["activeExpr"]   = m.activeExpr;
         motors.append(o);
     }
 
-    for (auto& [objectId, rb] : scene.allRigidBodies()) {
+    QJsonArray signalsArr, sequences, poses;
+    for (auto& [id, sg] : scene.allSignals()) {
+        QJsonObject o;
+        o["id"]           = sg.id;
+        o["name"]         = sg.name;
+        o["type"]         = signalTypeName(sg.type);
+        o["kind"]         = signalKindName(sg.kind);
+        o["initialValue"] = sg.initialValue;
+        o["expression"]   = sg.expression;
+        o["description"]  = sg.description;
+        signalsArr.append(o);
+    }
+    for (auto& [id, q] : scene.allSequences()) {
+        QJsonObject o;
+        o["id"]              = q.id;
+        o["name"]            = q.name;
+        o["enableCondition"] = q.enableCondition;
+        o["startCondition"]  = q.startCondition;
+        o["loop"]            = q.loop;
+        QJsonArray ops;
+        for (auto& op : q.operations) {
+            QJsonObject oo;
+            oo["id"]             = op.id;
+            oo["name"]           = op.name;
+            oo["type"]           = operationTypeName(op.type);
+            oo["actuatorId"]     = op.actuatorId;
+            oo["poseId"]         = op.poseId;
+            oo["target"]         = op.target;
+            oo["velocity"]       = op.velocity;
+            oo["duration"]       = op.duration;
+            oo["condition"]      = op.condition;
+            oo["startCondition"] = op.startCondition;
+            oo["onStart"]        = op.onStart;
+            oo["onFinish"]       = op.onFinish;
+            QJsonArray preds;
+            for (int p : op.predecessors) preds.append(p);
+            oo["predecessors"] = preds;
+            ops.append(oo);
+        }
+        o["operations"] = ops;
+        sequences.append(o);
+    }
+    for (auto& [id, pose] : scene.allPoses()) {
+        QJsonObject o;
+        o["id"]   = pose.id;
+        o["name"] = pose.name;
+        QJsonArray vals;
+        for (auto& [jid, v] : pose.jointValues)
+            vals.append(QJsonObject{{"jointId", jid}, {"value", double(v)}});
+        o["values"] = vals;
+        poses.append(o);
+    }
+
+    for (int objectId : sortedKeys(scene.allRigidBodies())) {
+        const RigidBody& rb = scene.allRigidBodies().at(objectId);
         QJsonObject o;
         o["objectId"]       = objectId;
         o["mass"]           = rb.mass;
@@ -167,7 +240,8 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene) {
         rigidBodies.append(o);
     }
 
-    for (auto& [objectId, belt] : scene.allConveyorBelts()) {
+    for (int objectId : sortedKeys(scene.allConveyorBelts())) {
+        const ConveyorBelt& belt = scene.allConveyorBelts().at(objectId);
         QJsonObject o;
         o["objectId"]  = objectId;
         o["velocity"]  = double(belt.velocity);
@@ -177,12 +251,16 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene) {
     }
 
     QJsonObject root;
+    root["version"]       = 2;
     root["objects"]       = objects;
     root["joints"]        = joints;
     root["motors"]        = motors;
     root["rigidBodies"]   = rigidBodies;
     root["conveyorBelts"] = conveyorBelts;
     root["meshes"]        = meshes;
+    root["signals"]       = signalsArr;
+    root["sequences"]     = sequences;
+    root["poses"]         = poses;
     return root;
 }
 
@@ -238,6 +316,7 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root) {
     }
 
     // Joints
+    QHash<int, int> jointIdMap;
     for (auto v : root["joints"].toArray()) {
         auto o = v.toObject();
         Joint j;
@@ -248,27 +327,93 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root) {
         j.limitMin     = float(o["limitMin"].toDouble(-180));
         j.limitMax     = float(o["limitMax"].toDouble(180));
         j.initialAngle = float(o["initialAngle"].toDouble());
+        j.continuous   = o["continuous"].toBool(false);
         j.parentBodyId = idMap.value(o["parentBodyId"].toInt(-1), -1);
         j.childBodyId  = idMap.value(o["childBodyId"].toInt(-1), -1);
-        scene.addJoint(j);
+        jointIdMap[o["id"].toInt(-1)] = scene.addJoint(j);
     }
 
-    // Motors — match by joint name
+    // Actuators (motors)
+    QHash<int, int> motorIdMap;
     for (auto v : root["motors"].toArray()) {
         auto o = v.toObject();
         Motor m;
-        m.name           = o["name"].toString();
-        m.velocity       = float(o["velocity"].toDouble(45));
-        m.targetPosition = float(o["targetPosition"].toDouble());
-        m.enabled        = o["enabled"].toBool(true);
-        m.jointId        = -1;
-        for (auto& [jid, j] : scene.allJoints()) {
-            if (j.name == m.name.mid(6)) {  // strip "Motor_" prefix
-                m.jointId = jid;
-                break;
-            }
+        m.name         = o["name"].toString();
+        m.jointId      = jointIdMap.value(o["jointId"].toInt(-1), -1);
+        m.mode         = o["mode"].toString() == "Speed" ? ActuatorMode::Speed : ActuatorMode::Position;
+        m.velocity     = float(o["velocity"].toDouble(45));
+        m.acceleration = float(o["acceleration"].toDouble(0));
+        m.enabled      = o["enabled"].toBool(true);
+        m.targetExpr   = o["targetExpr"].toString();
+        m.velocityExpr = o["velocityExpr"].toString();
+        m.activeExpr   = o["activeExpr"].toString();
+        if (m.jointId != -1 && !scene.motorForJoint(m.jointId))
+            motorIdMap[o["id"].toInt(-1)] = scene.addMotor(m);
+    }
+
+    // Signals
+    for (auto v : root["signals"].toArray()) {
+        auto o = v.toObject();
+        Signal sg;
+        sg.name         = o["name"].toString();
+        QString t = o["type"].toString();
+        sg.type         = t == "Int" ? SignalType::Int : (t == "Real" ? SignalType::Real : SignalType::Bool);
+        QString k = o["kind"].toString();
+        sg.kind         = k == "Input" ? SignalKind::Input : (k == "Derived" ? SignalKind::Derived : SignalKind::Internal);
+        sg.initialValue = o["initialValue"].toDouble();
+        sg.expression   = o["expression"].toString();
+        sg.description  = o["description"].toString();
+        scene.addSignal(sg);
+    }
+
+    // Poses
+    QHash<int, int> poseIdMap;
+    for (auto v : root["poses"].toArray()) {
+        auto o = v.toObject();
+        Pose p;
+        p.name = o["name"].toString();
+        for (auto pv : o["values"].toArray()) {
+            auto po = pv.toObject();
+            int jid = jointIdMap.value(po["jointId"].toInt(-1), -1);
+            if (jid != -1) p.jointValues[jid] = float(po["value"].toDouble());
         }
-        if (m.jointId != -1) scene.addMotor(m);
+        poseIdMap[o["id"].toInt(-1)] = scene.addPose(p);
+    }
+
+    // Sequences
+    for (auto v : root["sequences"].toArray()) {
+        auto o = v.toObject();
+        Sequence q;
+        q.name            = o["name"].toString();
+        q.enableCondition = o["enableCondition"].toString();
+        q.startCondition  = o["startCondition"].toString();
+        q.loop            = o["loop"].toBool(false);
+        QHash<int, int> opIdMap;
+        QList<QJsonObject> opObjs;
+        for (auto ov : o["operations"].toArray()) {
+            auto oo = ov.toObject();
+            opIdMap[oo["id"].toInt(-1)] = scene.allocateId();
+            opObjs << oo;
+        }
+        for (auto& oo : opObjs) {
+            Operation op;
+            op.id             = opIdMap.value(oo["id"].toInt(-1));
+            op.name           = oo["name"].toString();
+            op.type           = operationTypeFromName(oo["type"].toString());
+            op.actuatorId     = motorIdMap.value(oo["actuatorId"].toInt(-1), -1);
+            op.poseId         = poseIdMap.value(oo["poseId"].toInt(-1), -1);
+            op.target         = oo["target"].toString();
+            op.velocity       = oo["velocity"].toString();
+            op.duration       = oo["duration"].toString();
+            op.condition      = oo["condition"].toString();
+            op.startCondition = oo["startCondition"].toString();
+            op.onStart        = oo["onStart"].toString();
+            op.onFinish       = oo["onFinish"].toString();
+            for (auto pv : oo["predecessors"].toArray())
+                if (opIdMap.contains(pv.toInt())) op.predecessors.push_back(opIdMap.value(pv.toInt()));
+            q.operations.push_back(op);
+        }
+        scene.addSequence(q);
     }
 
     // Rigid bodies

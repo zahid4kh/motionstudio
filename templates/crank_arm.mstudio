@@ -6,9 +6,21 @@
             "type": "Cube",
             "parentId": -1,
             "transform": {
-                "position": {"x": 0, "y": 0.1, "z": 0},
-                "rotation": {"x": 0, "y": 0, "z": 0},
-                "scale":    {"x": 0.7, "y": 0.2, "z": 0.7}
+                "position": {
+                    "x": 0,
+                    "y": 0.1,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.7,
+                    "y": 0.2,
+                    "z": 0.7
+                }
             }
         },
         {
@@ -17,9 +29,21 @@
             "type": "Cylinder",
             "parentId": 1,
             "transform": {
-                "position": {"x": 0, "y": 0.55, "z": 0},
-                "rotation": {"x": 0, "y": 0, "z": 0},
-                "scale":    {"x": 0.1, "y": 0.55, "z": 0.1}
+                "position": {
+                    "x": 0,
+                    "y": 0.55,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.1,
+                    "y": 0.55,
+                    "z": 0.1
+                }
             }
         },
         {
@@ -28,9 +52,21 @@
             "type": "Capsule",
             "parentId": 2,
             "transform": {
-                "position": {"x": 0.55, "y": 0.55, "z": 0},
-                "rotation": {"x": 0, "y": 0, "z": 90},
-                "scale":    {"x": 0.08, "y": 0.4, "z": 0.08}
+                "position": {
+                    "x": 0.55,
+                    "y": 0.55,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 90
+                },
+                "scale": {
+                    "x": 0.08,
+                    "y": 0.4,
+                    "z": 0.08
+                }
             }
         },
         {
@@ -39,9 +75,21 @@
             "type": "Sphere",
             "parentId": 3,
             "transform": {
-                "position": {"x": 0.55, "y": 0, "z": 0},
-                "rotation": {"x": 0, "y": 0, "z": 0},
-                "scale":    {"x": 0.14, "y": 0.14, "z": 0.14}
+                "position": {
+                    "x": 0.55,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.14,
+                    "y": 0.14,
+                    "z": 0.14
+                }
             }
         }
     ],
@@ -50,22 +98,53 @@
             "id": 5,
             "name": "Crank_joint",
             "type": "Revolute",
-            "axis": {"x": 0, "y": 1, "z": 0},
+            "axis": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
             "limitMin": -180,
             "limitMax": 180,
             "initialAngle": 0,
             "parentBodyId": 1,
-            "childBodyId": 2
+            "childBodyId": 2,
+            "continuous": true,
+            "pivot": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            }
         }
     ],
     "motors": [
         {
-            "id": 6,
-            "name": "Motor_Crank_joint",
-            "velocity": 60,
-            "targetPosition": 0,
+            "id": 108,
+            "name": "Crank",
             "jointId": 5,
-            "enabled": true
+            "mode": "Speed",
+            "velocity": 60,
+            "acceleration": 60,
+            "enabled": true,
+            "targetExpr": "",
+            "velocityExpr": "",
+            "activeExpr": "Run"
         }
-    ]
+    ],
+    "signals": [
+        {
+            "id": 107,
+            "name": "Run",
+            "kind": "Input",
+            "type": "Bool",
+            "initialValue": 1,
+            "expression": "",
+            "description": "Crank turns while true"
+        }
+    ],
+    "version": 2,
+    "rigidBodies": [],
+    "conveyorBelts": [],
+    "meshes": [],
+    "sequences": [],
+    "poses": []
 }

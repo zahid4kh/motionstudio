@@ -21,6 +21,11 @@ public slots:
 
 signals:
     void pickAxisRequested();
+    void openActuatorRequested(int jointId);
+
+public:
+    // Disables definition edits (joint/actuator) while the simulation is active
+    void setSimulationActive(bool active);
 
 private slots:
     void onSelectionChanged(int id);
@@ -114,17 +119,24 @@ private:
     QDoubleSpinBox* m_jLimitMax   = nullptr;
     QDoubleSpinBox* m_jInitAngle  = nullptr;
     QLabel*         m_jInitLabel  = nullptr;
+    QCheckBox*      m_jContinuous = nullptr;
+    QDoubleSpinBox* m_jPosition   = nullptr;   // live joint value (jog)
+    QLabel*         m_jPosLabel   = nullptr;
     QPushButton*    m_addMotorBtn = nullptr;
 
     // Joint — rotation origin (revolute only)
     QWidget*        m_jPivotRow      = nullptr;
     QDoubleSpinBox* m_jPivotX = nullptr, *m_jPivotY = nullptr, *m_jPivotZ = nullptr;
 
-    // Motor
+    // Actuator (Motor)
     QGroupBox*      m_motorGroup  = nullptr;
+    QLabel*         m_mName       = nullptr;
+    QComboBox*      m_mMode       = nullptr;
     QDoubleSpinBox* m_mVel        = nullptr;
-    QDoubleSpinBox* m_mTarget     = nullptr;
+    QDoubleSpinBox* m_mAccel      = nullptr;
     QCheckBox*      m_mEnabled    = nullptr;
+    QLabel*         m_mBindings   = nullptr;
+    bool            m_simActive   = false;
 
     // Physics — rigid body
     QGroupBox*      m_physicsGroup  = nullptr;

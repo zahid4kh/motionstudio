@@ -21,33 +21,40 @@ static const char* kDialogStyle =
 
 const QList<TemplateDialog::TemplateInfo> TemplateDialog::s_templates = {
     {
-        "Simple Pendulum",
-        "A pivot cylinder with a sphere bob attached by a revolute joint.\n"
-        "Motor drives 30 °/s — watch the pendulum sweep back and forth.",
-        ":/templates/simple_pendulum.mstudio"
-    },
-    {
-        "Robotic Arm",
-        "3-segment arm: Base → Arm1 → Arm2 → Gripper.\n"
-        "Three revolute joints with independent motors at 25, 40, and 90 °/s.",
+        "Robotic Arm — Pick & Place",
+        "3-axis arm running a looping pick & place sequence built from poses,\n"
+        "parallel moves, waits and signal actions. Press Play, then switch Start ON\n"
+        "in the Automation panel's Runtime tab. Stop holds after the current step.",
         ":/templates/robotic_arm.mstudio"
     },
     {
+        "Indexing Table",
+        "A turntable indexes 90° (target = Table.target + 90), then a press stamps\n"
+        "the part and retracts. A derived Safe signal interlocks the table; a counter\n"
+        "tracks parts. Press Play, then switch Start ON.",
+        ":/templates/indexing_table.mstudio"
+    },
+    {
+        "Simple Pendulum",
+        "A looping two-operation sequence swings the bob between ±Amplitude.\n"
+        "Change Amplitude live from the Runtime tab.",
+        ":/templates/simple_pendulum.mstudio"
+    },
+    {
         "Solar System",
-        "Sun sphere with an orbiting Planet and a Moon that orbits the Planet.\n"
-        "Nested revolute joints — planet orbits at 20 °/s, moon at 75 °/s.",
+        "Continuous speed-mode actuators with expression bindings:\n"
+        "speed = 20 · TimeWarp, active = !Hold. Try them in the Runtime tab.",
         ":/templates/solar_system.mstudio"
     },
     {
         "Spinning Top",
-        "A flat disc on a stand with a spike — driven at 180 °/s.\n"
-        "Good for testing fast rotation and child-body carry-along.",
+        "A disc driven in speed mode with acceleration ramps; the Fast input\n"
+        "switches its bound speed between 180 and 720 °/s.",
         ":/templates/spinning_top.mstudio"
     },
     {
         "Crank Arm",
-        "A crank cylinder attached to a body, with a swinging arm and sphere handle.\n"
-        "Motor drives 60 °/s — watch the handle trace a full circle.",
+        "A crank turning at 60 °/s while the Run input is on, ramping up and down.",
         ":/templates/crank_arm.mstudio"
     },
 };

@@ -6,6 +6,8 @@
 #include <QPushButton>
 #include <QPoint>
 #include <vector>
+#include <QSet>
+#include <QStringList>
 #include <unordered_map>
 #include "Camera.h"
 #include "../scene/SceneGraph.h"
@@ -30,6 +32,10 @@ public:
     // for the selected object.
     void beginAxisPick(int objectId);
     void cancelAxisPick();
+
+    // Simulation feedback: tint parts driven by a moving actuator and list
+    // the running automation operations in the top-left corner.
+    void setSimulationOverlay(const QSet<int>& movingObjects, const QStringList& lines);
 
 signals:
     void keyPointSelected(const QString& name, const QVector3D& worldPos);
@@ -115,6 +121,9 @@ private:
     static constexpr int kGizmoMargin = 14;
 
     int              m_hoveredId = -1;
+    QSet<int>        m_movingObjects;
+    QStringList      m_overlayLines;
+    class QLabel*    m_simOverlay = nullptr;   // a widget, not QPainter text (renders reliably over GL)
     int              m_nearKeyPointIdx = -1;  // index into keyPointsFor(hovered obj type)
     QPoint           m_lastMouse;
     Qt::MouseButton  m_dragBtn = Qt::NoButton;

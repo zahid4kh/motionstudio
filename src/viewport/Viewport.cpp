@@ -1,4 +1,5 @@
 #include "Viewport.h"
+#include <QLabel>
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <QKeyEvent>
@@ -39,6 +40,7 @@ uniform vec3  lightDir;
 uniform vec3  viewPos;
 uniform bool  isSelected;
 uniform bool  isHovered;
+uniform bool  isActive;
 out vec4 fragColor;
 void main(){
     vec3 n = normalize(normal);
@@ -48,6 +50,7 @@ void main(){
     vec3 h = normalize(l + v);
     float spec = pow(max(dot(n,h), 0.0), 48.0);
     vec3 col = objColor * (0.18 + 0.72*diff) + vec3(0.4)*spec;
+    if(isActive)   col = mix(col, vec3(0.15, 0.80, 0.45), 0.30);
     if(isHovered)  col = mix(col, vec3(0.45, 0.72, 1.0), 0.28);
     if(isSelected) col = mix(col, vec3(1.0, 0.75, 0.1),  0.40);
     fragColor = vec4(col, 1.0);
@@ -246,6 +249,7 @@ Viewport::Viewport(SceneGraph* scene, QWidget* parent)
     connect(scene, &SceneGraph::conveyorBeltRemoved,this, [this](int){ update(); });
     connect(scene, &SceneGraph::conveyorBeltChanged,this, [this](int){ update(); });
     connect(scene, &SceneGraph::floorChanged,       this, [this](bool){ update(); });
+    connect(scene, &SceneGraph::jointsMoved,        this, [this]{ update(); });
 
     // View-snap overlay buttons
     auto mkBtn = [&](const QString& label) -> QPushButton* {
@@ -374,6 +378,27 @@ void Viewport::paintGL() {
     drawKeyPoints(p);
     drawAxisPickBanner(p);
 }
+
+void Viewport::setSimulationOverlay(const QSet<int>& movingObjects, const QStringList& lines) {
+    if (movingObjects == m_movingObjects && lines == m_overlayLines) return;
+    m_movingObjects = movingObjects;
+    if (lines != m_overlayLines) {
+        m_overlayLines = lines;
+        if (!m_simOverlay) {
+            m_simOverlay = new QLabel(this);
+            m_simOverlay->setStyleSheet("QLabel { background:rgba(255,255,255,215); color:#143c78; "
+                                        "border:1px solid rgba(80,120,200,120); border-radius:5px; "
+                                        "padding:4px 8px; font-size:11px; }");
+            m_simOverlay->setAttribute(Qt::WA_TransparentForMouseEvents);
+        }
+        m_simOverlay->setText("▶ " + lines.join("\n▶ "));
+        m_simOverlay->adjustSize();
+        m_simOverlay->move(8, 40);
+        m_simOverlay->setVisible(!lines.isEmpty());
+    }
+    update();
+}
+
 
 // ── Shader / mesh setup ──────────────────────────────────────────────────────
 
@@ -721,6 +746,7 @@ void Viewport::drawScene(){
         m_objShader->setUniformValue("objColor",   primitiveColor(obj.type));
         m_objShader->setUniformValue("isSelected", obj.selected);
         m_objShader->setUniformValue("isHovered",  id == m_hoveredId && !obj.selected);
+        m_objShader->setUniformValue("isActive",   m_movingObjects.contains(id));
         switch(obj.type){
             case PrimitiveType::Cube:     drawMesh(m_cube);     break;
             case PrimitiveType::Cylinder: drawMesh(m_cylinder); break;

@@ -4,5 +4,7 @@ build/
 packaging/staging_motionstd/
 packaging/*.deb
 *.mstudio
+!templates/*.mstudio
 CLAUDE.md
 packaging
+AUTOMATION_PLAN.md

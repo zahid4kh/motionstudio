@@ -19,6 +19,8 @@
 #include <QCursor>
 #include <QUrl>
 #include <QtConcurrent/QtConcurrentRun>
+#include <QComboBox>
+#include <QSet>
 #include <functional>
 
 // ── Style constants ───────────────────────────────────────────────────────────
@@ -68,15 +70,16 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(m_scene, &SceneGraph::objectChanged, this, &MainWindow::onSceneDirtied);
     connect(m_scene, &SceneGraph::jointAdded,    this, &MainWindow::onSceneDirtied);
     connect(m_scene, &SceneGraph::motorAdded,    this, &MainWindow::onSceneDirtied);
+    connect(m_scene, &SceneGraph::automationChanged, this, &MainWindow::onSceneDirtied);
 
-    connect(m_undo, &UndoManager::historyChanged, this, [this]{
-        m_undoAction->setEnabled(m_undo->canUndo());
-        m_redoAction->setEnabled(m_undo->canRedo());
-    });
+    connect(m_undo, &UndoManager::historyChanged, this, &MainWindow::updateUndoActions);
 
-    connect(m_sim, &SimulationEngine::stateChanged, this, &MainWindow::onSimStateChanged);
-    connect(m_sim, &SimulationEngine::timeUpdated,  this, &MainWindow::onTimeUpdated);
-    connect(m_sim, &SimulationEngine::stepped,      m_viewport, QOverload<>::of(&QWidget::update));
+    connect(m_sim, &SimulationEngine::stateChanged,  this, &MainWindow::onSimStateChanged);
+    connect(m_sim, &SimulationEngine::activeChanged, this, &MainWindow::onSimActiveChanged);
+    connect(m_sim, &SimulationEngine::startFailed,   this, &MainWindow::onSimStartFailed);
+    connect(m_sim, &SimulationEngine::timeUpdated,   this, &MainWindow::onTimeUpdated);
+    connect(m_sim, &SimulationEngine::stepped,       m_viewport, QOverload<>::of(&QWidget::update));
+    connect(m_sim, &SimulationEngine::stepped,       this, &MainWindow::updateSimulationOverlay);
 
     m_statusTimer.setSingleShot(true);
     connect(&m_statusTimer, &QTimer::timeout, this, [this](){
@@ -184,18 +187,31 @@ void MainWindow::buildToolbar() {
 
     // ── Assembly ──
     connect(mkBtn(tb,"Add Joint","Add Revolute joint\nObject must have a parent"), &QAction::triggered, this, &MainWindow::addJointToSelected);
-    connect(mkBtn(tb,"Add Motor","Add Motor to joint\nObject must have a joint"),  &QAction::triggered, this, &MainWindow::addMotorToSelected);
+    connect(mkBtn(tb,"Add Actuator","Add an actuator to the selected part's joint\nso automation logic can drive it"),  &QAction::triggered, this, &MainWindow::addMotorToSelected);
     connect(mkBtn(tb,"Delete",   "Delete selected  (Del)"),                        &QAction::triggered, this, &MainWindow::deleteSelected);
     tb->addSeparator();
 
     // ── Simulation ──
-    auto* playA  = mkBtn(tb, "▶  Play",  "Start simulation  (Space)");
-    auto* pauseA = mkBtn(tb, "⏸  Pause", "Pause simulation  (Space)");
-    auto* resetA = mkBtn(tb, "↺  Reset", "Stop and reset to t=0");
+    auto* playA  = mkBtn(tb, "▶  Play",  "Run the automation logic  (Space)");
+    auto* pauseA = mkBtn(tb, "⏸  Pause", "Pause  (Space)");
+    auto* stepA  = mkBtn(tb, "⏭  Step",  "Run exactly one scan (16 ms), then pause  (F10)");
+    auto* resetA = mkBtn(tb, "↺  Reset", "Stop and restore the scene to how it was before Play");
+    stepA->setShortcut(Qt::Key_F10);
     connect(playA,  &QAction::triggered, m_sim, &SimulationEngine::play);
     connect(pauseA, &QAction::triggered, m_sim, &SimulationEngine::pause);
+    connect(stepA,  &QAction::triggered, m_sim, &SimulationEngine::step);
     connect(resetA, &QAction::triggered, m_sim, &SimulationEngine::reset);
-    Q_UNUSED(resetA);
+
+    auto* speed = new QComboBox(tb);
+    speed->addItems({"0.25×", "0.5×", "1×", "2×", "4×"});
+    speed->setCurrentIndex(2);
+    speed->setToolTip("Playback speed (scan results are identical at any speed)");
+    speed->setStyleSheet("QComboBox { padding:3px 6px; font-size:12px; }");
+    connect(speed, &QComboBox::currentIndexChanged, this, [this](int i){
+        static const double f[] = {0.25, 0.5, 1.0, 2.0, 4.0};
+        m_sim->setSpeedFactor(f[i]);
+    });
+    tb->addWidget(speed);
 
     connect(m_sim, &SimulationEngine::stateChanged, [playA, pauseA](bool running){
         playA->setEnabled(!running);
@@ -234,6 +250,18 @@ void MainWindow::buildDocks() {
     };
     mkDock("Hierarchy",  m_hierarchy,  Qt::LeftDockWidgetArea);
     mkDock("Properties", m_properties, Qt::RightDockWidgetArea);
+
+    m_automation = new AutomationPanel(m_scene, m_sim, this);
+    m_automationDock = mkDock("Automation", m_automation, Qt::BottomDockWidgetArea);
+    m_automationDock->setObjectName("automationDock");
+    m_automationDock->setMinimumHeight(200);
+    resizeDocks({m_automationDock}, {300}, Qt::Vertical);
+    connect(m_automation, &AutomationPanel::statusMessage, this, &MainWindow::showStatus);
+    connect(m_properties, &PropertiesPanel::openActuatorRequested, this, [this](int jointId){
+        m_automationDock->show();
+        m_automationDock->raise();
+        m_automation->showActuatorForJoint(jointId);
+    });
 
     connect(m_viewport, &Viewport::keyPointSelected,
             m_properties, &PropertiesPanel::showPointCoords);
@@ -282,6 +310,10 @@ void MainWindow::openProject() {
     QString path = QFileDialog::getOpenFileName(this, "Open Project", {},
         "MotionStudio Project (*.mstudio);;JSON Files (*.json);;All Files (*)");
     if(path.isEmpty()) return;
+    openFile(path);
+}
+
+bool MainWindow::openFile(const QString& path) {
     m_sim->reset();
     if(ProjectSerializer::load(*m_scene, path)){
         m_currentFile = path;
@@ -289,12 +321,13 @@ void MainWindow::openProject() {
         updateTitle();
         m_undo->reset();
         showStatus("Opened: " + QFileInfo(path).fileName());
-    } else {
-        QMessageBox::critical(this, "Load Failed",
-            "Could not load project from:\n" + path +
-            "\n\nThe file may be corrupt or incompatible.");
-        showStatus("Failed to open project", false);
+        return true;
     }
+    QMessageBox::critical(this, "Load Failed",
+        "Could not load project from:\n" + path +
+        "\n\nThe file may be corrupt or incompatible.");
+    showStatus("Failed to open project", false);
+    return false;
 }
 
 void MainWindow::openTemplate() {
@@ -314,7 +347,7 @@ void MainWindow::openTemplate() {
         m_dirty = false;
         updateTitle();
         m_undo->reset();
-        showStatus("Template loaded — press Play to run the simulation");
+        showStatus("Template loaded — see the Automation panel, then press Play");
     } else {
         showStatus("Failed to load template", false);
     }
@@ -499,11 +532,10 @@ void MainWindow::addMotorToSelected() {
     if(id == -1){ showStatus("Select an object first", false); return; }
     Joint* joint = m_scene->jointForChild(id);
     if(!joint){ showStatus("Add a joint to this object first", false); return; }
-    Motor m;
-    m.name    = "Motor_" + joint->name;
-    m.jointId = joint->id;
-    m_scene->addMotor(m);
-    showStatus("Motor added — set velocity in Properties, then press Play");
+    if(m_scene->motorForJoint(joint->id)){ showStatus("This joint already has an actuator", false); return; }
+    int mid = m_scene->addActuatorForJoint(joint->id);
+    const Motor* m = m_scene->getMotor(mid);
+    showStatus(QString("Actuator %1 added — drive it from a sequence in the Automation panel").arg(m ? m->name : ""));
 }
 
 void MainWindow::deleteSelected() {
@@ -518,6 +550,56 @@ void MainWindow::deleteSelected() {
 
 void MainWindow::onSimStateChanged(bool running) {
     showStatus(running ? "Simulation running  —  Space to pause" : "Simulation paused");
+}
+
+void MainWindow::onSimActiveChanged(bool active) {
+    m_properties->setSimulationActive(active);
+    updateUndoActions();
+    if (!active) {
+        m_viewport->setSimulationOverlay({}, {});
+        showStatus("Reset — scene restored, definitions editable");
+    }
+}
+
+void MainWindow::onSimStartFailed(const QStringList& errors) {
+    m_automationDock->show();
+    m_automationDock->raise();
+    QString list = errors.mid(0, 12).join("\n• ");
+    if (errors.size() > 12) list += QString("\n… and %1 more").arg(errors.size() - 12);
+    QMessageBox::warning(this, "Cannot Start Simulation",
+        "The automation definitions have problems:\n\n• " + list +
+        "\n\nFix them in the Automation panel (fields with errors are outlined in red).");
+    showStatus(QString("Cannot start — %1 problem%2 in the automation logic")
+                   .arg(errors.size()).arg(errors.size() == 1 ? "" : "s"), false);
+}
+
+void MainWindow::updateSimulationOverlay() {
+    AutomationEngine* ae = m_sim->automation();
+    if (!ae->isActive()) { m_viewport->setSimulationOverlay({}, {}); return; }
+
+    // Tint each moving actuator's driven link plus everything rigidly attached
+    // to it (descendants reached without crossing another joint).
+    QSet<int> moving;
+    std::function<void(int)> addRigid = [&](int oid) {
+        moving.insert(oid);
+        if (const SceneObject* o = m_scene->getObject(oid))
+            for (int c : o->childIds)
+                if (!m_scene->jointForChild(c)) addRigid(c);
+    };
+    for (int mid : ae->movingMotors()) {
+        const Motor* m = m_scene->getMotor(mid);
+        const Joint* j = m ? m_scene->getJoint(m->jointId) : nullptr;
+        if (j) addRigid(j->childBodyId);
+    }
+    m_viewport->setSimulationOverlay(moving, ae->activeOperationLabels());
+}
+
+void MainWindow::updateUndoActions() {
+    // Undo/redo rebuild the scene from a snapshot, which would pull the rug
+    // out from under a running simulation — only allow them while stopped.
+    bool idle = !m_sim->isActive();
+    m_undoAction->setEnabled(idle && m_undo->canUndo());
+    m_redoAction->setEnabled(idle && m_undo->canRedo());
 }
 
 void MainWindow::onTimeUpdated(double seconds) {

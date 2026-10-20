@@ -57,9 +57,20 @@ set(SOURCES
     src/scene/SceneGraph.cpp
     src/scene/UndoManager.cpp
     src/physics/SimulationEngine.cpp
+    src/automation/Expression.cpp
+    src/automation/AutomationEngine.cpp
     src/ui/HierarchyPanel.cpp
     src/ui/PropertiesPanel.cpp
     src/ui/TemplateDialog.cpp
+    src/ui/automation/AutomationCommon.cpp
+    src/ui/automation/AutomationPanel.cpp
+    src/ui/automation/ExpressionEdit.cpp
+    src/ui/automation/SignalsPage.cpp
+    src/ui/automation/ActuatorsPage.cpp
+    src/ui/automation/SequencesPage.cpp
+    src/ui/automation/RuntimePage.cpp
+    src/ui/automation/GanttView.cpp
+    src/ui/automation/SignalTracePlot.cpp
     src/serialization/ProjectSerializer.cpp
     src/import/StepImporter.cpp
     resources.qrc

@@ -17,5 +17,10 @@ int main(int argc, char* argv[]) {
     MainWindow window;
     window.show();
 
+    // Optional: project file to open on startup
+    const QStringList args = app.arguments();
+    if (args.size() > 1 && !args.at(1).startsWith('-'))
+        window.openFile(args.at(1));
+
     return app.exec();
 }
