@@ -5,61 +5,38 @@
 #include <QMenu>
 #include <QInputDialog>
 #include <QMessageBox>
-#include <QPainter>
-#include <QPixmap>
 #include <QShortcut>
+#include "Theme.h"
+#include "PrimitiveIcons.h"
 
-// Small filled-circle icon marking objects that carry a RigidBody, drawn once
-// and reused for every tree item (see applyRigidBodyIcon).
-static QIcon makeRigidBodyIcon() {
-    QPixmap pm(14, 14);
-    pm.fill(Qt::transparent);
-    QPainter p(&pm);
-    p.setRenderHint(QPainter::Antialiasing);
-    p.setPen(QPen(QColor("#c07000"), 1.0));
-    p.setBrush(QColor("#e8963c"));
-    p.drawEllipse(QRectF(1.5, 1.5, 11, 11));
-    p.end();
-    return QIcon(pm);
+static const char* typeName(const SceneObject& obj) {
+    switch(obj.type){
+        case PrimitiveType::Cube:         return "Cube";
+        case PrimitiveType::Cylinder:     return "Cylinder";
+        case PrimitiveType::Sphere:       return "Sphere";
+        case PrimitiveType::Capsule:      return "Capsule";
+        case PrimitiveType::Basket:       return "Basket";
+        case PrimitiveType::ImportedMesh: return obj.mesh ? "Imported part" : "Assembly";
+    }
+    return "";
 }
 
 HierarchyPanel::HierarchyPanel(SceneGraph* scene, QWidget* parent)
     : QWidget(parent), m_scene(scene)
 {
-    m_rigidBodyIcon = makeRigidBodyIcon();
-
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
 
-    auto* header = new QLabel("  Hierarchy", this);
-    header->setFixedHeight(28);
-    header->setStyleSheet("background:#e8ecf2; color:#333333; font-size:11px; font-weight:bold; border-bottom:1px solid #d0d0d0;");
-    layout->addWidget(header);
-
-    auto* card = new QWidget(this);
-    card->setStyleSheet("QWidget#hierarchyCard { background:#ffffff; border:1px solid #d4dae8; border-radius:5px; }");
-    card->setObjectName("hierarchyCard");
-    auto* cardLayout = new QVBoxLayout(card);
-    cardLayout->setContentsMargins(6, 6, 6, 6);
-    cardLayout->setSpacing(0);
-    layout->addWidget(card, 1);
-
-    m_tree = new QTreeWidget(card);
+    m_tree = new QTreeWidget(this);
+    m_tree->setObjectName("hierarchyTree");
     m_tree->setHeaderHidden(true);
     m_tree->setIndentation(16);
-    m_tree->setIconSize(QSize(12, 12));
+    m_tree->setIconSize(QSize(16, 16));
     m_tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    m_tree->setStyleSheet(
-        "QTreeWidget { background:#ffffff; color:#222222; border:none; font-size:12px; outline:0; }"
-        "QTreeWidget::item { padding:4px 3px; border-radius:4px; border-bottom:1px solid #f0f2f7; }"
-        "QTreeWidget::item:selected { background:#cce0ff; color:#111111; border-bottom:1px solid #cce0ff; }"
-        "QTreeWidget::item:hover:!selected { background:#eef4ff; }"
-        "QTreeView::branch { background:transparent; }"
-    );
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     m_tree->setCursor(Qt::PointingHandCursor);
-    cardLayout->addWidget(m_tree);
+    layout->addWidget(m_tree, 1);
 
     connect(m_tree, &QTreeWidget::itemSelectionChanged,
             this, &HierarchyPanel::onTreeSelectionChanged);
@@ -88,18 +65,8 @@ void HierarchyPanel::addItem(int objectId, QTreeWidgetItem* parentItem) {
     const SceneObject* obj = m_scene->getObject(objectId);
     if(!obj) return;
 
-    QString icon;
-    switch(obj->type){
-        case PrimitiveType::Cube:     icon = "[C]"; break;
-        case PrimitiveType::Cylinder: icon = "[Y]"; break;
-        case PrimitiveType::Sphere:   icon = "[S]"; break;
-        case PrimitiveType::Capsule:  icon = "[K]"; break;
-        case PrimitiveType::Basket:   icon = "[B]"; break;
-        // Imported CAD: [A] assembly node (no geometry), [P] part with mesh
-        case PrimitiveType::ImportedMesh: icon = obj->mesh ? "[P]" : "[A]"; break;
-    }
     auto* item = new QTreeWidgetItem();
-    item->setText(0, icon + " " + obj->name);
+    item->setText(0, obj->name);
     item->setData(0, Qt::UserRole, objectId);
 
     if(parentItem)
@@ -115,8 +82,15 @@ void HierarchyPanel::addItem(int objectId, QTreeWidgetItem* parentItem) {
         addItem(childId, item);
 }
 
+// The item's icon shows the primitive type; objects that carry a RigidBody are
+// drawn in the physics colour.
 void HierarchyPanel::applyRigidBodyIcon(QTreeWidgetItem* item, int objectId) {
-    item->setIcon(0, m_scene->getRigidBody(objectId) ? m_rigidBodyIcon : QIcon());
+    const SceneObject* obj = m_scene->getObject(objectId);
+    if(!obj) return;
+    const bool rigid = m_scene->getRigidBody(objectId) != nullptr;
+    item->setIcon(0, Theme::icon(primitiveIconName(obj->type, obj->mesh != nullptr),
+                                 rigid ? Theme::Tint::Physics : Theme::Tint::Muted));
+    item->setToolTip(0, QString(typeName(*obj)) + (rigid ? "  ·  Rigid body" : ""));
 }
 
 void HierarchyPanel::onRigidBodyChanged(int objectId) {
@@ -200,11 +174,11 @@ void HierarchyPanel::showContextMenu(const QPoint& pos) {
         menu.addAction("(select an object to act on it)");
     } else if(selected.size() == 1){
         QTreeWidgetItem* only = selected.first();
-        menu.addAction("Rename", [this, only](){
+        menu.addAction(Theme::icon("pencil"), "Rename", [this, only](){
             onItemDoubleClicked(only, 0);
         });
         menu.addSeparator();
-        menu.addAction("Delete", [this, selected](){
+        menu.addAction(Theme::icon("trash-2", Theme::Tint::Danger), "Delete", [this, selected](){
             deleteSelectedItems(selected);
         });
     } else if(selected.size() == 2){
@@ -222,19 +196,19 @@ void HierarchyPanel::showContextMenu(const QPoint& pos) {
             setRelation(/*child=*/idA, /*parent=*/idB);
         });
         menu.addSeparator();
-        menu.addAction("No relation \xE2\x80\x94 just combine", [this, selected](){
+        menu.addAction(Theme::icon("weight"), "No relation \xE2\x80\x94 just combine", [this, selected](){
             combineSelectedIntoRigidBody(selected);
         });
         menu.addSeparator();
-        menu.addAction("Delete Selected (2)", [this, selected](){
+        menu.addAction(Theme::icon("trash-2", Theme::Tint::Danger), "Delete Selected (2)", [this, selected](){
             deleteSelectedItems(selected);
         });
     } else {
-        menu.addAction(QString("Combine into Rigid Body (%1)").arg(selected.size()), [this, selected](){
+        menu.addAction(Theme::icon("weight"), QString("Combine into Rigid Body (%1)").arg(selected.size()), [this, selected](){
             combineSelectedIntoRigidBody(selected);
         });
         menu.addSeparator();
-        menu.addAction(QString("Delete Selected (%1)").arg(selected.size()), [this, selected](){
+        menu.addAction(Theme::icon("trash-2", Theme::Tint::Danger), QString("Delete Selected (%1)").arg(selected.size()), [this, selected](){
             deleteSelectedItems(selected);
         });
     }

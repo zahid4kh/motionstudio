@@ -1,4 +1,5 @@
 #include "GanttView.h"
+#include "ui/Theme.h"
 #include <QMouseEvent>
 #include <QPainter>
 #include <algorithm>
@@ -38,15 +39,16 @@ static double niceStep(double range, int targetTicks) {
 }
 
 void GanttView::paintEvent(QPaintEvent*) {
+    const Theme::Colors& c = Theme::colors();
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
-    p.fillRect(rect(), QColor("#ffffff"));
+    p.fillRect(rect(), c.island);
     QFont small = font();
     small.setPointSizeF(std::max(7.0, small.pointSizeF() - 1));
     p.setFont(small);
 
     if (m_bars.empty()) {
-        p.setPen(QColor("#99a"));
+        p.setPen(c.muted);
         p.drawText(rect(), Qt::AlignCenter, "No operations");
         return;
     }
@@ -64,12 +66,11 @@ void GanttView::paintEvent(QPaintEvent*) {
 
     // Time grid
     double step = niceStep(tMax, std::max(2, (x1 - x0) / 70));
-    p.setPen(QColor("#e4e8f0"));
     for (double t = 0; t <= tMax + 1e-9; t += step) {
         int x = int(X(t));
-        p.setPen(QColor("#e4e8f0"));
+        p.setPen(c.border);
         p.drawLine(x, kHeader - 2, x, height());
-        p.setPen(QColor("#889"));
+        p.setPen(c.muted);
         p.drawText(QRect(x - 30, 0, 60, kHeader - 2), Qt::AlignCenter, QString("%1 s").arg(t, 0, 'g', 4));
     }
 
@@ -77,10 +78,10 @@ void GanttView::paintEvent(QPaintEvent*) {
     for (int i = 0; i < int(m_bars.size()); ++i) {
         const Bar& b = m_bars[size_t(i)];
         int y = kHeader + i * kRowH;
-        if (i == m_selected) p.fillRect(0, y, width(), kRowH, QColor("#e6f0fc"));
-        else if (i % 2) p.fillRect(0, y, width(), kRowH, QColor("#f8f9fc"));
+        if (i == m_selected) p.fillRect(0, y, width(), kRowH, c.selection);
+        else if (i % 2) p.fillRect(0, y, width(), kRowH, c.island.lighter(c.dark ? 118 : 104));
 
-        p.setPen(QColor("#334"));
+        p.setPen(c.text);
         p.drawText(QRect(6, y, kLabelW - 10, kRowH), Qt::AlignVCenter | Qt::AlignLeft,
                    p.fontMetrics().elidedText(b.label, Qt::ElideRight, kLabelW - 10));
 
@@ -88,26 +89,26 @@ void GanttView::paintEvent(QPaintEvent*) {
         anyTiming = true;
         double end = b.end >= 0 ? b.end : (m_live ? m_now : b.start);
         QRectF r(X(b.start), y + 4, std::max(3.0, X(end) - X(b.start)), kRowH - 8);
-        QColor fill = b.state == 2 ? QColor("#58b368") : (b.state == 1 ? QColor("#3d8fe0") : QColor("#c0c8d8"));
+        QColor fill = b.state == 2 ? c.success : (b.state == 1 ? c.info : c.handle);
         if (b.fromPreviousCycle) fill.setAlpha(110);
         p.setPen(Qt::NoPen);
         p.setBrush(fill);
-        p.drawRoundedRect(r, 3, 3);
+        p.drawRoundedRect(r, 4, 4);
         if (b.state == 1 && b.progress > 0 && b.progress < 1) {
             p.setBrush(QColor(255, 255, 255, 90));
             QRectF pr = r;
             pr.setWidth(r.width() * b.progress);
-            p.drawRoundedRect(pr, 3, 3);
+            p.drawRoundedRect(pr, 4, 4);
         }
     }
 
     if (m_live) {
-        p.setPen(QPen(QColor("#d04040"), 1.2));
+        p.setPen(QPen(c.danger, 1.2));
         int x = int(X(m_now));
         p.drawLine(x, kHeader - 2, x, kHeader + int(m_bars.size()) * kRowH);
     }
     if (!anyTiming) {
-        p.setPen(QColor("#99a"));
+        p.setPen(c.muted);
         p.drawText(QRect(x0, kHeader, x1 - x0, int(m_bars.size()) * kRowH), Qt::AlignCenter,
                    "Press Play to see operation timing");
     }

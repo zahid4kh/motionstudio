@@ -62,6 +62,8 @@ set(SOURCES
     src/ui/HierarchyPanel.cpp
     src/ui/PropertiesPanel.cpp
     src/ui/TemplateDialog.cpp
+    src/ui/Theme.cpp
+    src/ui/Island.cpp
     src/ui/automation/AutomationCommon.cpp
     src/ui/automation/AutomationPanel.cpp
     src/ui/automation/ExpressionEdit.cpp

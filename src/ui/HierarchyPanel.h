@@ -35,5 +35,4 @@ private:
     SceneGraph*               m_scene;
     QMap<int, QTreeWidgetItem*> m_items;
     bool                       m_ignoreSelection = false;
-    QIcon                      m_rigidBodyIcon;
 };

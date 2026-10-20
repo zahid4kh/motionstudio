@@ -1,5 +1,6 @@
 #include "ExpressionEdit.h"
 #include "automation/Expression.h"
+#include "ui/Theme.h"
 #include <QAbstractItemView>
 #include <QCompleter>
 #include <QKeyEvent>
@@ -7,7 +8,6 @@
 #include <QStringListModel>
 
 ExpressionEdit::ExpressionEdit(QWidget* parent) : QLineEdit(parent) {
-    setFont(QFont("monospace", font().pointSize()));
     setClearButtonEnabled(false);
 
     m_model = new QStringListModel(this);
@@ -41,12 +41,16 @@ void ExpressionEdit::setExpression(const QString& t) {
 
 void ExpressionEdit::revalidate() {
     m_error = m_validator ? m_validator(text()) : QString();
+    // Styled by the theme through the "error" property (ExpressionEdit[error="true"])
+    const bool hadError = property("error").toBool();
     if (m_error.isEmpty()) {
-        setStyleSheet("");
         setToolTip(m_baseTip);
     } else {
-        setStyleSheet("ExpressionEdit { border:1px solid #d03030; background:#fff3f3; }");
         setToolTip((m_baseTip.isEmpty() ? QString() : m_baseTip + "\n\n") + "⚠ " + m_error);
+    }
+    if (hadError != !m_error.isEmpty()) {
+        setProperty("error", !m_error.isEmpty());
+        Theme::repolish(this);
     }
 }
 

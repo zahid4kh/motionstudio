@@ -4,9 +4,11 @@
 #include "SequencesPage.h"
 #include "SignalsPage.h"
 #include "physics/SimulationEngine.h"
+#include "ui/Theme.h"
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMenu>
+#include <QTabBar>
 #include <QTabWidget>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -14,34 +16,44 @@
 AutomationPanel::AutomationPanel(SceneGraph* scene, SimulationEngine* sim, QWidget* parent)
     : QWidget(parent), m_scene(scene), m_sim(sim)
 {
-    setStyleSheet(autoui::kPageStyle);
     auto* vb = new QVBoxLayout(this);
     vb->setContentsMargins(0, 0, 0, 0);
     vb->setSpacing(0);
 
     m_tabs = new QTabWidget;
     m_tabs->setDocumentMode(true);
+    m_tabs->tabBar()->setDrawBase(false);
     m_signals   = new SignalsPage(scene, sim);
     m_actuators = new ActuatorsPage(scene, sim);
     m_sequences = new SequencesPage(scene, sim);
     m_runtime   = new RuntimePage(scene, sim);
-    m_tabs->addTab(m_signals,   "Signals");
-    m_tabs->addTab(m_actuators, "Actuators && Poses");
-    m_tabs->addTab(m_sequences, "Sequences");
-    m_tabs->addTab(m_runtime,   "Runtime");
+    m_tabs->addTab(m_signals,   Theme::icon("toggle-right"), "Signals");
+    m_tabs->addTab(m_actuators, Theme::icon("cog"),          "Actuators && Poses");
+    m_tabs->addTab(m_sequences, Theme::icon("list-ordered"), "Sequences");
+    m_tabs->addTab(m_runtime,   Theme::icon("activity"),     "Runtime");
+    m_tabs->setIconSize(QSize(15, 15));
 
     // Corner: lock indicator + problems button
     auto* corner = new QWidget;
     auto* ch = new QHBoxLayout(corner);
-    ch->setContentsMargins(0, 2, 6, 2);
-    ch->setSpacing(8);
+    ch->setContentsMargins(0, 2, 8, 2);
+    ch->setSpacing(6);
+    auto* lockIcon = new QLabel;
+    Theme::setLabelIcon(lockIcon, "lock", 13, Theme::Tint::Warning);
     m_lockLabel = new QLabel("Definitions locked while simulating — Reset to edit");
-    m_lockLabel->setStyleSheet("color:#a06010; font-size:10px;");
+    m_lockLabel->setObjectName("warningText");
     m_lockLabel->hide();
+    lockIcon->hide();
+    m_lockIcon = lockIcon;
     m_problems = new QToolButton;
+    m_problems->setObjectName("problems");
     m_problems->setPopupMode(QToolButton::InstantPopup);
     m_problems->setAutoRaise(true);
+    m_problems->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    m_problems->setIconSize(QSize(14, 14));
+    ch->addWidget(lockIcon);
     ch->addWidget(m_lockLabel);
+    ch->addSpacing(6);
     ch->addWidget(m_problems);
     m_tabs->setCornerWidget(corner, Qt::TopRightCorner);
     vb->addWidget(m_tabs);
@@ -80,6 +92,7 @@ AutomationPanel::AutomationPanel(SceneGraph* scene, SimulationEngine* sim, QWidg
 
 void AutomationPanel::setLocked(bool locked) {
     m_lockLabel->setVisible(locked);
+    m_lockIcon->setVisible(locked);
     for (autoui::Page* p : std::initializer_list<autoui::Page*>{m_signals, m_actuators, m_sequences, m_runtime})
         p->setLocked(locked);
 }
@@ -88,14 +101,17 @@ void AutomationPanel::revalidate() {
     m_problemList = AutomationEngine::validateAll(*m_scene);
     auto* menu = new QMenu(m_problems);
     if (m_problemList.isEmpty()) {
-        m_problems->setText("✓ No problems");
-        m_problems->setStyleSheet("QToolButton { color:#1a7a30; font-size:10px; border:none; }");
+        m_problems->setText("No problems");
+        m_problems->setIcon(Theme::icon("circle-check", Theme::Tint::Success));
+        m_problems->setProperty("tone", "ok");
         menu->addAction("All expressions and references are valid")->setEnabled(false);
     } else {
-        m_problems->setText(QString("⚠ %1 problem%2").arg(m_problemList.size()).arg(m_problemList.size() == 1 ? "" : "s"));
-        m_problems->setStyleSheet("QToolButton { color:#b01020; font-size:10px; font-weight:bold; border:none; }");
+        m_problems->setText(QString("%1 problem%2").arg(m_problemList.size()).arg(m_problemList.size() == 1 ? "" : "s"));
+        m_problems->setIcon(Theme::icon("triangle-alert", Theme::Tint::Danger));
+        m_problems->setProperty("tone", "bad");
         for (const QString& p : m_problemList) menu->addAction(p)->setEnabled(false);
     }
+    Theme::repolish(m_problems);
     if (QMenu* old = m_problems->menu()) old->deleteLater();
     m_problems->setMenu(menu);
 }

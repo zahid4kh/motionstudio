@@ -4,30 +4,8 @@
 #include <QFormLayout>
 #include <QScrollArea>
 #include <QInputDialog>
-
-// ── Style ─────────────────────────────────────────────────────────────────────
-
-static const char* kPanelStyle =
-    "QWidget        { background:#ffffff; }"
-    "QGroupBox      { color:#2255aa; border:1px solid #d4dae8; border-radius:5px; "
-    "                 margin-top:10px; font-size:11px; font-weight:bold; background:#ffffff; }"
-    "QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }"
-    "QLabel         { color:#333; font-size:11px; background:transparent; }"
-    "QDoubleSpinBox { background:#f5f7fc; color:#111; border:1px solid #c0c8da; "
-    "                 border-radius:4px; padding:3px 5px; min-height:24px; font-size:11px; }"
-    "QDoubleSpinBox:focus { border:1px solid #4480cc; background:#eef4ff; }"
-    "QDoubleSpinBox:hover { border:1px solid #88aadd; }"
-    "QComboBox      { background:#f5f7fc; color:#111; border:1px solid #c0c8da; "
-    "                 border-radius:4px; padding:3px 5px; min-height:24px; font-size:11px; }"
-    "QComboBox:focus { border:1px solid #4480cc; }"
-    "QCheckBox      { color:#333; font-size:11px; }"
-    "QPushButton    { background:#f0f4fc; color:#333; border:1px solid #b8c4da; "
-    "                 border-radius:4px; padding:5px 12px; font-size:11px; }"
-    "QPushButton:hover   { background:#dce8f8; border-color:#7aaae0; color:#1040a0; }"
-    "QPushButton:pressed { background:#c8d8f0; }"
-    "QPushButton[danger='true'] { background:#fff0f0; color:#aa2020; border-color:#ddb0b0; }"
-    "QPushButton[danger='true']:hover { background:#ffe0e0; border-color:#cc6060; }"
-    "QScrollArea    { border:none; background:#ffffff; }";
+#include "Theme.h"
+#include "PrimitiveIcons.h"
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -37,7 +15,9 @@ QDoubleSpinBox* PropertiesPanel::makeSpin(float mn, float mx, float step, const 
     s->setSingleStep(step);
     s->setDecimals(3);
     s->setAccelerated(true);
-    s->setFixedWidth(92);
+    // Shares the row in XYZ rows; labelRow() gives single fields a fixed width
+    s->setMinimumWidth(72);
+    s->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     if (!suffix.isEmpty()) s->setSuffix(suffix);
     return s;
 }
@@ -48,6 +28,16 @@ QDoubleSpinBox* PropertiesPanel::makeLengthSpin(float mn, float mx, float step, 
     auto* s = makeSpin(mn, mx, step, baseSuffix);
     m_lengthFields.push_back({s, mn, mx, step, baseSuffix});
     return s;
+}
+
+static QPushButton* iconButton(const QString& icon, const QString& text) {
+    return new QPushButton(Theme::icon(icon), text);
+}
+
+static QPushButton* dangerButton(const QString& text) {
+    auto* b = new QPushButton(Theme::icon("trash-2", Theme::Tint::Danger), text);
+    b->setProperty("danger", true);
+    return b;
 }
 
 // Only " m" and " m/s" suffixes appear on length fields today.
@@ -65,22 +55,24 @@ static QHBoxLayout* xyzRow(const QString& label,
     auto* row = new QHBoxLayout;
     row->setSpacing(3);
     row->setContentsMargins(0, 0, 0, 0);
-    auto chip = [&](const QString& t, QColor c) {
+    auto chip = [&](const QString& t) {
         auto* l = new QLabel(t);
+        l->setObjectName("axis" + t);
         l->setAlignment(Qt::AlignCenter);
-        l->setFixedWidth(14);
-        l->setStyleSheet(QString("color:%1; font-weight:bold; font-size:10px; background:transparent;").arg(c.name()));
+        l->setFixedWidth(12);
         return l;
     };
+    // Compact fields: no step arrows (wheel, arrow keys and typing still work)
+    for (QDoubleSpinBox* s : {x, y, z}) s->setButtonSymbols(QAbstractSpinBox::NoButtons);
     if (!label.isEmpty()) {
         auto* ll = new QLabel(label);
         ll->setFixedWidth(66);
-        ll->setStyleSheet("color:#555; font-size:11px; background:transparent;");
+        ll->setObjectName("fieldLabel");
         row->addWidget(ll);
     }
-    row->addWidget(chip("X", {200, 60, 60}));  row->addWidget(x);
-    row->addWidget(chip("Y", {40, 160, 60}));  row->addWidget(y);
-    row->addWidget(chip("Z", {40, 80, 220}));  row->addWidget(z);
+    row->addWidget(chip("X"));  row->addWidget(x);
+    row->addWidget(chip("Y"));  row->addWidget(y);
+    row->addWidget(chip("Z"));  row->addWidget(z);
     return row;
 }
 
@@ -89,8 +81,9 @@ static void labelRow(QVBoxLayout* vb, const QString& lbl, QWidget* w, int labelW
     auto* row = new QHBoxLayout;
     auto* l = new QLabel(lbl);
     l->setFixedWidth(labelWidth);
-    l->setStyleSheet("color:#555; font-size:11px; background:transparent;");
+    l->setObjectName("fieldLabel");
     row->addWidget(l);
+    if (qobject_cast<QAbstractSpinBox*>(w)) w->setFixedWidth(130);
     row->addWidget(w);
     row->addStretch();
     vb->addLayout(row);
@@ -101,42 +94,29 @@ static void labelRow(QVBoxLayout* vb, const QString& lbl, QWidget* w, int labelW
 PropertiesPanel::PropertiesPanel(SceneGraph* scene, QWidget* parent)
     : QWidget(parent), m_scene(scene)
 {
-    setStyleSheet(kPanelStyle);
     setMinimumWidth(260);
 
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 0, 0, 0);
     outer->setSpacing(0);
 
-    auto* hdrRow = new QWidget(this);
-    hdrRow->setFixedHeight(28);
-    hdrRow->setStyleSheet("background:#e8ecf2; border-bottom:1px solid #d0d0d0;");
-    auto* hdrLayout = new QHBoxLayout(hdrRow);
-    hdrLayout->setContentsMargins(6, 0, 6, 0);
-
-    auto* hdr = new QLabel("Properties", hdrRow);
-    hdr->setStyleSheet("color:#333; font-size:11px; font-weight:bold; background:transparent; border:none;");
-    hdrLayout->addWidget(hdr);
-    hdrLayout->addStretch();
-
-    m_unitCombo = new QComboBox(hdrRow);
+    // Shown in the dock's header (see unitCombo())
+    m_unitCombo = new QComboBox(this);
     m_unitCombo->addItems({"m", "mm"});
     m_unitCombo->setToolTip("Length display unit (values are still stored in metres)");
-    m_unitCombo->setFixedWidth(56);
-    hdrLayout->addWidget(m_unitCombo);
+    m_unitCombo->setFixedWidth(78);
     connect(m_unitCombo, &QComboBox::currentIndexChanged, this, &PropertiesPanel::onUnitChanged);
-
-    outer->addWidget(hdrRow);
 
     auto* scroll = new QScrollArea(this);
     scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     outer->addWidget(scroll);
 
     auto* inner = new QWidget;
-    inner->setStyleSheet("background:#ffffff;");
     auto* vbox = new QVBoxLayout(inner);
-    vbox->setContentsMargins(10, 6, 10, 10);
-    vbox->setSpacing(6);
+    vbox->setContentsMargins(8, 2, 8, 8);
+    vbox->setSpacing(4);
 
     buildNameSection();
     buildPointSection();
@@ -206,16 +186,24 @@ PropertiesPanel::PropertiesPanel(SceneGraph* scene, QWidget* parent)
 
 void PropertiesPanel::buildNameSection() {
     auto* card = new QWidget;
-    card->setStyleSheet("QWidget { background:#f0f4fc; border:1px solid #d4dae8; border-radius:5px; }");
-    auto* vb = new QVBoxLayout(card);
-    vb->setContentsMargins(10, 6, 10, 6);
+    card->setObjectName("card");
+    card->setAttribute(Qt::WA_StyledBackground);
+    auto* hb = new QHBoxLayout(card);
+    hb->setContentsMargins(12, 10, 12, 10);
+    hb->setSpacing(10);
+    m_typeIcon = new QLabel;
+    m_typeIcon->setFixedSize(26, 26);
+    m_typeIcon->setAlignment(Qt::AlignCenter);
+    hb->addWidget(m_typeIcon);
+    auto* vb = new QVBoxLayout;
     vb->setSpacing(1);
     m_nameLabel = new QLabel("—");
-    m_nameLabel->setStyleSheet("font-size:13px; font-weight:bold; color:#1a3a7a; background:transparent;");
+    m_nameLabel->setObjectName("nameTitle");
     m_typeLabel = new QLabel;
-    m_typeLabel->setStyleSheet("font-size:10px; color:#667799; background:transparent;");
+    m_typeLabel->setObjectName("hint");
     vb->addWidget(m_nameLabel);
     vb->addWidget(m_typeLabel);
+    hb->addLayout(vb, 1);
 }
 
 void PropertiesPanel::buildPointSection() {
@@ -224,12 +212,12 @@ void PropertiesPanel::buildPointSection() {
     vb->setSpacing(3);
 
     m_pointNameLabel = new QLabel("—");
-    m_pointNameLabel->setStyleSheet("font-size:12px; font-weight:bold; color:#1a3a7a; background:transparent;");
+    m_pointNameLabel->setObjectName("mono");
     vb->addWidget(m_pointNameLabel);
 
     auto mkCoord = [&](const QString& axis) -> QLabel* {
         auto* l = new QLabel(QString("%1: —").arg(axis));
-        l->setStyleSheet("font-family:monospace; font-size:11px; color:#333; background:transparent;");
+        l->setObjectName("monoHint");
         return l;
     };
     m_ptX = mkCoord("X"); m_ptY = mkCoord("Y"); m_ptZ = mkCoord("Z");
@@ -275,7 +263,7 @@ void PropertiesPanel::buildTransformSection() {
     vb->addLayout(xyzRow("Rotation",   m_rx, m_ry, m_rz));
     vb->addLayout(xyzRow("Dimensions", m_sx, m_sy, m_sz));
 
-    m_snapToFloorBtn = new QPushButton("Snap Bottom to Floor");
+    m_snapToFloorBtn = iconButton("arrow-down-to-line", "Snap Bottom to Floor");
     m_snapToFloorBtn->setToolTip("Move Y so the object's bottom face rests at Y = 0");
     vb->addWidget(m_snapToFloorBtn);
 
@@ -293,10 +281,10 @@ void PropertiesPanel::buildConnectionsSection() {
 
     auto* info = new QLabel("This object has a parent but no joint.\nAdd a joint to enable motion.");
     info->setWordWrap(true);
-    info->setStyleSheet("color:#556; font-size:10px; background:transparent;");
+    info->setObjectName("hint");
     vb->addWidget(info);
 
-    m_addJointBtn = new QPushButton("Add Joint to Parent");
+    m_addJointBtn = iconButton("rotate-3d", "Add Joint to Parent");
     m_addJointBtn->setToolTip("Create a Revolute joint connecting this object to its parent");
     vb->addWidget(m_addJointBtn);
 
@@ -313,7 +301,7 @@ void PropertiesPanel::buildJointSection() {
     {
         auto* row = new QHBoxLayout;
         auto* l = new QLabel("Type"); l->setFixedWidth(70);
-        l->setStyleSheet("color:#555; font-size:11px; background:transparent;");
+        l->setObjectName("fieldLabel");
         row->addWidget(l); row->addWidget(m_jType, 1);
         vb->addLayout(row);
     }
@@ -324,7 +312,7 @@ void PropertiesPanel::buildJointSection() {
     m_jAxisY->setValue(1);
     vb->addLayout(xyzRow("Axis", m_jAxisX, m_jAxisY, m_jAxisZ));
 
-    m_jPickAxisBtn = new QPushButton("Pick Axis in 3D…");
+    m_jPickAxisBtn = iconButton("crosshair", "Pick Axis in 3D…");
     m_jPickAxisBtn->setToolTip("Click one of the gizmo's arrows on the selected part to set this axis");
     vb->addWidget(m_jPickAxisBtn);
 
@@ -335,7 +323,7 @@ void PropertiesPanel::buildJointSection() {
 
     m_jInitLabel = new QLabel("Init angle");
     m_jInitLabel->setFixedWidth(70);
-    m_jInitLabel->setStyleSheet("color:#555; font-size:11px; background:transparent;");
+    m_jInitLabel->setObjectName("fieldLabel");
 
     m_jContinuous = new QCheckBox("Continuous (no limits)");
     m_jContinuous->setToolTip("Revolute only: allow unlimited rotation (wheels, turntables)");
@@ -344,6 +332,7 @@ void PropertiesPanel::buildJointSection() {
     labelRow(vb, "Limit max",  m_jLimitMax);
     {
         auto* row = new QHBoxLayout;
+        m_jInitAngle->setFixedWidth(130);
         row->addWidget(m_jInitLabel);
         row->addWidget(m_jInitAngle);
         row->addStretch();
@@ -369,22 +358,22 @@ void PropertiesPanel::buildJointSection() {
     m_jPosition->setToolTip("Current joint value. Jog to pose the mechanism; the simulation starts from here.");
     m_jPosLabel = new QLabel("Position");
     m_jPosLabel->setFixedWidth(70);
-    m_jPosLabel->setStyleSheet("color:#555; font-size:11px; background:transparent;");
+    m_jPosLabel->setObjectName("fieldLabel");
     {
         auto* row = new QHBoxLayout;
+        m_jPosition->setFixedWidth(130);
         row->addWidget(m_jPosLabel);
         row->addWidget(m_jPosition);
         row->addStretch();
         vb->addLayout(row);
     }
 
-    m_addMotorBtn = new QPushButton("Add Actuator to this Joint");
+    m_addMotorBtn = iconButton("cog", "Add Actuator to this Joint");
     m_addMotorBtn->setToolTip("Attach an actuator so automation logic can drive this joint");
     vb->addWidget(m_addMotorBtn);
 
     auto* btnRow = new QHBoxLayout;
-    auto* rmBtn = new QPushButton("Remove Joint");
-    rmBtn->setProperty("danger", true);
+    auto* rmBtn = dangerButton("Remove Joint");
     btnRow->addStretch(); btnRow->addWidget(rmBtn);
     vb->addLayout(btnRow);
 
@@ -418,7 +407,7 @@ void PropertiesPanel::buildMotorSection() {
     vb->setSpacing(5);
 
     m_mName = new QLabel;
-    m_mName->setStyleSheet("font-family:monospace; font-weight:bold; color:#1a3a7a; background:transparent;");
+    m_mName->setObjectName("mono");
     m_mName->setToolTip("Name used in expressions (rename it in the Automation panel)");
     labelRow(vb, "Name", m_mName);
 
@@ -442,15 +431,14 @@ void PropertiesPanel::buildMotorSection() {
 
     m_mBindings = new QLabel;
     m_mBindings->setWordWrap(true);
-    m_mBindings->setStyleSheet("font-family:monospace; font-size:10px; color:#556; background:transparent;");
+    m_mBindings->setObjectName("monoHint");
     vb->addWidget(m_mBindings);
 
-    auto* openBtn = new QPushButton("Edit Logic in Automation Panel…");
+    auto* openBtn = iconButton("workflow", "Edit Logic in Automation Panel…");
     vb->addWidget(openBtn);
 
     auto* btnRow = new QHBoxLayout;
-    auto* rmBtn = new QPushButton("Remove Actuator");
-    rmBtn->setProperty("danger", true);
+    auto* rmBtn = dangerButton("Remove Actuator");
     btnRow->addStretch(); btnRow->addWidget(rmBtn);
     vb->addLayout(btnRow);
 
@@ -470,7 +458,7 @@ void PropertiesPanel::buildPhysicsSection() {
     vb->setSpacing(5);
 
     // ── No rigid body: just an add button ──────────────────────────────────
-    m_rbAddBtn = new QPushButton("Add Rigid Body");
+    m_rbAddBtn = iconButton("weight", "Add Rigid Body");
     m_rbAddBtn->setToolTip("Make this object a physics actor (mass, gravity, collision)");
     vb->addWidget(m_rbAddBtn);
 
@@ -489,7 +477,7 @@ void PropertiesPanel::buildPhysicsSection() {
     rbvb->addWidget(m_rbGravity);
 
     // Add collision button (shown when no collision yet)
-    m_colAddBtn = new QPushButton("Add Collision Body");
+    m_colAddBtn = iconButton("square-dashed", "Add Collision Body");
     m_colAddBtn->setToolTip("Add a collision shape matching this primitive's dimensions");
     rbvb->addWidget(m_colAddBtn);
 
@@ -499,10 +487,8 @@ void PropertiesPanel::buildPhysicsSection() {
     colvb->setContentsMargins(0, 0, 0, 0);
     colvb->setSpacing(4);
 
-    auto* colHdr = new QLabel("— Collision Body —");
-    colHdr->setAlignment(Qt::AlignCenter);
-    colHdr->setStyleSheet("color:#2255aa; font-size:10px; font-weight:bold; "
-                          "padding:2px 0; background:transparent;");
+    auto* colHdr = new QLabel("COLLISION BODY");
+    colHdr->setObjectName("subheading");
     colvb->addWidget(colHdr);
 
     m_colType = new QComboBox;
@@ -550,8 +536,7 @@ void PropertiesPanel::buildPhysicsSection() {
     m_cOffZ = makeLengthSpin(-1e4f, 1e4f, 0.01f);
     colvb->addLayout(xyzRow("Offset", m_cOffX, m_cOffY, m_cOffZ));
 
-    m_colRemBtn = new QPushButton("Remove Collision Body");
-    m_colRemBtn->setProperty("danger", true);
+    m_colRemBtn = dangerButton("Remove Collision Body");
     colvb->addWidget(m_colRemBtn);
 
     rbvb->addWidget(m_colWidget);
@@ -559,8 +544,7 @@ void PropertiesPanel::buildPhysicsSection() {
     // Remove rigid body (always at bottom of rb section)
     {
         auto* row = new QHBoxLayout;
-        m_rbRemBtn = new QPushButton("Remove Rigid Body");
-        m_rbRemBtn->setProperty("danger", true);
+        m_rbRemBtn = dangerButton("Remove Rigid Body");
         row->addStretch();
         row->addWidget(m_rbRemBtn);
         rbvb->addLayout(row);
@@ -585,7 +569,7 @@ void PropertiesPanel::buildConveyorSection() {
     auto* vb = new QVBoxLayout(m_conveyorGroup);
     vb->setSpacing(5);
 
-    m_cvAddBtn = new QPushButton("Add Conveyor Belt");
+    m_cvAddBtn = iconButton("chevrons-right", "Add Conveyor Belt");
     m_cvAddBtn->setToolTip("Make this surface push objects placed on top of it");
     vb->addWidget(m_cvAddBtn);
 
@@ -603,7 +587,7 @@ void PropertiesPanel::buildConveyorSection() {
     {
         auto* row = new QHBoxLayout;
         auto* l = new QLabel("Direction"); l->setFixedWidth(70);
-        l->setStyleSheet("color:#555; font-size:11px; background:transparent;");
+        l->setObjectName("fieldLabel");
         row->addWidget(l); row->addWidget(m_cvDir, 1);
         pvb->addLayout(row);
     }
@@ -613,8 +597,7 @@ void PropertiesPanel::buildConveyorSection() {
     pvb->addWidget(m_cvEnabled);
 
     auto* btnRow = new QHBoxLayout;
-    m_cvRemBtn = new QPushButton("Remove Conveyor Belt");
-    m_cvRemBtn->setProperty("danger", true);
+    m_cvRemBtn = dangerButton("Remove Conveyor Belt");
     btnRow->addStretch(); btnRow->addWidget(m_cvRemBtn);
     pvb->addLayout(btnRow);
 
@@ -678,6 +661,10 @@ void PropertiesPanel::updatePhysicsUI(int objectId) {
     bool isBasket = obj && obj->type == PrimitiveType::Basket;
 
     RigidBody* rb = m_scene->getRigidBody(objectId);
+    // Name card icon: the primitive, tinted when it is a physics actor
+    if (obj)
+        Theme::setLabelIcon(m_typeIcon, primitiveIconName(obj->type, obj->mesh != nullptr), 22,
+                            rb ? Theme::Tint::Physics : Theme::Tint::Text);
     if (!rb) {
         m_rbAddBtn->show();
         m_rbPropsWidget->hide();
@@ -763,7 +750,7 @@ void PropertiesPanel::loadObject(int id) {
     static const char* typeNames[] = {"Cube", "Cylinder", "Sphere", "Capsule", "Basket", "Imported Mesh"};
     QString parentInfo = obj->parentId == -1 ? "Root object" :
         "Child of: " + (m_scene->getObject(obj->parentId) ? m_scene->getObject(obj->parentId)->name : "?");
-    m_typeLabel->setText(QString("%1  —  %2").arg(typeNames[int(obj->type)], parentInfo));
+    m_typeLabel->setText(QString("%1  ·  %2").arg(typeNames[int(obj->type)], parentInfo));
 
     // Transform
     const double lf = unitFactor();

@@ -1,6 +1,7 @@
 #include "SignalsPage.h"
 #include "automation/Expression.h"
 #include "physics/SimulationEngine.h"
+#include "ui/Theme.h"
 #include <QComboBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -30,10 +31,10 @@ SignalsPage::SignalsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* pare
     vb->setSpacing(4);
 
     auto* bar = new QHBoxLayout;
-    m_addInput    = new QPushButton("+ Input");
-    m_addInternal = new QPushButton("+ Internal");
-    m_addDerived  = new QPushButton("+ Derived");
-    m_delete      = new QPushButton("Delete");
+    m_addInput    = new QPushButton(Theme::icon("log-in"),   "New Input");
+    m_addInternal = new QPushButton(Theme::icon("variable"), "New Internal");
+    m_addDerived  = new QPushButton(Theme::icon("sigma"),    "New Derived");
+    m_delete      = new QPushButton(Theme::icon("trash-2", Theme::Tint::Danger), "Delete");
     m_delete->setProperty("danger", true);
     m_addInput->setToolTip("A signal you set by hand from the Runtime tab (buttons, switches, set-points)");
     m_addInternal->setToolTip("A state/flag written by operation actions (e.g. Gripper = true; Count = Count + 1)");
@@ -41,7 +42,7 @@ SignalsPage::SignalsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* pare
     for (auto* b : {m_addInput, m_addInternal, m_addDerived}) bar->addWidget(b);
     bar->addStretch();
     auto* hint = new QLabel("Double-click a cell to edit. Names are used in expressions.");
-    hint->setStyleSheet("color:#778; font-size:10px;");
+    hint->setObjectName("hint");
     bar->addWidget(hint);
     bar->addWidget(m_delete);
     vb->addLayout(bar);
@@ -145,7 +146,7 @@ void SignalsPage::refresh() {
             auto* na = new QTableWidgetItem(sg.kind == SignalKind::Input ? "set from the Runtime tab"
                                                                          : "set by operation actions");
             na->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
-            na->setForeground(QColor("#99a"));
+            na->setForeground(Theme::colors().muted);
             m_table->setItem(row, C_Expr, na);
         }
 
@@ -178,7 +179,7 @@ void SignalsPage::refreshRuntime() {
         double v = ae->value(s->name);
         it->setText(autoui::formatValue(v, false, s->type));
         if (s->type == SignalType::Bool)
-            it->setBackground(v != 0.0 ? QColor("#c8f0c8") : QColor("#f4f4f4"));
+            it->setBackground(autoui::boolBrush(v != 0.0));
     }
 }
 

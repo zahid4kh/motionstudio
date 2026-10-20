@@ -3,21 +3,7 @@
 #include <QHBoxLayout>
 #include <QDialogButtonBox>
 #include <QPushButton>
-
-static const char* kDialogStyle =
-    "QDialog { background:#f4f6fb; }"
-    "QListWidget { background:#ffffff; border:1px solid #c8cdd8; border-radius:4px; "
-    "              font-size:13px; color:#222; outline:0; }"
-    "QListWidget::item { padding:9px 12px; border-bottom:1px solid #eef0f5; }"
-    "QListWidget::item:selected { background:#ddeafc; color:#1040a0; border-color:#b8d0f0; }"
-    "QListWidget::item:hover    { background:#eef4ff; }"
-    "QLabel#desc { background:#ffffff; border:1px solid #c8cdd8; border-radius:4px; "
-    "              padding:10px 12px; font-size:12px; color:#445; min-height:60px; }"
-    "QDialogButtonBox QPushButton { padding:5px 18px; border-radius:4px; font-size:12px; "
-    "                               border:1px solid #c8cdd8; background:#f4f6fb; color:#333; }"
-    "QDialogButtonBox QPushButton:hover   { background:#ddeafc; border-color:#7aaae8; color:#1040a0; }"
-    "QDialogButtonBox QPushButton:default { background:#1a6fda; color:#fff; border-color:#1050b0; }"
-    "QDialogButtonBox QPushButton:default:hover { background:#1558b8; }";
+#include "Theme.h"
 
 const QList<TemplateDialog::TemplateInfo> TemplateDialog::s_templates = {
     {
@@ -25,59 +11,69 @@ const QList<TemplateDialog::TemplateInfo> TemplateDialog::s_templates = {
         "3-axis arm running a looping pick & place sequence built from poses,\n"
         "parallel moves, waits and signal actions. Press Play, then switch Start ON\n"
         "in the Automation panel's Runtime tab. Stop holds after the current step.",
-        ":/templates/robotic_arm.mstudio"
+        ":/templates/robotic_arm.mstudio",
+        "bot"
     },
     {
         "Indexing Table",
         "A turntable indexes 90° (target = Table.target + 90), then a press stamps\n"
         "the part and retracts. A derived Safe signal interlocks the table; a counter\n"
         "tracks parts. Press Play, then switch Start ON.",
-        ":/templates/indexing_table.mstudio"
+        ":/templates/indexing_table.mstudio",
+        "disc-3"
     },
     {
         "Simple Pendulum",
         "A looping two-operation sequence swings the bob between ±Amplitude.\n"
         "Change Amplitude live from the Runtime tab.",
-        ":/templates/simple_pendulum.mstudio"
+        ":/templates/simple_pendulum.mstudio",
+        "timer"
     },
     {
         "Solar System",
         "Continuous speed-mode actuators with expression bindings:\n"
         "speed = 20 · TimeWarp, active = !Hold. Try them in the Runtime tab.",
-        ":/templates/solar_system.mstudio"
+        ":/templates/solar_system.mstudio",
+        "orbit"
     },
     {
         "Spinning Top",
         "A disc driven in speed mode with acceleration ramps; the Fast input\n"
         "switches its bound speed between 180 and 720 °/s.",
-        ":/templates/spinning_top.mstudio"
+        ":/templates/spinning_top.mstudio",
+        "rotate-cw"
     },
     {
         "Crank Arm",
         "A crank turning at 60 °/s while the Run input is on, ramping up and down.",
-        ":/templates/crank_arm.mstudio"
+        ":/templates/crank_arm.mstudio",
+        "cog"
     },
 };
 
 TemplateDialog::TemplateDialog(QWidget* parent) : QDialog(parent) {
     setWindowTitle("Open Template");
-    setMinimumSize(500, 340);
-    setStyleSheet(kDialogStyle);
+    setMinimumSize(540, 420);
 
     auto* vb = new QVBoxLayout(this);
     vb->setSpacing(10);
-    vb->setContentsMargins(14, 14, 14, 14);
+    vb->setContentsMargins(18, 16, 18, 16);
 
-    auto* header = new QLabel("Choose a template to explore:");
-    header->setStyleSheet("font-size:13px; font-weight:bold; color:#222; background:transparent;");
+    auto* header = new QLabel("Choose a template to explore");
+    header->setObjectName("dialogTitle");
     vb->addWidget(header);
+    auto* sub = new QLabel("Each one is a working automation example — load it, then press Play.");
+    sub->setObjectName("hint");
+    vb->addWidget(sub);
 
     m_list = new QListWidget(this);
-    m_list->setMinimumHeight(160);
+    m_list->setObjectName("templateList");
+    m_list->setIconSize(QSize(18, 18));
+    m_list->setMinimumHeight(190);
     vb->addWidget(m_list);
 
     m_desc = new QLabel(this);
-    m_desc->setObjectName("desc");
+    m_desc->setObjectName("templateDesc");
     m_desc->setWordWrap(true);
     m_desc->setAlignment(Qt::AlignTop | Qt::AlignLeft);
     m_desc->setText("Select a template above to see its description.");
@@ -85,6 +81,7 @@ TemplateDialog::TemplateDialog(QWidget* parent) : QDialog(parent) {
 
     auto* btns = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     btns->button(QDialogButtonBox::Ok)->setText("Load Template");
+    btns->button(QDialogButtonBox::Ok)->setIcon(Theme::icon("layout-template", Theme::Tint::OnAccent));
     btns->button(QDialogButtonBox::Ok)->setDefault(true);
     btns->button(QDialogButtonBox::Ok)->setEnabled(false);
     vb->addWidget(btns);
@@ -103,7 +100,7 @@ TemplateDialog::TemplateDialog(QWidget* parent) : QDialog(parent) {
 
 void TemplateDialog::populate() {
     for(int i = 0; i < s_templates.size(); ++i){
-        auto* item = new QListWidgetItem(s_templates[i].name, m_list);
+        auto* item = new QListWidgetItem(Theme::icon(s_templates[i].icon), s_templates[i].name, m_list);
         item->setData(Qt::UserRole, i);
     }
 }

@@ -1,39 +1,10 @@
 #include "AutomationCommon.h"
 #include "physics/SimulationEngine.h"
+#include "ui/Theme.h"
 #include <QTimer>
 #include <cmath>
 
 namespace autoui {
-
-const char* kPageStyle =
-    "QWidget        { background:#ffffff; color:#222; font-size:11px; }"
-    "QGroupBox      { color:#2255aa; border:1px solid #d4dae8; border-radius:5px; "
-    "                 margin-top:10px; font-weight:bold; }"
-    "QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }"
-    "QLabel         { background:transparent; }"
-    "QLineEdit, QDoubleSpinBox, QSpinBox, QComboBox {"
-    "                 background:#f5f7fc; border:1px solid #c0c8da; border-radius:4px; "
-    "                 padding:2px 5px; min-height:22px; }"
-    "QLineEdit:focus, QDoubleSpinBox:focus, QComboBox:focus { border:1px solid #4480cc; background:#eef4ff; }"
-    "QLineEdit:disabled, QDoubleSpinBox:disabled, QComboBox:disabled { color:#888; background:#f2f2f2; }"
-    "QPushButton, QToolButton { background:#f0f4fc; color:#333; border:1px solid #b8c4da; "
-    "                 border-radius:4px; padding:4px 10px; }"
-    "QPushButton:hover, QToolButton:hover { background:#dce8f8; border-color:#7aaae0; color:#1040a0; }"
-    "QPushButton:pressed, QToolButton:pressed { background:#c8d8f0; }"
-    "QPushButton:checked { background:#1a6fda; color:#fff; border-color:#1050b0; }"
-    "QPushButton:disabled, QToolButton:disabled { color:#aaa; background:#f4f4f4; border-color:#ddd; }"
-    "QPushButton[danger='true'] { background:#fff0f0; color:#aa2020; border-color:#ddb0b0; }"
-    "QPushButton[danger='true']:disabled { background:#f7f4f4; color:#c8b4b4; border-color:#e6dada; }"
-    "QTableWidget, QTreeWidget, QListWidget { border:1px solid #d4dae8; gridline-color:#e6e9f0; "
-    "                 alternate-background-color:#f7f9fd; selection-background-color:#d0e4f8; "
-    "                 selection-color:#111; }"
-    "QHeaderView::section { background:#eef1f6; color:#445; border:none; border-right:1px solid #d8dce6; "
-    "                 border-bottom:1px solid #d0d0d0; padding:3px 6px; font-weight:bold; }"
-    "QTabWidget::pane { border:none; }"
-    "QTabBar::tab   { background:#e8ecf2; color:#445; padding:5px 14px; border:1px solid #d0d6e0; "
-    "                 border-bottom:none; border-top-left-radius:4px; border-top-right-radius:4px; margin-right:2px; }"
-    "QTabBar::tab:selected { background:#ffffff; color:#1a3a7a; font-weight:bold; }"
-    "QSplitter::handle { background:#e4e8ee; }";
 
 ExpressionEdit* makeExprEdit(SceneGraph* scene, ExprKind kind, const QString& placeholder, QWidget* parent) {
     auto* e = new ExpressionEdit(parent);
@@ -54,6 +25,21 @@ QString formatValue(double v, bool isBool, SignalType type) {
     return QString::number(v, 'f', dec);
 }
 
+QBrush boolBrush(bool on) {
+    const Theme::Colors& c = Theme::colors();
+    return on ? Theme::soft(c.success, 0.26) : Theme::soft(c.muted, 0.10);
+}
+
+QBrush opStateBrush(AutomationEngine::OpState state) {
+    const Theme::Colors& c = Theme::colors();
+    switch (state) {
+        case AutomationEngine::OpState::Running: return Theme::soft(c.info, 0.24);
+        case AutomationEngine::OpState::Done:    return Theme::soft(c.success, 0.22);
+        case AutomationEngine::OpState::Waiting: break;
+    }
+    return Theme::soft(c.muted, 0.10);
+}
+
 QString posUnit(const Joint* j) { return (j && j->type == JointType::Prismatic) ? " m" : "°"; }
 QString velUnit(const Joint* j) { return (j && j->type == JointType::Prismatic) ? " m/s" : "°/s"; }
 
@@ -66,6 +52,8 @@ Page::Page(SceneGraph* scene, SimulationEngine* sim, QWidget* parent)
     connect(scene, &SceneGraph::jointAdded,        this, sched);
     connect(scene, &SceneGraph::objectRemoved,     this, sched);
     connect(scene, &SceneGraph::objectChanged,     this, sched);
+    // Item backgrounds and rich text bake theme colours in: rebuild on a switch
+    connect(Theme::notifier(), &Theme::Notifier::changed, this, [this] { scheduleRefresh(); });
 }
 
 void Page::scheduleRefresh() {

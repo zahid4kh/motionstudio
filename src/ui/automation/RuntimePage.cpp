@@ -1,6 +1,7 @@
 #include "RuntimePage.h"
 #include "SignalTracePlot.h"
 #include "physics/SimulationEngine.h"
+#include "ui/Theme.h"
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QGroupBox>
@@ -29,7 +30,7 @@ RuntimePage::RuntimePage(SceneGraph* scene, SimulationEngine* sim, QWidget* pare
 
     // ── Inputs ──────────────────────────────────────────────────────────────
     auto* inBox = new QGroupBox("Inputs");
-    inBox->setMinimumWidth(230);
+    inBox->setMinimumWidth(270);
     auto* iv = new QVBoxLayout(inBox);
     iv->setContentsMargins(6, 12, 6, 6);
     auto* scroll = new QScrollArea;
@@ -50,6 +51,7 @@ RuntimePage::RuntimePage(SceneGraph* scene, SimulationEngine* sim, QWidget* pare
     m_filter = new QLineEdit;
     m_filter->setPlaceholderText("Filter…");
     m_filter->setClearButtonEnabled(true);
+    m_filter->addAction(Theme::icon("search", Theme::Tint::Muted), QLineEdit::LeadingPosition);
     wv->addWidget(m_filter);
     m_watch = new QTableWidget(0, W_Count);
     m_watch->setHorizontalHeaderLabels({"Plot", "Name", "Value"});
@@ -70,7 +72,7 @@ RuntimePage::RuntimePage(SceneGraph* scene, SimulationEngine* sim, QWidget* pare
     auto* sv = new QVBoxLayout(stBox);
     sv->setContentsMargins(6, 12, 6, 6);
     m_header = new QLabel;
-    m_header->setStyleSheet("color:#334;");
+
     sv->addWidget(m_header);
     m_status = new QTreeWidget;
     m_status->setColumnCount(2);
@@ -81,7 +83,7 @@ RuntimePage::RuntimePage(SceneGraph* scene, SimulationEngine* sim, QWidget* pare
     sv->addWidget(m_status, 1);
     m_warnings = new QLabel;
     m_warnings->setWordWrap(true);
-    m_warnings->setStyleSheet("color:#a05010; font-size:10px;");
+    m_warnings->setObjectName("warningText");
     sv->addWidget(m_warnings);
     right->addWidget(stBox);
 
@@ -92,7 +94,7 @@ RuntimePage::RuntimePage(SceneGraph* scene, SimulationEngine* sim, QWidget* pare
     m_window = new QComboBox;
     m_window->addItems({"5 s", "10 s", "20 s", "60 s"});
     m_window->setCurrentIndex(2);
-    auto* clr = new QPushButton("Clear");
+    auto* clr = new QPushButton(Theme::icon("eraser"), "Clear");
     tb->addWidget(new QLabel("Window"));
     tb->addWidget(m_window);
     tb->addStretch();
@@ -167,13 +169,13 @@ void RuntimePage::rebuildInputs() {
         h->addWidget(lbl, 1);
         const QString name = s.name;
         if (s.type == SignalType::Bool) {
-            r.toggle = new QPushButton("OFF");
+            r.toggle = new QPushButton(Theme::icon("power"), "OFF");
             r.toggle->setCheckable(true);
             r.toggle->setToolTip("Latching switch");
-            r.toggle->setFixedWidth(52);
-            r.pulse = new QPushButton("Push");
+            r.toggle->setFixedWidth(64);
+            r.pulse = new QPushButton(Theme::icon("hand"), "Push");
             r.pulse->setToolTip("Momentary button: true while held (at least one scan)");
-            r.pulse->setFixedWidth(52);
+            r.pulse->setFixedWidth(76);
             connect(r.toggle, &QPushButton::clicked, this, [this, name](bool on){
                 m_sim->automation()->setInput(name, on ? 1 : 0);
             });
@@ -201,12 +203,12 @@ void RuntimePage::rebuildInputs() {
     if (m_inputs.empty()) {
         auto* l = new QLabel("No Input signals. Add them on the Signals tab (e.g. Start, Stop, EStop).");
         l->setWordWrap(true);
-        l->setStyleSheet("color:#889;");
+        l->setObjectName("subtle");
         m_inputLayout->addWidget(l);
     } else if (!live) {
         auto* l = new QLabel("Press Play or Step to operate the inputs.");
         l->setWordWrap(true);
-        l->setStyleSheet("color:#889; font-size:10px;");
+        l->setObjectName("hint");
         m_inputLayout->addWidget(l);
     }
     m_inputLayout->addStretch();
@@ -236,7 +238,7 @@ void RuntimePage::rebuildWatch() {
         if (s.kind == AutomationEngine::SymbolKind::Signal) {
             QFont f = name->font(); f.setBold(true); name->setFont(f);
         } else {
-            name->setForeground(QColor("#556"));
+            name->setForeground(Theme::colors().muted);
         }
         m_watch->setItem(row, W_Name, name);
         auto* val = new QTableWidgetItem("—");
@@ -304,12 +306,14 @@ void RuntimePage::refreshRuntime() {
         QStringList act = ae->activeOperationLabels();
         m_header->setText(QString("<b>t = %1 s</b> &nbsp; scans: %2 &nbsp; %3")
             .arg(ae->time(), 0, 'f', 2).arg(ae->scanCount())
-            .arg(m_sim->isRunning() ? "<span style='color:#1a7a30'>● running</span>"
-                                    : "<span style='color:#a06010'>❚❚ paused</span>"));
+            .arg(m_sim->isRunning()
+                     ? QString("<span style='color:%1'>● running</span>").arg(Theme::css(Theme::colors().success))
+                     : QString("<span style='color:%1'>❚❚ paused</span>").arg(Theme::css(Theme::colors().warning))));
         const auto& w = ae->warnings();
         m_warnings->setText(w.isEmpty() ? QString() : "⚠ " + w.mid(std::max(0, int(w.size()) - 3)).join("\n⚠ "));
     } else {
-        m_header->setText("<span style='color:#889'>Simulation stopped — press Play or Step.</span>");
+        m_header->setText(QString("<span style='color:%1'>Simulation stopped — press Play or Step.</span>")
+                              .arg(Theme::css(Theme::colors().muted)));
         m_warnings->clear();
     }
 
@@ -331,7 +335,7 @@ void RuntimePage::refreshRuntime() {
         bool isBool = name->data(Qt::UserRole).toBool();
         double v = ae->value(name->text());
         val->setText(autoui::formatValue(v, isBool, SignalType(name->data(Qt::UserRole + 1).toInt())));
-        if (isBool) val->setBackground(v != 0 ? QColor("#c8f0c8") : QBrush());
+        if (isBool) val->setBackground(v != 0 ? autoui::boolBrush(true) : QBrush());
     }
 
     // Status tree
@@ -353,24 +357,20 @@ void RuntimePage::refreshRuntime() {
             auto* it = top->child(k);
             auto st = ae->opStatus(sid, it->data(0, Qt::UserRole).toInt());
             QString txt;
-            QColor bg;
             switch (st.state) {
                 case AutomationEngine::OpState::Waiting:
                     txt = "waiting" + (st.detail.isEmpty() ? QString() : " — " + st.detail);
-                    bg = QColor("#f4f4f4");
                     break;
                 case AutomationEngine::OpState::Running:
                     txt = QString("running %1%").arg(int(st.progress * 100)) +
                           (st.detail.isEmpty() ? QString() : " — " + st.detail);
-                    bg = QColor("#cfe3fa");
                     break;
                 case AutomationEngine::OpState::Done:
                     txt = QString("done in %1 s").arg(st.endTime - st.startTime, 0, 'f', 2);
-                    bg = QColor("#d4f0d4");
                     break;
             }
             it->setText(1, txt);
-            it->setBackground(1, bg);
+            it->setBackground(1, autoui::opStateBrush(st.state));
         }
     }
     m_plot->update();

@@ -1,6 +1,7 @@
 #include "ActuatorsPage.h"
 #include "automation/Expression.h"
 #include "physics/SimulationEngine.h"
+#include "ui/Theme.h"
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
@@ -55,9 +56,12 @@ ActuatorsPage::ActuatorsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     lv->setSpacing(4);
     auto* bar = new QHBoxLayout;
     m_addBtn = new QToolButton;
-    m_addBtn->setText("+ Actuator for joint…");
+    m_addBtn->setText("Actuator for joint…");
+    m_addBtn->setIcon(Theme::icon("plus"));
+    m_addBtn->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    m_addBtn->setObjectName("menuButton");
     m_addBtn->setToolTip("Attach an actuator to a joint that doesn't have one");
-    m_delBtn = new QPushButton("Delete");
+    m_delBtn = new QPushButton(Theme::icon("trash-2", Theme::Tint::Danger), "Delete");
     m_delBtn->setProperty("danger", true);
     bar->addWidget(m_addBtn);
     bar->addStretch();
@@ -152,8 +156,8 @@ ActuatorsPage::ActuatorsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     scroll->setWidget(m_jogHost);
     jv->addWidget(scroll, 1);
     auto* jb = new QHBoxLayout;
-    m_toInitBtn  = new QPushButton("All to Init");
-    m_setInitBtn = new QPushButton("Current → Init");
+    m_toInitBtn  = new QPushButton(Theme::icon("house"), "All to Init");
+    m_setInitBtn = new QPushButton(Theme::icon("pin"),   "Current → Init");
     m_toInitBtn->setToolTip("Move every joint back to its saved initial value");
     m_setInitBtn->setToolTip("Store the current joint values as each joint's initial value (saved with the project)");
     jb->addWidget(m_toInitBtn);
@@ -170,16 +174,16 @@ ActuatorsPage::ActuatorsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     m_poses->setToolTip("Double-click to rename. Use MoveToPose operations to move to a pose.");
     pv->addWidget(m_poses, 1);
     auto* pb1 = new QHBoxLayout;
-    m_poseCapture = new QPushButton("Capture");
-    m_poseUpdate  = new QPushButton("Update");
+    m_poseCapture = new QPushButton(Theme::icon("camera"),     "Capture");
+    m_poseUpdate  = new QPushButton(Theme::icon("refresh-cw"), "Update");
     m_poseCapture->setToolTip("Save the current joint values as a new pose");
     m_poseUpdate->setToolTip("Overwrite the selected pose with the current joint values");
     pb1->addWidget(m_poseCapture);
     pb1->addWidget(m_poseUpdate);
     pv->addLayout(pb1);
     auto* pb2 = new QHBoxLayout;
-    m_poseGo     = new QPushButton("Go to");
-    m_poseDelete = new QPushButton("Delete");
+    m_poseGo     = new QPushButton(Theme::icon("navigation"), "Go to");
+    m_poseDelete = new QPushButton(Theme::icon("trash-2", Theme::Tint::Danger), "Delete");
     m_poseDelete->setProperty("danger", true);
     m_poseGo->setToolTip("Jog all joints to the selected pose (edit mode)");
     pb2->addWidget(m_poseGo);
@@ -301,7 +305,7 @@ void ActuatorsPage::rebuildJog() {
     if (jids.empty()) {
         auto* l = new QLabel("No joints yet — select a part with a parent and use Add Joint.");
         l->setWordWrap(true);
-        l->setStyleSheet("color:#889;");
+        l->setObjectName("subtle");
         m_jogLayout->addWidget(l);
     }
     for (int jid : jids) {
@@ -320,7 +324,7 @@ void ActuatorsPage::rebuildJog() {
         auto* lbl = new QLabel(m ? m->name : j->name);
         lbl->setToolTip(jointLabel(*m_scene, *j) + (m ? "" : "\n(no actuator — cannot be moved by automation)"));
         lbl->setFixedWidth(90);
-        if (!m) lbl->setStyleSheet("color:#889;");
+        if (!m) lbl->setObjectName("subtle");
         auto* sl = new QSlider(Qt::Horizontal);
         sl->setRange(int(std::floor(lo * scale)), int(std::ceil(hi * scale)));
         sl->setValue(int(std::lround(j->currentValue * scale)));
@@ -330,7 +334,7 @@ void ActuatorsPage::rebuildJog() {
         sp->setSingleStep(prism ? 0.005 : 1.0);
         sp->setSuffix(autoui::posUnit(j));
         sp->setValue(j->currentValue);
-        sp->setFixedWidth(88);
+        sp->setFixedWidth(108);
         sl->setEnabled(!m_locked);
         sp->setEnabled(!m_locked);
         h->addWidget(lbl);
@@ -400,7 +404,7 @@ void ActuatorsPage::loadForm() {
     m_form->setTitle("Actuator — " + m->name);
     m_name->setText(m->name);
     m_jointLabel->setText(j ? "on " + jointLabel(*m_scene, *j) : "");
-    m_jointLabel->setStyleSheet("color:#667;");
+    m_jointLabel->setObjectName("subtle");
     m_mode->setCurrentIndex(m->mode == ActuatorMode::Speed ? 1 : 0);
     m_velLabel->setText(m->mode == ActuatorMode::Speed ? "Speed" : "Max speed");
     m_velocity->setSuffix(autoui::velUnit(j));
@@ -511,7 +515,7 @@ void ActuatorsPage::addActuatorMenu() {
     for (int jid : jids) {
         if (m_scene->motorForJoint(jid)) continue;
         const Joint* j = m_scene->getJoint(jid);
-        QAction* a = menu.addAction(jointLabel(*m_scene, *j));
+        QAction* a = menu.addAction(Theme::icon("rotate-3d"), jointLabel(*m_scene, *j));
         connect(a, &QAction::triggered, this, [this, jid]{
             const Joint* jj = m_scene->getJoint(jid);
             if (!jj) return;

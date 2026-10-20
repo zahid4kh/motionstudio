@@ -15,6 +15,7 @@
 
 class QAction;
 class QDockWidget;
+class QMenuBar;
 
 // Result of a background StepImporter::importFile() call (see importStepFile)
 struct StepImportResult {
@@ -60,7 +61,10 @@ private:
     void buildMenu();
     void buildToolbar();
     void buildDocks();
+    void buildViewMenu();
     void buildStatusBar();
+    QDockWidget* makeDock(const QString& title, const QString& icon, QWidget* content,
+                          Qt::DockWidgetArea area, QWidget* headerTools = nullptr);
     void updateTitle();
     void updateUndoActions();
 
@@ -77,7 +81,14 @@ private:
     HierarchyPanel*   m_hierarchy  = nullptr;
     PropertiesPanel*  m_properties = nullptr;
     AutomationPanel*  m_automation = nullptr;
+    QDockWidget*      m_hierarchyDock  = nullptr;
+    QDockWidget*      m_propertiesDock = nullptr;
     QDockWidget*      m_automationDock = nullptr;
+
+    // The menu bar lives in a custom menu widget (with the toolbar island),
+    // so QMainWindow::menuBar() must not be used — it would replace that widget.
+    QMenuBar*         m_menuBar   = nullptr;
+    QWidget*          m_toolHost  = nullptr;
 
     QAction* m_undoAction = nullptr;
     QAction* m_redoAction = nullptr;

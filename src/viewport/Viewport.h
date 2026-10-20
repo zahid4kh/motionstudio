@@ -74,6 +74,7 @@ private:
     void drawAxisGizmo();
     void drawAxisLabels(QPainter& p);
     void drawKeyHints  (QPainter& p);
+    void drawPill(QPainter& p, const QPointF& topLeft, const QString& text, const QColor& border = QColor());
     void drawPhysicsOverlays();
     void drawKeyPoints (QPainter& p);
     void drawAxisPickBanner(QPainter& p);

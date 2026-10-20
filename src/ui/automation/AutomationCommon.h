@@ -1,4 +1,5 @@
 #pragma once
+#include <QBrush>
 #include <QWidget>
 #include <QString>
 #include "ExpressionEdit.h"
@@ -9,8 +10,6 @@ class SimulationEngine;
 
 namespace autoui {
 
-// Shared look for the automation pages (matches PropertiesPanel's light theme)
-extern const char* kPageStyle;
 
 enum class ExprKind { Value, Assignments };
 
@@ -21,6 +20,10 @@ ExpressionEdit* makeExprEdit(SceneGraph* scene, ExprKind kind, const QString& pl
 
 // Formats a runtime value for display, using the symbol's type
 QString formatValue(double v, bool isBool, SignalType type);
+
+// Soft cell backgrounds from the theme: a boolean value, an operation's state
+QBrush boolBrush(bool on);
+QBrush opStateBrush(AutomationEngine::OpState state);
 
 // Unit suffix for a joint's position ("°" or " m") and velocity
 QString posUnit(const Joint* j);

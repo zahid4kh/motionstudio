@@ -16,6 +16,7 @@ private:
         QString name;
         QString description;
         QString path;
+        QString icon;   // Lucide icon name (Theme::icon)
     };
 
     void populate();

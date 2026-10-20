@@ -34,6 +34,7 @@ private:
     SimulationEngine* m_sim;
     QTabWidget*       m_tabs = nullptr;
     QLabel*           m_lockLabel = nullptr;
+    QLabel*           m_lockIcon  = nullptr;
     QToolButton*      m_problems = nullptr;
     SignalsPage*      m_signals = nullptr;
     ActuatorsPage*    m_actuators = nullptr;

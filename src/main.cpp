@@ -1,6 +1,8 @@
 #include <QApplication>
+#include <QIcon>
 #include <QSurfaceFormat>
 #include "MainWindow.h"
+#include "ui/Theme.h"
 
 int main(int argc, char* argv[]) {
     QSurfaceFormat fmt;
@@ -13,6 +15,8 @@ int main(int argc, char* argv[]) {
     app.setApplicationName("MotionStudio");
     app.setApplicationVersion("0.1.0");
     app.setDesktopFileName("motionstd");
+    app.setWindowIcon(QIcon(":/icon.png"));
+    Theme::apply(app);
 
     MainWindow window;
     window.show();

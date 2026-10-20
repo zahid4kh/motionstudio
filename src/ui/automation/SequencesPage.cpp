@@ -2,6 +2,7 @@
 #include "GanttView.h"
 #include "automation/Expression.h"
 #include "physics/SimulationEngine.h"
+#include "ui/Theme.h"
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFormLayout>
@@ -41,6 +42,19 @@ QString typeHelp(OperationType t) {
     return {};
 }
 
+QIcon typeIcon(OperationType t) {
+    switch (t) {
+        case OperationType::Move:       return Theme::icon("move-right");
+        case OperationType::MoveToPose: return Theme::icon("navigation");
+        case OperationType::Run:        return Theme::icon("fast-forward");
+        case OperationType::Stop:       return Theme::icon("circle-stop");
+        case OperationType::Set:        return Theme::icon("equal");
+        case OperationType::Wait:       return Theme::icon("hourglass");
+        case OperationType::WaitFor:    return Theme::icon("eye");
+    }
+    return {};
+}
+
 QString opDisplayName(const Operation& op, int index) {
     return op.name.isEmpty() ? QString("#%1").arg(index + 1) : op.name;
 }
@@ -60,9 +74,12 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     lv->setContentsMargins(0, 0, 0, 0);
     lv->setSpacing(4);
     auto* lbar = new QHBoxLayout;
-    auto* lt = new QLabel("<b>Sequences</b>");
-    m_seqAdd = new QPushButton("+");
-    m_seqDel = new QPushButton("−");
+    auto* lt = new QLabel("SEQUENCES");
+    lt->setObjectName("subheading");
+    m_seqAdd = new QPushButton(Theme::icon("plus"), "");
+    m_seqDel = new QPushButton(Theme::icon("minus", Theme::Tint::Danger), "");
+    m_seqAdd->setObjectName("iconButton");
+    m_seqDel->setObjectName("iconButton");
     m_seqAdd->setToolTip("New sequence");
     m_seqDel->setToolTip("Delete sequence");
     m_seqDel->setProperty("danger", true);
@@ -90,7 +107,7 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     m_seqLoop = new QCheckBox("Loop (start a new cycle after each one completes)");
     m_seqState = new QLabel;
     m_seqState->setWordWrap(true);
-    m_seqState->setStyleSheet("color:#556; font-size:10px;");
+    m_seqState->setObjectName("hint");
     sf->addRow("Name", m_seqName);
     sf->addRow("Enabled when", m_seqEnable);
     sf->addRow("Start when", m_seqStart);
@@ -107,20 +124,27 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     mv->setSpacing(4);
     auto* obar = new QHBoxLayout;
     m_opAdd = new QToolButton;
-    m_opAdd->setText("+ Operation ▾");
+    m_opAdd->setText("Operation");
+    m_opAdd->setIcon(Theme::icon("plus"));
+    m_opAdd->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    m_opAdd->setObjectName("menuButton");
     m_opAdd->setPopupMode(QToolButton::InstantPopup);
     auto* addMenu = new QMenu(m_opAdd);
     for (OperationType t : kTypes) {
-        QAction* a = addMenu->addAction(operationTypeName(t));
+        QAction* a = addMenu->addAction(typeIcon(t), operationTypeName(t));
         a->setToolTip(typeHelp(t));
         connect(a, &QAction::triggered, this, [this, t]{ addOperation(t); });
     }
     addMenu->setToolTipsVisible(true);
     m_opAdd->setMenu(addMenu);
-    m_opDup  = new QPushButton("Duplicate");
-    m_opUp   = new QPushButton("▲");
-    m_opDown = new QPushButton("▼");
-    m_opDel  = new QPushButton("Delete");
+    m_opDup  = new QPushButton(Theme::icon("copy"), "Duplicate");
+    m_opUp   = new QPushButton(Theme::icon("arrow-up"), "");
+    m_opDown = new QPushButton(Theme::icon("arrow-down"), "");
+    m_opDel  = new QPushButton(Theme::icon("trash-2", Theme::Tint::Danger), "Delete");
+    m_opUp->setObjectName("iconButton");
+    m_opDown->setObjectName("iconButton");
+    m_opUp->setToolTip("Move operation up");
+    m_opDown->setToolTip("Move operation down");
     m_opDel->setProperty("danger", true);
     m_opUp->setFixedWidth(30);
     m_opDown->setFixedWidth(30);
@@ -143,7 +167,7 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     m_ops->verticalHeader()->setDefaultSectionSize(22);
     m_ops->setColumnWidth(C_Num, 28);
     m_ops->setColumnWidth(C_Name, 110);
-    m_ops->setColumnWidth(C_Type, 80);
+    m_ops->setColumnWidth(C_Type, 124);
     m_ops->setColumnWidth(C_What, 170);
     m_ops->setColumnWidth(C_After, 60);
     m_ops->setColumnWidth(C_When, 110);
@@ -169,7 +193,7 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     m_opName = new QLineEdit;
     m_opName->setPlaceholderText("optional");
     m_opType = new QComboBox;
-    for (OperationType t : kTypes) m_opType->addItem(operationTypeName(t));
+    for (OperationType t : kTypes) m_opType->addItem(typeIcon(t), operationTypeName(t));
     m_opActuator = new QComboBox;
     m_opPose = new QComboBox;
     m_opTarget    = autoui::makeExprEdit(scene, autoui::ExprKind::Value, "e.g. 90  or  Pick ? -45 : 0");
@@ -178,6 +202,7 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     m_opCondition = autoui::makeExprEdit(scene, autoui::ExprKind::Value, "e.g. PartPresent && !EStop");
     m_opAfter = new QToolButton;
     m_opAfter->setPopupMode(QToolButton::InstantPopup);
+    m_opAfter->setObjectName("menuButton");
     m_opAfter->setToolTip("Operations that must be finished before this one starts.\n"
                           "Several operations after the same predecessor run in parallel.");
     m_opAfter->setMinimumWidth(120);
@@ -190,7 +215,7 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     m_opVelLabel = new QLabel("Velocity");
     m_opStatus = new QLabel;
     m_opStatus->setWordWrap(true);
-    m_opStatus->setStyleSheet("color:#556; font-size:10px;");
+    m_opStatus->setObjectName("hint");
     m_opLayout->addRow("Name", m_opName);
     m_opLayout->addRow("Type", m_opType);
     m_opLayout->addRow("Actuator", m_opActuator);
@@ -359,7 +384,7 @@ void SequencesPage::rebuildOpTable() {
             num->setTextAlignment(Qt::AlignCenter);
             m_ops->setItem(i, C_Num, num);
             m_ops->setItem(i, C_Name, new QTableWidgetItem(op.name));
-            m_ops->setItem(i, C_Type, new QTableWidgetItem(operationTypeName(op.type)));
+            m_ops->setItem(i, C_Type, new QTableWidgetItem(typeIcon(op.type), operationTypeName(op.type)));
             m_ops->setItem(i, C_What, new QTableWidgetItem(describe(op)));
             m_ops->setItem(i, C_After, new QTableWidgetItem(predecessorText(*s, op)));
             m_ops->setItem(i, C_When, new QTableWidgetItem(op.startCondition.trimmed()));
@@ -523,24 +548,20 @@ void SequencesPage::refreshRuntime() {
             }
             auto st = ae->opStatus(s->id, op.id);
             QString txt;
-            QColor bg;
             switch (st.state) {
                 case AutomationEngine::OpState::Waiting:
                     txt = "waiting" + (st.detail.isEmpty() ? QString() : " — " + st.detail);
-                    bg = QColor("#f4f4f4");
                     break;
                 case AutomationEngine::OpState::Running:
                     txt = QString("running %1%").arg(int(st.progress * 100)) +
                           (st.detail.isEmpty() ? QString() : " — " + st.detail);
-                    bg = QColor("#cfe3fa");
                     break;
                 case AutomationEngine::OpState::Done:
                     txt = QString("done (%1 s)").arg(st.endTime - st.startTime, 0, 'f', 2);
-                    bg = QColor("#d4f0d4");
                     break;
             }
             stateItem->setText(txt);
-            stateItem->setBackground(bg);
+            stateItem->setBackground(autoui::opStateBrush(st.state));
             b.state = int(st.state);
             b.progress = st.progress;
             b.detail = st.detail;
@@ -745,6 +766,7 @@ void SequencesPage::commitOpForm() {
         m_loading = true;
         m_ops->item(i, C_Name)->setText(op->name);
         m_ops->item(i, C_Type)->setText(operationTypeName(op->type));
+        m_ops->item(i, C_Type)->setIcon(typeIcon(op->type));
         m_ops->item(i, C_What)->setText(describe(*op));
         m_ops->item(i, C_When)->setText(op->startCondition.trimmed());
         m_loading = false;

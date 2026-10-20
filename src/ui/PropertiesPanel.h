@@ -27,6 +27,9 @@ public:
     // Disables definition edits (joint/actuator) while the simulation is active
     void setSimulationActive(bool active);
 
+    // Length unit selector, placed in the dock's header by MainWindow
+    QComboBox* unitCombo() const { return m_unitCombo; }
+
 private slots:
     void onSelectionChanged(int id);
     void onTransformEdited();
@@ -91,6 +94,7 @@ private:
     QVector3D  m_lastPointPos;
 
     // Name card
+    QLabel*         m_typeIcon   = nullptr;
     QLabel*         m_nameLabel  = nullptr;
     QLabel*         m_typeLabel  = nullptr;
 

@@ -1,4 +1,5 @@
 #include "Viewport.h"
+#include "ui/Theme.h"
 #include <QLabel>
 #include <QMouseEvent>
 #include <QWheelEvent>
@@ -215,14 +216,6 @@ static QMatrix4x4 stripScale(const QMatrix4x4& m) {
 
 // ── Constructor / Destructor ─────────────────────────────────────────────────
 
-static const char* kOverlayBtnStyle =
-    "QPushButton { background:rgba(240,244,255,210); color:#334; "
-    "  border:1px solid #8899cc; border-radius:3px; "
-    "  padding:2px 6px; font-size:10px; font-weight:bold; }"
-    "QPushButton:hover   { background:rgba(180,200,255,230); }"
-    "QPushButton:pressed { background:rgba(150,175,240,255); }"
-    "QPushButton[active='true'] { background:rgba(55,115,210,200); color:#fff; border-color:#2255bb; }";
-
 Viewport::Viewport(SceneGraph* scene, QWidget* parent)
     : QOpenGLWidget(parent), m_scene(scene)
 {
@@ -254,8 +247,9 @@ Viewport::Viewport(SceneGraph* scene, QWidget* parent)
     // View-snap overlay buttons
     auto mkBtn = [&](const QString& label) -> QPushButton* {
         auto* b = new QPushButton(label, this);
-        b->setStyleSheet(kOverlayBtnStyle);
-        b->setFixedSize(46, 22);
+        b->setObjectName("viewButton");
+        b->setFixedSize(52, 26);
+        b->setCursor(Qt::PointingHandCursor);
         b->raise();
         return b;
     };
@@ -264,9 +258,11 @@ Viewport::Viewport(SceneGraph* scene, QWidget* parent)
     m_btnTop   = mkBtn("Top");
     m_btnSide  = mkBtn("Side");
 
-    m_btnFloor = new QPushButton("Floor: ON", this);
-    m_btnFloor->setStyleSheet(kOverlayBtnStyle);
-    m_btnFloor->setFixedSize(70, 22);
+    m_btnFloor = new QPushButton(Theme::icon("grid-3x3", Theme::Tint::OnAccent), "Floor: ON", this);
+    m_btnFloor->setObjectName("viewButton");
+    m_btnFloor->setToolTip("Toggle the floor collider (objects rest on Y = 0)");
+    m_btnFloor->setFixedSize(96, 26);
+    m_btnFloor->setCursor(Qt::PointingHandCursor);
     m_btnFloor->setProperty("active", true);
     m_btnFloor->raise();
 
@@ -284,8 +280,8 @@ Viewport::Viewport(SceneGraph* scene, QWidget* parent)
         m_scene->setFloorEnabled(now);
         m_btnFloor->setText(now ? "Floor: ON" : "Floor: OFF");
         m_btnFloor->setProperty("active", now);
-        m_btnFloor->style()->unpolish(m_btnFloor);
-        m_btnFloor->style()->polish(m_btnFloor);
+        m_btnFloor->setIcon(Theme::icon("grid-3x3", now ? Theme::Tint::OnAccent : Theme::Tint::Text));
+        Theme::repolish(m_btnFloor);
     });
 
 }
@@ -322,7 +318,6 @@ void Viewport::initializeGL() {
     initializeOpenGLFunctions();
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_MULTISAMPLE);
-    glClearColor(0.88f, 0.90f, 0.94f, 1.0f);
     buildShaders();
     buildMeshes();
     buildGrid();
@@ -337,7 +332,7 @@ void Viewport::resizeGL(int w, int h) {
 }
 
 void Viewport::repositionOverlays() {
-    const int mg = 6, gap = 3;
+    const int mg = 10, gap = 4;
     int x = mg;
     for (auto* btn : {m_btnFront, m_btnTop, m_btnSide}) {
         btn->move(x, mg);
@@ -358,7 +353,8 @@ void Viewport::paintGL() {
     glDisable(GL_BLEND);
     glDisable(GL_CULL_FACE);
     glDisable(GL_SCISSOR_TEST);
-    glClearColor(0.88f, 0.90f, 0.94f, 1.0f);
+    const QColor bg = Theme::colors().viewport;
+    glClearColor(bg.redF(), bg.greenF(), bg.blueF(), 1.0f);
     glViewport(0, 0, m_vpW, m_vpH);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -386,14 +382,12 @@ void Viewport::setSimulationOverlay(const QSet<int>& movingObjects, const QStrin
         m_overlayLines = lines;
         if (!m_simOverlay) {
             m_simOverlay = new QLabel(this);
-            m_simOverlay->setStyleSheet("QLabel { background:rgba(255,255,255,215); color:#143c78; "
-                                        "border:1px solid rgba(80,120,200,120); border-radius:5px; "
-                                        "padding:4px 8px; font-size:11px; }");
+            m_simOverlay->setObjectName("viewOverlay");
             m_simOverlay->setAttribute(Qt::WA_TransparentForMouseEvents);
         }
         m_simOverlay->setText("▶ " + lines.join("\n▶ "));
         m_simOverlay->adjustSize();
-        m_simOverlay->move(8, 40);
+        m_simOverlay->move(10, 46);
         m_simOverlay->setVisible(!lines.isEmpty());
     }
     update();
@@ -694,9 +688,9 @@ void Viewport::drawMesh(const MeshData& m){
 void Viewport::drawGrid(){
     float aspect=float(m_vpW)/float(std::max(m_vpH,1));
     // Tint grid blue when floor is active
-    QVector3D gridCol = m_scene->floorEnabled()
-        ? QVector3D(0.52f, 0.60f, 0.80f)
-        : QVector3D(0.65f, 0.68f, 0.74f);
+    auto vec = [](const QColor& c) { return QVector3D(c.redF(), c.greenF(), c.blueF()); };
+    const Theme::Colors& tc = Theme::colors();
+    QVector3D gridCol = vec(m_scene->floorEnabled() ? tc.gridFloor : tc.grid);
     m_gridShader->bind();
     m_gridShader->setUniformValue("view", m_camera.viewMatrix());
     m_gridShader->setUniformValue("proj", m_camera.projectionMatrix(aspect));
@@ -716,8 +710,8 @@ void Viewport::drawGrid(){
         m_wireShader->setUniformValue("model",     ident);
         m_wireShader->setUniformValue("view",      m_camera.viewMatrix());
         m_wireShader->setUniformValue("proj",      m_camera.projectionMatrix(aspect));
-        m_wireShader->setUniformValue("lineColor", QVector3D(0.30f, 0.50f, 0.88f));
-        m_wireShader->setUniformValue("alpha",     0.09f);
+        m_wireShader->setUniformValue("lineColor", vec(tc.floorFill));
+        m_wireShader->setUniformValue("alpha",     tc.dark ? 0.07f : 0.09f);
         glBindVertexArray(m_floorVao);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         glBindVertexArray(0);
@@ -873,6 +867,21 @@ void Viewport::drawPhysicsOverlays() {
 
 // ── Key point overlay ─────────────────────────────────────────────────────────
 
+// Text on a rounded, theme-coloured chip whose top-left corner is at `topLeft`
+void Viewport::drawPill(QPainter& p, const QPointF& topLeft, const QString& text, const QColor& border) {
+    const Theme::Colors& c = Theme::colors();
+    QFontMetricsF fm(p.font());
+    QRectF r(topLeft, QSizeF(fm.horizontalAdvance(text) + 18, fm.height() + 8));
+    p.save();
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setPen(QPen(border.isValid() ? border : c.border, 1));
+    p.setBrush(Theme::soft(c.panel, 0.92));
+    p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), r.height() / 2, r.height() / 2);
+    p.setPen(c.text);
+    p.drawText(r, Qt::AlignCenter, text);
+    p.restore();
+}
+
 void Viewport::drawKeyPoints(QPainter& p) {
     if (m_hoveredId == -1) { m_nearKeyPointIdx = -1; return; }
     const SceneObject* obj = m_scene->getObject(m_hoveredId);
@@ -914,8 +923,8 @@ void Viewport::drawKeyPoints(QPainter& p) {
         if (!spts[i].valid) continue;
         bool near = (i == m_nearKeyPointIdx);
         int r = near ? 7 : 5;
-        p.setPen(QPen(QColor(40, 60, 200, 220), near ? 2.0 : 1.5));
-        p.setBrush(near ? QColor(255, 240, 30, 230) : QColor(255, 255, 255, 190));
+        p.setPen(QPen(Theme::colors().info, near ? 2.0 : 1.5));
+        p.setBrush(near ? QColor(255, 220, 40, 235) : Theme::soft(Theme::colors().panel, 0.85));
         p.drawEllipse(spts[i].pos, r, r);
     }
 
@@ -928,9 +937,8 @@ void Viewport::drawKeyPoints(QPainter& p) {
             .arg(double(wp.x()), 0, 'f', 3)
             .arg(double(wp.y()), 0, 'f', 3)
             .arg(double(wp.z()), 0, 'f', 3);
-        p.setPen(QColor(20, 20, 80, 200));
-        QFont f; f.setPointSize(8); f.setBold(true); p.setFont(f);
-        p.drawText(sp + QPointF(10, -4), lbl);
+        QFont f = font(); f.setPointSize(8); f.setBold(true); p.setFont(f);
+        drawPill(p, sp + QPointF(12, -10), lbl);
     }
 }
 
@@ -1126,12 +1134,12 @@ void Viewport::drawAxisLabels(QPainter& p){
     };
 
     struct { QVector3D tip; QColor col; QString label; } axes[] = {
-        { {1,0,0}, {210,40,40},  "X" },
-        { {0,1,0}, {20,170,55},  "Y" },
-        { {0,0,1}, {35,90,235},  "Z" },
+        { {1,0,0}, Theme::colors().axisX, "X" },
+        { {0,1,0}, Theme::colors().axisY, "Y" },
+        { {0,0,1}, Theme::colors().axisZ, "Z" },
     };
 
-    QFont f = p.font();
+    QFont f = font();
     f.setBold(true);
     f.setPointSize(9);
     p.setFont(f);
@@ -1152,17 +1160,11 @@ void Viewport::drawAxisPickBanner(QPainter& p){
     QString name = obj ? obj->name : QString("object");
     QString text = QString("\"%1\" — click a gizmo arrow to set the Joint Axis  (Esc to cancel)").arg(name);
 
-    QFont f; f.setPointSize(9); f.setBold(true);
+    QFont f = font(); f.setPointSize(9); f.setBold(true);
     p.setFont(f);
     QFontMetrics fm(f);
     int textW = fm.horizontalAdvance(text);
-    int x = (m_vpW - textW) / 2;
-    int y = 36 + fm.ascent();
-
-    p.setPen(QColor(0,0,0,90));
-    p.drawText(x+1, y+1, text);
-    p.setPen(QColor(30,60,140,235));
-    p.drawText(x, y, text);
+    drawPill(p, QPointF((m_vpW - textW) / 2.0, 46), text, Theme::colors().info);
 }
 
 void Viewport::drawKeyHints(QPainter& p){
@@ -1172,17 +1174,15 @@ void Viewport::drawKeyHints(QPainter& p){
         "Scroll  Zoom",
         "Click  Select",
     };
-    QFont f;
+    QFont f = font();
     f.setPointSize(8);
     p.setFont(f);
 
     int x = m_vpW - 120;
-    int y = m_vpH - 12 - 4*16;
+    int y = m_vpH - 14 - 4*16;
 
+    p.setPen(Theme::colors().muted);
     for(auto& h : hints){
-        p.setPen(QColor(0,0,0,55));
-        p.drawText(x+1, y+1, h);
-        p.setPen(QColor(40,50,80,130));
         p.drawText(x, y, h);
         y += 16;
     }

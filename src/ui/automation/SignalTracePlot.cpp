@@ -1,15 +1,9 @@
 #include "SignalTracePlot.h"
+#include "ui/Theme.h"
 #include <QPainter>
 #include <QPainterPath>
 #include <algorithm>
 #include <cmath>
-
-namespace {
-const QColor kColors[] = {
-    QColor("#1a6fda"), QColor("#d0582a"), QColor("#2a9a48"), QColor("#9a3ad0"),
-    QColor("#c09010"), QColor("#108a9a"), QColor("#c03070"), QColor("#5a6a8a"),
-};
-}
 
 SignalTracePlot::SignalTracePlot(QWidget* parent) : QWidget(parent) {
     setMinimumHeight(90);
@@ -47,15 +41,16 @@ void SignalTracePlot::clear() {
 }
 
 void SignalTracePlot::paintEvent(QPaintEvent*) {
+    const Theme::Colors& c = Theme::colors();
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
-    p.fillRect(rect(), Qt::white);
+    p.fillRect(rect(), c.island);
     QFont small = font();
     small.setPointSizeF(std::max(7.0, small.pointSizeF() - 1));
     p.setFont(small);
 
     if (m_lanes.empty()) {
-        p.setPen(QColor("#99a"));
+        p.setPen(c.muted);
         p.drawText(rect().adjusted(8, 0, -8, 0), Qt::AlignCenter | Qt::TextWordWrap,
                    "Tick “Plot” next to signals in the watch list to trace them here.");
         return;
@@ -69,22 +64,21 @@ void SignalTracePlot::paintEvent(QPaintEvent*) {
     auto X = [&](double t) { return x0 + (x1 - x0) * (t - t0) / m_window; };
 
     // Time axis
-    p.setPen(QColor("#889"));
     double step = m_window <= 10 ? 1 : (m_window <= 30 ? 5 : 10);
     for (double t = std::ceil(t0 / step) * step; t <= t1 + 1e-9; t += step) {
         int x = int(X(t));
-        p.setPen(QColor("#eceff4"));
+        p.setPen(c.border);
         p.drawLine(x, 0, x, height() - axisH);
-        p.setPen(QColor("#889"));
+        p.setPen(c.muted);
         p.drawText(QRect(x - 25, height() - axisH, 50, axisH), Qt::AlignCenter, QString("%1").arg(t, 0, 'g', 4));
     }
 
     for (int i = 0; i < n; ++i) {
         const Lane& l = m_lanes[size_t(i)];
-        const QColor col = kColors[i % 8];
+        const QColor col = c.series[size_t(i) % c.series.size()];
         double top = i * laneH, bot = (i + 1) * laneH;
-        if (i % 2) p.fillRect(QRectF(0, top, width(), laneH), QColor("#f8f9fc"));
-        p.setPen(QColor("#e0e4ec"));
+        if (i % 2) p.fillRect(QRectF(0, top, width(), laneH), c.island.lighter(c.dark ? 118 : 104));
+        p.setPen(c.border);
         p.drawLine(QPointF(0, bot), QPointF(width(), bot));
 
         // Visible range
@@ -106,11 +100,11 @@ void SignalTracePlot::paintEvent(QPaintEvent*) {
         QString label = l.name;
         p.drawText(QRectF(6, top, labelW - 10, laneH / 2 + 4), Qt::AlignLeft | Qt::AlignBottom,
                    p.fontMetrics().elidedText(label, Qt::ElideRight, labelW - 10));
-        p.setPen(QColor("#556"));
+        p.setPen(c.text);
         QString val = !any ? "—" : (l.isBool ? (last != 0 ? "true" : "false") : QString::number(last, 'f', 3));
         p.drawText(QRectF(6, top + laneH / 2, labelW - 10, laneH / 2), Qt::AlignLeft | Qt::AlignTop, val);
         if (!l.isBool && any) {
-            p.setPen(QColor("#aab"));
+            p.setPen(c.muted);
             p.drawText(QRectF(x0 + 2, top + 1, 80, 12), Qt::AlignLeft, QString::number(hi - range * pad, 'g', 4));
             p.drawText(QRectF(x0 + 2, bot - 13, 80, 12), Qt::AlignLeft, QString::number(lo + range * pad, 'g', 4));
         }
