@@ -8,3 +8,4 @@ packaging/*.deb
 CLAUDE.md
 packaging
 AUTOMATION_PLAN.md
+templates/tutorial.md
