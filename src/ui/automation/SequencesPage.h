@@ -23,6 +23,7 @@ public:
     void refresh() override;
     void refreshRuntime() override;
     void setLocked(bool locked) override;
+    void selectSequence(int sequenceId);
 
 private:
     Sequence*  currentSequence();

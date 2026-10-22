@@ -70,6 +70,7 @@ void ExpressionEdit::updateCompletion() {
         return;
     }
     QStringList words = m_words();
+    words << "true" << "false";
     for (const QString& f : expr::functionNames()) words << f + "(";
     m_model->setStringList(words);
     m_completer->setCompletionPrefix(prefix);

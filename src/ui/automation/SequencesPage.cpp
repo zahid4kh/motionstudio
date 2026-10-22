@@ -587,6 +587,12 @@ void SequencesPage::setLocked(bool locked) {
     refresh();
 }
 
+void SequencesPage::selectSequence(int sequenceId) {
+    m_seqId = sequenceId;
+    m_opId = -1;
+    refresh();
+}
+
 // ── Sequence edits ───────────────────────────────────────────────────────────
 
 void SequencesPage::addSequence() {

@@ -7,8 +7,8 @@ MotionStudio turns a 3D model into a working machine in five steps. Each step bu
 | 1. **Model** | File › Import STEP, or the toolbar | Bring in parts and arrange the hierarchy (child parts move with their parent) |
 | 2. **Joints** | Properties › *Add Joint to Parent* | Say *how* a part moves relative to its parent: revolute (turns) or prismatic (slides) |
 | 3. **Actuators** | Automation › Actuators & Poses | Put a motor on each joint that the automation should drive |
-| 4. **Poses** | Automation › Actuators & Poses | Jog the joints and *Capture* the positions the machine visits |
-| 5. **Sequences** | Automation › Sequences | Chain operations: move to a pose, wait, set a signal, repeat |
+| 4. **Poses** | Automation › Actuators & Poses | Jog the joints and *Capture* the positions the machine visits (at least two, e.g. `Home` and a target) |
+| 5. **Sequences** | Automation › Sequences | Chain operations: move to a pose, wait, set a signal, repeat. *Sequence from Poses* builds a simple cycle in one click |
 
 Then press **Play** (Space) and drive the machine from the **Runtime** tab.
 

@@ -8,6 +8,8 @@ A **sequence** is a program: a set of operations linked by *After* (predecessors
 2. Press **Operation** and choose a type. A new operation is placed *after* the selected one, so adding them in order builds a chain.
 3. Fill in the fields, then press **Play**.
 
+**Shortcut:** with two or more poses captured, **Sequence from Poses** in the Actuators & Poses tab builds a looping sequence of MoveToPose steps for you. See [Poses](help:poses).
+
 ## Sequence settings
 
 | Field | Meaning |

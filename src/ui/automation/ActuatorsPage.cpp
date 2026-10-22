@@ -198,7 +198,8 @@ ActuatorsPage::ActuatorsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     pv->setContentsMargins(6, 12, 6, 6);
     m_poses = new QListWidget;
     m_poses->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
-    m_poses->setToolTip("Double-click to rename. Use MoveToPose operations to move to a pose.");
+    m_poses->setToolTip("Double-click to rename. A pose is a stored position: a sequence's MoveToPose "
+                        "operations move the machine between poses, so you need at least two to see motion.");
     pv->addWidget(m_poses, 1);
     auto* pb1 = new QHBoxLayout;
     m_poseCapture = new QPushButton(Theme::icon("camera"),     "Capture");
@@ -216,6 +217,8 @@ ActuatorsPage::ActuatorsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     pb2->addWidget(m_poseGo);
     pb2->addWidget(m_poseDelete);
     pv->addLayout(pb2);
+    m_poseSequence = new QPushButton(Theme::icon("workflow"), "Sequence from Poses");
+    pv->addWidget(m_poseSequence);
     split->addWidget(poseBox);
 
     split->setStretchFactor(0, 5);
@@ -261,6 +264,7 @@ ActuatorsPage::ActuatorsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     connect(m_poseUpdate,  &QPushButton::clicked, this, &ActuatorsPage::updatePose);
     connect(m_poseGo,      &QPushButton::clicked, this, &ActuatorsPage::goToPose);
     connect(m_poseDelete,  &QPushButton::clicked, this, &ActuatorsPage::deletePose);
+    connect(m_poseSequence, &QPushButton::clicked, this, &ActuatorsPage::sequenceFromPoses);
     connect(m_poses, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem*){ /* rename via editor */ });
     connect(m_poses, &QListWidget::itemChanged, this, [this](QListWidgetItem* it){
         if (m_loading) return;
@@ -303,9 +307,14 @@ void ActuatorsPage::updateGuidance() {
     } else if (m_scene->allPoses().empty()) {
         text = "<b>Next:</b> jog the joints to each place the machine visits and press <i>Capture</i> to save a pose.";
         topic = "poses";
+    } else if (m_scene->allPoses().size() == 1 && m_scene->allSequences().empty()) {
+        text = "<b>Next:</b> capture at least one more pose, e.g. <i>Home</i>. The machine moves <i>between</i> poses, "
+               "so one pose alone shows no motion.";
+        topic = "poses";
     } else if (m_scene->allSequences().empty()) {
-        text = "<b>Next:</b> open the <i>Sequences</i> tab and chain MoveToPose operations into a program.";
-        topic = "sequences";
+        text = "<b>Next:</b> press <i>Sequence from Poses</i> to cycle through them, "
+               "or chain MoveToPose operations in the <i>Sequences</i> tab.";
+        topic = "poses";
     } else {
         text = "<b>Ready:</b> press <i>Play</i> (Space), then drive the inputs from the <i>Runtime</i> tab.";
         topic = "runtime";
@@ -451,6 +460,12 @@ void ActuatorsPage::rebuildPoses() {
     m_poseUpdate->setEnabled(!m_locked && has);
     m_poseGo->setEnabled(!m_locked && has);
     m_poseDelete->setEnabled(!m_locked && has);
+    const bool canSequence = m_poses->count() >= 2;
+    m_poseSequence->setEnabled(!m_locked && canSequence);
+    m_poseSequence->setToolTip(canSequence
+        ? "Build a looping sequence that moves through the poses in this list's order, "
+          "then back to the first. Edit it afterwards in the Sequences tab."
+        : "Capture at least two poses first: a sequence moves between poses.");
     m_loading = false;
     updateGuidance();
 }
@@ -659,4 +674,28 @@ void ActuatorsPage::deletePose() {
     if (id < 0) return;
     edit([&]{ m_scene->removePose(id); });
     rebuildPoses();
+}
+
+void ActuatorsPage::sequenceFromPoses() {
+    if (m_locked || m_poses->count() < 2) return;
+    Sequence q;
+    q.name = m_scene->makeSymbolName("PoseCycle");
+    q.loop = true;
+    int prev = -1;
+    for (int i = 0; i < m_poses->count(); ++i) {
+        Operation op;
+        op.id     = m_scene->allocateId();
+        op.type   = OperationType::MoveToPose;
+        op.poseId = m_poses->item(i)->data(Qt::UserRole).toInt();
+        if (prev >= 0) op.predecessors.push_back(prev);
+        prev = op.id;
+        q.operations.push_back(op);
+    }
+    int id = 0;
+    edit([&]{ id = m_scene->addSequence(q); });
+    updateGuidance();
+    const Sequence* s = m_scene->getSequence(id);
+    emit statusMessage(QString("Sequence %1 created with %2 MoveToPose steps. Press Play to run it")
+                           .arg(s ? s->name : q.name).arg(m_poses->count()), true);
+    emit sequenceCreated(id);
 }

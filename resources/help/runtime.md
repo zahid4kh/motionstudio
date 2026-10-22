@@ -27,6 +27,7 @@ The viewport tints the parts that are moving and lists the operations currently 
 | Symptom | Usual cause |
 |---|---|
 | Nothing moves on Play | The sequence's *Start when* is false (switch `Start` ON), or there is no sequence at all. Position actuators wait to be commanded. |
+| Nothing moves, although the sequence runs | The machine is already at the pose it is told to move to. With a single pose that is always the case; capture a second one (see [Poses](help:poses)). |
 | A joint spins forever | It is in **Speed** mode with *Active at start* on. Switch it to **Position**. |
 | A move never finishes | The target is outside the joint's limits, so the joint stops at the limit and is never *in position*. Check the limits in Properties. |
 | An operation is skipped or ignored | The actuator has a **Target =** binding. Bindings override operations. |

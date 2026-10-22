@@ -28,6 +28,10 @@ public:
 
     void selectActuatorForJoint(int jointId);
 
+signals:
+    // A sequence was built from the poses; the panel shows it in the Sequences tab
+    void sequenceCreated(int sequenceId);
+
 private:
     void rebuildTable();
     void rebuildJog();
@@ -45,6 +49,8 @@ private:
     void updatePose();
     void goToPose();
     void deletePose();
+    // A looping sequence with one MoveToPose per pose, in list order
+    void sequenceFromPoses();
     int  currentPoseId() const;
 
     // Actuator list + form
@@ -76,6 +82,7 @@ private:
     // Poses
     QListWidget*    m_poses = nullptr;
     QPushButton*    m_poseCapture = nullptr, *m_poseUpdate = nullptr, *m_poseGo = nullptr, *m_poseDelete = nullptr;
+    QPushButton*    m_poseSequence = nullptr;
 
     bool            m_loading = false;
     int             m_selectedMotor = -1;
