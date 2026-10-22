@@ -62,6 +62,7 @@ private:
     void buildToolbar();
     void buildDocks();
     void buildViewMenu();
+    void buildHelpMenu();
     void buildStatusBar();
     QDockWidget* makeDock(const QString& title, const QString& icon, QWidget* content,
                           Qt::DockWidgetArea area, QWidget* headerTools = nullptr);

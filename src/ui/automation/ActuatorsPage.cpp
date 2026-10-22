@@ -1,6 +1,7 @@
 #include "ActuatorsPage.h"
 #include "automation/Expression.h"
 #include "physics/SimulationEngine.h"
+#include "ui/HelpDialog.h"
 #include "ui/Theme.h"
 #include <QCheckBox>
 #include <QComboBox>
@@ -39,6 +40,20 @@ QString bindingSummary(const Motor& m) {
     if (!m.activeExpr.trimmed().isEmpty())   b << "active = " + m.activeExpr.trimmed();
     return b.join(";  ");
 }
+
+// What the actuator will do once Play is pressed, the usual source of surprises
+QString playBehaviour(const Motor& m, const Joint* j) {
+    if (!m.targetExpr.trimmed().isEmpty())
+        return "On Play: follows its Target binding every scan. Operations cannot move it.";
+    if (m.mode == ActuatorMode::Position)
+        return "On Play: holds still until a Move or MoveToPose operation (or a Target binding) gives it a target.";
+    if (!m.activeExpr.trimmed().isEmpty())
+        return "On Play: runs at its speed whenever the Active binding is true.";
+    if (!m.enabled)
+        return "On Play: idle until a Run operation or an Active binding starts it.";
+    return QString("On Play: runs at %1%2 straight away and never stops. Right for wheels, conveyors and fans; "
+                   "a robot axis wants Position mode.").arg(m.velocity, 0, 'g', 4).arg(autoui::velUnit(j));
+}
 } // namespace
 
 ActuatorsPage::ActuatorsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* parent)
@@ -63,8 +78,16 @@ ActuatorsPage::ActuatorsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     m_addBtn->setToolTip("Attach an actuator to a joint that doesn't have one");
     m_delBtn = new QPushButton(Theme::icon("trash-2", Theme::Tint::Danger), "Delete");
     m_delBtn->setProperty("danger", true);
+    m_nextStep = new QLabel;
+    m_nextStep->setObjectName("hint");
+    m_nextStep->setWordWrap(true);
+    m_nextStep->setTextFormat(Qt::RichText);
     bar->addWidget(m_addBtn);
-    bar->addStretch();
+    bar->addSpacing(6);
+    auto* bulb = new QLabel;
+    Theme::setLabelIcon(bulb, "lightbulb", 14, Theme::Tint::Muted);
+    bar->addWidget(bulb);
+    bar->addWidget(m_nextStep, 1);
     bar->addWidget(m_delBtn);
     lv->addLayout(bar);
 
@@ -128,6 +151,10 @@ ActuatorsPage::ActuatorsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     modeRow->addWidget(m_active);
     modeRow->addStretch();
     fl->addRow("Mode", modeRow);
+    m_modeHint = new QLabel;
+    m_modeHint->setObjectName("hint");
+    m_modeHint->setWordWrap(true);
+    fl->addRow("", m_modeHint);
     auto* velRow = new QHBoxLayout;
     velRow->addWidget(m_velocity);
     velRow->addWidget(new QLabel("Accel"));
@@ -204,6 +231,9 @@ ActuatorsPage::ActuatorsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
         m_selectedMotor = it ? it->data(Qt::UserRole).toInt() : -1;
         loadForm();
     });
+    connect(m_nextStep, &QLabel::linkActivated, this, [this](const QString& topic){
+        HelpDialog::showTopic(topic, this);
+    });
     connect(m_name, &QLineEdit::editingFinished, this, &ActuatorsPage::renameActuator);
     connect(m_mode, &QComboBox::currentIndexChanged, this, &ActuatorsPage::commitForm);
     connect(m_velocity, &QDoubleSpinBox::valueChanged, this, &ActuatorsPage::commitForm);
@@ -249,6 +279,38 @@ void ActuatorsPage::refresh() {
     rebuildJog();
     rebuildPoses();
     loadForm();
+}
+
+void ActuatorsPage::updateGuidance() {
+    int motors = 0, speedOnly = 0;
+    for (int mid : m_scene->motorIdsSorted()) {
+        const Motor* m = m_scene->getMotor(mid);
+        ++motors;
+        if (m->mode == ActuatorMode::Speed && m->targetExpr.trimmed().isEmpty()) ++speedOnly;
+    }
+    QString text, topic = "actuators";
+    if (m_locked) {
+        text = "Simulating. Watch the Position column, or press Reset to edit.";
+        topic = "runtime";
+    } else if (m_scene->allJoints().empty()) {
+        text = "<b>Next:</b> select a part and press <i>Add Joint to Parent</i> in Properties.";
+        topic = "start";
+    } else if (motors == 0) {
+        text = "<b>Next:</b> give each joint the automation should drive an actuator.";
+    } else if (motors > 1 && speedOnly == motors) {
+        text = "<b>Check:</b> every actuator is in Speed mode, so it spins by itself. "
+               "Robot axes and slides want <i>Position</i> mode.";
+    } else if (m_scene->allPoses().empty()) {
+        text = "<b>Next:</b> jog the joints to each place the machine visits and press <i>Capture</i> to save a pose.";
+        topic = "poses";
+    } else if (m_scene->allSequences().empty()) {
+        text = "<b>Next:</b> open the <i>Sequences</i> tab and chain MoveToPose operations into a program.";
+        topic = "sequences";
+    } else {
+        text = "<b>Ready:</b> press <i>Play</i> (Space), then drive the inputs from the <i>Runtime</i> tab.";
+        topic = "runtime";
+    }
+    m_nextStep->setText(QString("%1 <a href=\"%2\">How?</a>").arg(text, topic));
 }
 
 void ActuatorsPage::rebuildTable() {
@@ -390,6 +452,7 @@ void ActuatorsPage::rebuildPoses() {
     m_poseGo->setEnabled(!m_locked && has);
     m_poseDelete->setEnabled(!m_locked && has);
     m_loading = false;
+    updateGuidance();
 }
 
 void ActuatorsPage::loadForm() {
@@ -397,6 +460,8 @@ void ActuatorsPage::loadForm() {
     m_form->setEnabled(m != nullptr && !m_locked);
     if (!m) {
         m_form->setTitle("Actuator");
+        m_modeHint->setText(m_scene->allJoints().empty() ? "Add a joint first, then an actuator for it."
+                                                         : "Use Actuator for joint… to drive a joint.");
         return;
     }
     m_loading = true;
@@ -415,6 +480,7 @@ void ActuatorsPage::loadForm() {
     m_bindTarget->setExpression(m->targetExpr);
     m_bindVelocity->setExpression(m->velocityExpr);
     m_bindActive->setExpression(m->activeExpr);
+    m_modeHint->setText(playBehaviour(*m, j));
     m_loading = false;
 }
 
@@ -468,6 +534,8 @@ void ActuatorsPage::commitForm() {
         m_scene->notifyAutomationChanged();
     });
     m_velLabel->setText(m->mode == ActuatorMode::Speed ? "Speed" : "Max speed");
+    m_modeHint->setText(playBehaviour(*m, m_scene->getJoint(m->jointId)));
+    updateGuidance();
     // Refresh the summary row without disturbing the form
     m_loading = true;
     for (int r = 0; r < m_table->rowCount(); ++r) {

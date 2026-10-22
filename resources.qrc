@@ -99,5 +99,18 @@
         <file alias="icons/weight.svg">resources/icons/weight.svg</file>
         <file alias="icons/workflow.svg">resources/icons/workflow.svg</file>
         <file alias="icons/x.svg">resources/icons/x.svg</file>
+        <file alias="help/start.md">resources/help/start.md</file>
+        <file alias="help/actuators.md">resources/help/actuators.md</file>
+        <file alias="help/poses.md">resources/help/poses.md</file>
+        <file alias="help/sequences.md">resources/help/sequences.md</file>
+        <file alias="help/signals.md">resources/help/signals.md</file>
+        <file alias="help/expressions.md">resources/help/expressions.md</file>
+        <file alias="help/recipes.md">resources/help/recipes.md</file>
+        <file alias="help/runtime.md">resources/help/runtime.md</file>
+        <file alias="help/shortcuts.md">resources/help/shortcuts.md</file>
+        <file alias="icons/book-open.svg">resources/icons/book-open.svg</file>
+        <file alias="icons/circle-help.svg">resources/icons/circle-help.svg</file>
+        <file alias="icons/code-xml.svg">resources/icons/code-xml.svg</file>
+        <file alias="icons/keyboard.svg">resources/icons/keyboard.svg</file>
     </qresource>
 </RCC>

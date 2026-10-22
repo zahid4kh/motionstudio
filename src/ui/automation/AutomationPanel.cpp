@@ -4,6 +4,7 @@
 #include "SequencesPage.h"
 #include "SignalsPage.h"
 #include "physics/SimulationEngine.h"
+#include "ui/HelpDialog.h"
 #include "ui/Theme.h"
 #include <QHBoxLayout>
 #include <QLabel>
@@ -54,6 +55,22 @@ AutomationPanel::AutomationPanel(SceneGraph* scene, SimulationEngine* sim, QWidg
     ch->addWidget(lockIcon);
     ch->addWidget(m_lockLabel);
     ch->addSpacing(6);
+    auto* guide = new QToolButton;
+    guide->setObjectName("problems");
+    guide->setText("Guide");
+    guide->setIcon(Theme::icon("circle-help"));
+    guide->setIconSize(QSize(14, 14));
+    guide->setAutoRaise(true);
+    guide->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    guide->setToolTip("How to use this tab, with examples to copy  (F1 for the full guide)");
+    connect(guide, &QToolButton::clicked, this, [this]{
+        QWidget* tab = m_tabs->currentWidget();
+        HelpDialog::showTopic(tab == m_signals   ? "signals"
+                            : tab == m_sequences ? "sequences"
+                            : tab == m_runtime   ? "runtime"
+                                                 : "actuators", this);
+    });
+    ch->addWidget(guide);
     ch->addWidget(m_problems);
     m_tabs->setCornerWidget(corner, Qt::TopRightCorner);
     vb->addWidget(m_tabs);

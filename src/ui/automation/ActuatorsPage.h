@@ -32,6 +32,8 @@ private:
     void rebuildTable();
     void rebuildJog();
     void rebuildPoses();
+    // The "Next:" line: the first thing the project still needs
+    void updateGuidance();
     void loadForm();
     int  currentMotorId() const;
     void commitForm();
@@ -60,6 +62,8 @@ private:
     ExpressionEdit* m_bindVelocity = nullptr;
     ExpressionEdit* m_bindActive = nullptr;
     QLabel*         m_velLabel = nullptr;
+    QLabel*         m_modeHint = nullptr;   // what the selected actuator does on Play
+    QLabel*         m_nextStep = nullptr;
 
     // Jog
     struct JogRow { int jointId; QSlider* slider; QDoubleSpinBox* spin; double scale; };

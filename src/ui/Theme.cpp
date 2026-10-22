@@ -160,6 +160,7 @@ QLabel#subheading { color: @muted@; font-size: 11px; font-weight: 700; padding: 
 QLabel#dialogTitle { font-size: 15px; font-weight: 700; }
 QLabel#templateDesc { background: @island@; color: @fg@; border: 1px solid @border@; border-radius: 10px;
     padding: 10px 12px; min-height: 60px; }
+QTextBrowser#helpView { background: @island@; color: @fg@; border: 1px solid @border@; border-radius: 10px; }
 QWidget#card { background: @panel@; border: 1px solid @border@; border-radius: 12px; }
 QWidget#card QLabel { background: transparent; }
 

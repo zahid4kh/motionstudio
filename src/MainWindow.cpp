@@ -2,6 +2,7 @@
 #include "serialization/ProjectSerializer.h"
 #include "import/StepImporter.h"
 #include "ui/TemplateDialog.h"
+#include "ui/HelpDialog.h"
 #include "ui/Island.h"
 #include "ui/Theme.h"
 #include <QApplication>
@@ -51,6 +52,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     buildToolbar();
     buildDocks();
     buildViewMenu();
+    buildHelpMenu();
     buildStatusBar();
 
     // Dirty-tracking
@@ -221,6 +223,34 @@ void MainWindow::buildViewMenu() {
     m_automationDock->toggleViewAction()->setShortcut(QKeySequence("Ctrl+J"));
     m_automationDock->toggleViewAction()->setShortcutContext(Qt::ApplicationShortcut);
     addAction(m_automationDock->toggleViewAction());   // so Ctrl+J also works from floating panels
+}
+
+void MainWindow::buildHelpMenu() {
+    auto* help = m_menuBar->addMenu("&Help");
+    const struct { const char* icon; const char* text; const char* topic; } topics[] = {
+        {"book-open",    "&Getting Started",           "start"},
+        {"cog",          "&Joints && Actuators",       "actuators"},
+        {"list-ordered", "&Sequences && Operations",   "sequences"},
+        {"code-xml",     "&Expression Reference",      "expressions"},
+        {"copy",         "&Recipes (copy && paste)",   "recipes"},
+        {"activity",     "Running && &Debugging",      "runtime"},
+        {"keyboard",     "&Keyboard && Mouse",         "shortcuts"},
+    };
+    for (const auto& t : topics) {
+        QAction* a = help->addAction(Theme::icon(t.icon), t.text, this,
+                                     [this, topic = QString(t.topic)]{ HelpDialog::showTopic(topic, this); });
+        if (QString(t.topic) == "start") {
+            a->setShortcut(QKeySequence::HelpContents);
+            a->setShortcutContext(Qt::ApplicationShortcut);
+            addAction(a);   // so F1 also works from floating panels
+        }
+    }
+    help->addSeparator();
+    help->addAction(Theme::icon("info"), "&About MotionStudio", this, [this]{
+        QMessageBox::about(this, "About MotionStudio",
+            QString("<b>MotionStudio %1</b><p>Build, automate and simulate machines: joints, actuators, "
+                    "poses, PLC-style sequences and MuJoCo physics.</p>").arg(QApplication::applicationVersion()));
+    });
 }
 
 // ── Toolbar ───────────────────────────────────────────────────────────────────
