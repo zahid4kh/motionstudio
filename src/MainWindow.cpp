@@ -185,8 +185,12 @@ void MainWindow::buildViewMenu() {
     for (const auto& p : panels) {
         QAction* a = p.dock->toggleViewAction();
         a->setIcon(Theme::icon(p.icon));
+        a->setEnabled(true);   // Qt disables it for docks without DockWidgetClosable
         view->addAction(a);
     }
+    m_automationDock->toggleViewAction()->setShortcut(QKeySequence("Ctrl+J"));
+    m_automationDock->toggleViewAction()->setShortcutContext(Qt::ApplicationShortcut);
+    addAction(m_automationDock->toggleViewAction());   // so Ctrl+J also works from floating panels
 }
 
 // ── Toolbar ───────────────────────────────────────────────────────────────────
@@ -358,13 +362,20 @@ void MainWindow::buildDocks() {
     // Initial panel sizes, once the window has its real size
     QTimer::singleShot(0, this, [this]{
         resizeDocks({m_hierarchyDock, m_propertiesDock}, {250, 390}, Qt::Horizontal);
-        resizeDocks({m_automationDock}, {320}, Qt::Vertical);
     });
 
     m_automation = new AutomationPanel(m_scene, m_sim, this);
     m_automationDock = makeDock("Automation", "workflow", m_automation, Qt::BottomDockWidgetArea);
     m_automationDock->setObjectName("automationDock");
     m_automationDock->setMinimumHeight(200);
+    // Hidden by default (View › Automation or Ctrl+J). It is only a view onto
+    // the engine, so hiding it never touches a running simulation.
+    m_automationDock->hide();
+    connect(m_automationDock, &QDockWidget::visibilityChanged, this, [this, sized = false](bool visible) mutable {
+        if (!visible || sized || m_automationDock->isFloating()) return;
+        sized = true;
+        QTimer::singleShot(0, this, [this]{ resizeDocks({m_automationDock}, {320}, Qt::Vertical); });
+    });
     connect(m_automation, &AutomationPanel::statusMessage, this, &MainWindow::showStatus);
     connect(m_properties, &PropertiesPanel::openActuatorRequested, this, [this](int jointId){
         m_automationDock->show();
@@ -454,7 +465,7 @@ void MainWindow::openTemplate() {
         m_dirty = false;
         updateTitle();
         m_undo->reset();
-        showStatus("Template loaded — see the Automation panel, then press Play");
+        showStatus("Template loaded — open the Automation panel (Ctrl+J) to see its logic, then press Play");
     } else {
         showStatus("Failed to load template", false);
     }
