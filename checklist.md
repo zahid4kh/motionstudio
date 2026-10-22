@@ -42,12 +42,14 @@ Goal: Physics works.
 
 - [x] CMakeLists.txt detects MuJoCo at `~/mujoco-3.10.0`
 - [x] `MUJOCO_ENABLED` compile flag set when found
-- [ ] MuJoCo rigid-body simulation (scene → MJCF XML → simulate)
-- [ ] Read-back simulated body poses into SceneGraph transforms
-- [ ] Gravity / collisions driven by MuJoCo
+- [x] MuJoCo rigid-body simulation (scene → MJCF XML → simulate)
+- [x] Read-back simulated body poses into SceneGraph transforms
+- [x] Gravity / collisions driven by MuJoCo
 
-> **Current state:** MuJoCo library linked but not yet wired into the simulation loop.
-> The stub `SimulationEngine` performs basic motor integration (joint angle += velocity × dt) without real physics.
+> **Current state:** `buildMuJoCoModel()` generates MJCF from the scene (bodies, joints with ranges, collision
+> shapes, gravity in −Y). The engine steps MuJoCo at 2 ms sub-steps and `syncFromMuJoCo()` writes the free
+> bodies and unactuated joints back. Actuated joints are driven kinematically by the AutomationEngine
+> (`prescribeActuatedJoints()`).
 
 ---
 
@@ -61,6 +63,7 @@ Goal: Mechanical motion works.
 - [x] Remove joint button in Properties panel
 - [x] Joint current value applied to child body transform during rendering
 - [ ] Joint limit visualisation in viewport (arc / arrow overlay)
+  - Partly done: the selected joint's axis is drawn as an arrow, with a right-hand-rule curl for revolute joints, but the limit range isn't drawn yet.
 
 ---
 
@@ -69,11 +72,13 @@ Goal: Mechanical motion works.
 Goal: Automation motion works.
 
 - [x] `Motor` data structure (velocity, target position, enabled flag, joint ID)
+  - Now the "Actuator": Position/Speed mode, acceleration, and expression bindings. Position targets come from poses, operations or `targetExpr`.
 - [x] Add motor to selected object's joint (toolbar button)
 - [x] Motor properties in Properties panel (velocity, target, enabled checkbox)
 - [x] Remove motor button in Properties panel
 - [x] Simulation engine: motor advances joint angle / displacement each tick
 - [x] Ping-pong bounce at joint limits
+  - Replaced: joints now clamp at their limits. Back-and-forth motion is a looping sequence (see the pendulum template).
 - [x] Play / Pause / Reset buttons in toolbar
 - [x] Elapsed time display in status bar
 
@@ -91,19 +96,35 @@ Goal: Projects persist.
 
 ---
 
-## Not Started (Post-MVP)
+## Post-MVP
 
-- [ ] MuJoCo full physics integration (Milestone 3 completion)
+- [x] MuJoCo full physics integration (Milestone 3 completion)
 - [ ] Joint / motor limit visualisation overlays
 - [ ] CAD import (STEP, SolidWorks)
-- [ ] Collision editing
+  - STEP is done (OpenCASCADE XCAF, keeps the assembly tree, File › Import STEP… or drag and drop). Native SolidWorks files aren't supported.
+- [x] Collision editing (Collision Body section in Properties: add/remove, shape type, dimensions)
 - [ ] Inverse Kinematics
 - [ ] Path Planning
 - [ ] PLC Integration
+  - There is an internal PLC-style scan engine (signals, sequences, expressions), but nothing connects to an external PLC yet (no Modbus/OPC UA).
 - [ ] Robot Programming
 - [ ] Sensors
 - [ ] Digital Twin
-- [ ] Undo / Redo
+- [x] Undo / Redo (whole-scene snapshots, Ctrl+Z / Ctrl+Shift+Z)
 - [ ] Object duplication
 - [ ] Multi-select
+  - Partly done: the hierarchy has extended selection (Ctrl/Shift click) for deleting several items. The viewport and Properties panel still work on one object.
 - [ ] Timeline scrubbing
+
+---
+
+## Done Beyond the Original Plan
+
+- [x] Automation system: signals, actuators and poses, sequences with a Gantt view, a runtime page with signal traces, and an expression language
+- [x] Starter templates (File › Open Template…)
+- [x] Conveyor belts
+- [x] Translate gizmo (drag along X/Y/Z)
+- [x] Joint axis picking on model geometry (round edges, cylinders, straight edges, faces), with an arrow showing the rotation direction and a Flip button
+- [x] UI redesign: Islands dark/light themes and Lucide icons
+- [x] Per-theme viewport lighting controls
+- [x] View cube, orthographic/perspective projection, Fit All (F)
