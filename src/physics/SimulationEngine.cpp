@@ -331,6 +331,9 @@ void SimulationEngine::writeBodyXML(QString& xml, int oid, int indent) const {
                 .arg(flt(pivotLocal.x())).arg(flt(pivotLocal.y())).arg(flt(pivotLocal.z()));
         }
 
+        // Joint::axis is in the parent's frame too; MJCF's is in the child's
+        const QVector3D axis = m_scene->localTransform(oid).inverted().mapVector(jnt->axis).normalized();
+
         // Continuous revolute joints get no range (autolimits → unlimited)
         QString rangeAttr = (jnt->type == JointType::Revolute && jnt->continuous)
             ? QString()
@@ -338,7 +341,7 @@ void SimulationEngine::writeBodyXML(QString& xml, int oid, int indent) const {
         xml += pad + QString("  <joint name=\"joint_%1\" type=\"%2\" axis=\"%3 %4 %5\"%6%7"
                              " damping=\"1.0\"/>\n")
             .arg(jnt->id).arg(jType)
-            .arg(flt(jnt->axis.x())).arg(flt(jnt->axis.y())).arg(flt(jnt->axis.z()))
+            .arg(flt(axis.x())).arg(flt(axis.y())).arg(flt(axis.z()))
             .arg(posAttr, rangeAttr);
     } else if (obj->parentId == -1 && rb) {
         // Root body with RigidBody: free joint so it can move dynamically

@@ -420,10 +420,12 @@ void MainWindow::buildDocks() {
         int id = m_scene->selectedObjectId();
         if (id != -1) m_viewport->beginAxisPick(id);
     });
-    connect(m_viewport, &Viewport::axisPicked, this, [this](int objectId, const QVector3D& localAxis){
+    connect(m_viewport, &Viewport::axisPicked, this,
+            [this](int objectId, const QVector3D& localAxis, const QVector3D& localPivot, bool setPivot){
         Joint* j = m_scene->jointForChild(objectId);
         if (!j) return;
         j->axis = localAxis;
+        if (setPivot) j->pivot = localPivot;
         emit m_scene->objectChanged(objectId);
     });
 }

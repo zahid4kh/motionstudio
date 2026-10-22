@@ -35,6 +35,8 @@ public:
     // Orthographic rays are parallel and start far behind the target, so
     // everything in front of the view lies ahead of them.
     void ray(float ndcX, float ndcY, float aspect, QVector3D* origin, QVector3D* dir) const;
+    // World size of one pixel at `point`, for overlays drawn at a fixed screen size
+    float worldPerPixel(const QVector3D& point, float viewportHeight) const;
 
     Projection projection() const { return m_projection; }
     void setProjection(Projection p) { m_projection = p; }

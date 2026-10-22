@@ -119,6 +119,7 @@ private:
     QComboBox*      m_jType       = nullptr;
     QDoubleSpinBox* m_jAxisX = nullptr, *m_jAxisY = nullptr, *m_jAxisZ = nullptr;
     QPushButton*    m_jPickAxisBtn = nullptr;
+    QPushButton*    m_jFlipAxisBtn = nullptr;
     QDoubleSpinBox* m_jLimitMin   = nullptr;
     QDoubleSpinBox* m_jLimitMax   = nullptr;
     QDoubleSpinBox* m_jInitAngle  = nullptr;

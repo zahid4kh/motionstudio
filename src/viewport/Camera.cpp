@@ -113,3 +113,10 @@ void Camera::ray(float ndcX, float ndcY, float aspect, QVector3D* origin, QVecto
         *dir    = (forward() + offset).normalized();
     }
 }
+
+float Camera::worldPerPixel(const QVector3D& point, float viewportHeight) const {
+    const float depth = m_projection == Projection::Orthographic
+                            ? m_distance
+                            : std::max(QVector3D::dotProduct(point - position(), forward()), 1e-3f);
+    return 2.0f * depth * std::tan(qDegreesToRadians(kFov) * 0.5f) / std::max(viewportHeight, 1.0f);
+}

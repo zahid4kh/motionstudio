@@ -487,12 +487,16 @@ void Viewport::paintGL() {
 
     glViewport(0, 0, m_vpW, m_vpH);
     glDisable(GL_SCISSOR_TEST);
+    // QPainter doesn't reset this: left on, the 2D overlays below would be
+    // depth-tested against the scene and partly vanish
+    glDisable(GL_DEPTH_TEST);
 
     p.endNativePainting();
 
     drawAxisLabels(p);
     drawKeyHints(p);
     drawKeyPoints(p);
+    drawJointAxes(p);
     drawAxisPickBanner(p);
 }
 
@@ -637,7 +641,8 @@ MeshData Viewport::makeCube() {
         -0.5f,-0.5f,-0.5f, 0,-1,0,  0.5f,-0.5f,-0.5f, 0,-1,0,  0.5f,-0.5f, 0.5f, 0,-1,0,
     };
     MeshData m;
-    uploadMesh(m, std::vector<float>(std::begin(v), std::end(v)));
+    m_primitiveVertices[int(PrimitiveType::Cube)].assign(std::begin(v), std::end(v));
+    uploadMesh(m, m_primitiveVertices[int(PrimitiveType::Cube)]);
     return m;
 }
 
@@ -657,6 +662,7 @@ MeshData Viewport::makeCylinder(int segs) {
         push(0,h,0, 0,1,0); push(r*cosf(a0),h,r*sinf(a0), 0,1,0); push(r*cosf(a1),h,r*sinf(a1), 0,1,0);
         push(0,-h,0, 0,-1,0); push(r*cosf(a1),-h,r*sinf(a1), 0,-1,0); push(r*cosf(a0),-h,r*sinf(a0), 0,-1,0);
     }
+    m_primitiveVertices[int(PrimitiveType::Cylinder)] = v;
     MeshData m; uploadMesh(m, v); return m;
 }
 
@@ -675,6 +681,7 @@ MeshData Viewport::makeSphere(int rings, int sectors) {
             push(p0,t0); push(p1,t1); push(p0,t1);
         }
     }
+    m_primitiveVertices[int(PrimitiveType::Sphere)] = v;
     MeshData m; uploadMesh(m, v); return m;
 }
 
@@ -702,6 +709,7 @@ MeshData Viewport::makeCapsule(int rings, int sectors) {
             pushS(p0,t1,-hcy,true); pushS(p1,t0,-hcy,true); pushS(p0,t0,-hcy,true);
         }
     }
+    m_primitiveVertices[int(PrimitiveType::Capsule)] = v;
     MeshData m; uploadMesh(m, v); return m;
 }
 
@@ -736,6 +744,7 @@ MeshData Viewport::makeBasket() {
     appendBox(v, { 0.475f, 0.025f, 0.f},    {0.025f,0.475f, 0.5f});   // right wall
     appendBox(v, {0.f,     0.025f, 0.475f}, {0.45f, 0.475f, 0.025f}); // front wall
     appendBox(v, {0.f,     0.025f,-0.475f}, {0.45f, 0.475f, 0.025f}); // back  wall
+    m_primitiveVertices[int(PrimitiveType::Basket)] = v;
     MeshData m; uploadMesh(m, v); return m;
 }
 
@@ -1008,7 +1017,7 @@ void Viewport::drawPill(QPainter& p, const QPointF& topLeft, const QString& text
 }
 
 void Viewport::drawKeyPoints(QPainter& p) {
-    if (m_hoveredId == -1) { m_nearKeyPointIdx = -1; return; }
+    if (m_hoveredId == -1 || m_axisPickId != -1) { m_nearKeyPointIdx = -1; return; }
     const SceneObject* obj = m_scene->getObject(m_hoveredId);
     if (!obj) { m_nearKeyPointIdx = -1; return; }
 
@@ -1284,13 +1293,15 @@ void Viewport::drawAxisPickBanner(QPainter& p){
 
     const SceneObject* obj = m_scene->getObject(m_axisPickId);
     QString name = obj ? obj->name : QString("object");
-    QString text = QString("\"%1\" — click a gizmo arrow to set the Joint Axis  (Esc to cancel)").arg(name);
+    QString text = QString("Joint axis for \"%1\": click a round edge, cylinder, edge or face  ·  Esc cancels").arg(name);
 
     QFont f = font(); f.setPointSize(9); f.setBold(true);
     p.setFont(f);
     QFontMetrics fm(f);
-    int textW = fm.horizontalAdvance(text);
-    drawPill(p, QPointF((m_vpW - textW) / 2.0, 46), text, Theme::colors().info);
+    const double pillW = fm.horizontalAdvance(text) + 18;
+    // Centred, but kept clear of the view cube
+    const double x = std::max(8.0, std::min((m_vpW - pillW) / 2.0, m_viewCube->x() - pillW - 8.0));
+    drawPill(p, QPointF(x, 46), text, Theme::colors().info);
 }
 
 void Viewport::drawKeyHints(QPainter& p){
@@ -1393,10 +1404,15 @@ void Viewport::mousePressEvent(QMouseEvent* e){
     if(m_axisPickId != -1){
         // Axis-pick mode: clicking a gizmo arrow commits its world direction
         // (converted to the parent's local frame) as the joint's axis instead
-        // of starting a drag. A miss just stays in pick mode.
-        if(e->button()==Qt::LeftButton && m_scene->selectedObjectId() == m_axisPickId){
-            int axisHit = hitTestGizmoAxis(e->pos().x(), e->pos().y());
-            if(axisHit != -1){
+        // of starting a drag; clicking geometry commits the hovered candidate.
+        // A miss just stays in pick mode.
+        if(e->button()==Qt::LeftButton){
+            int axisHit = m_scene->selectedObjectId() == m_axisPickId
+                              ? hitTestGizmoAxis(e->pos().x(), e->pos().y()) : -1;
+            if(axisHit == -1){
+                updateAxisCandidate(e->pos().x(), e->pos().y());
+                commitAxisCandidate();
+            } else {
                 static const QVector3D kWorldAx[3] = {{1,0,0},{0,1,0},{0,0,1}};
                 const SceneObject* obj = m_scene->getObject(m_axisPickId);
                 QVector3D localAxis = kWorldAx[axisHit];
@@ -1404,7 +1420,7 @@ void Viewport::mousePressEvent(QMouseEvent* e){
                     localAxis = m_scene->worldTransform(obj->parentId).inverted().mapVector(localAxis).normalized();
                 int pickedId = m_axisPickId;
                 cancelAxisPick();
-                emit axisPicked(pickedId, localAxis);
+                emit axisPicked(pickedId, localAxis, QVector3D(), false);
             }
         }
         return;
@@ -1477,6 +1493,10 @@ void Viewport::mouseMoveEvent(QMouseEvent* e){
 
     if(m_dragBtn==Qt::NoButton){
         updateHover(pos.x(), pos.y());
+        if(m_axisPickId != -1){
+            updateAxisCandidate(pos.x(), pos.y());
+            setCursor(Qt::CrossCursor);
+        }
         // Update gizmo hover and override cursor if needed
         int newGizmoHover = hitTestGizmoAxis(pos.x(), pos.y());
         if (newGizmoHover != m_gizmoHoveredAxis) {
@@ -1535,12 +1555,279 @@ void Viewport::keyPressEvent(QKeyEvent* e){
 void Viewport::beginAxisPick(int objectId){
     if(!m_scene->getObject(objectId)) return;
     m_axisPickId = objectId;
+    m_axisCandidate = {};
     setFocus();
+    setCursor(Qt::CrossCursor);
     update();
 }
 
 void Viewport::cancelAxisPick(){
     if(m_axisPickId == -1) return;
     m_axisPickId = -1;
+    m_axisCandidate = {};
+    setCursor(Qt::ArrowCursor);
     update();
+}
+
+const MeshFeatures* Viewport::featuresFor(const SceneObject& obj){
+    if(obj.type == PrimitiveType::ImportedMesh){
+        if(!obj.mesh || obj.mesh->interleaved.empty()) return nullptr;
+        FeatureCache& cache = m_meshFeatures[obj.mesh.get()];
+        if(!cache.features || cache.geometry.expired()){
+            cache.geometry = obj.mesh;
+            cache.features = std::make_unique<MeshFeatures>(obj.mesh->interleaved);
+        }
+        return cache.features.get();
+    }
+    const int k = int(obj.type);
+    if(!m_primitiveFeatures[k] && !m_primitiveVertices[k].empty())
+        m_primitiveFeatures[k] = std::make_unique<MeshFeatures>(m_primitiveVertices[k]);
+    return m_primitiveFeatures[k].get();
+}
+
+bool Viewport::toScreen(const QVector3D& world, QPointF* out) const {
+    const float aspect = float(m_vpW) / float(std::max(m_vpH, 1));
+    const QVector4D clip = m_camera.projectionMatrix(aspect) * m_camera.viewMatrix() * QVector4D(world, 1.0f);
+    if(clip.w() <= 1e-6f) return false;
+    *out = QPointF((clip.x() / clip.w() + 1.0f) * 0.5f * m_vpW, (1.0f - clip.y() / clip.w()) * 0.5f * m_vpH);
+    return true;
+}
+
+// Whether a ray from `o` along `d` meets the box (an origin inside counts)
+static bool rayMeetsBox(const QVector3D& o, const QVector3D& d, const QVector3D& mn, const QVector3D& mx){
+    float tMin = 0.0f, tMax = std::numeric_limits<float>::max();
+    for(int i = 0; i < 3; ++i){
+        if(std::abs(d[i]) < 1e-12f){ if(o[i] < mn[i] || o[i] > mx[i]) return false; continue; }
+        float t1 = (mn[i] - o[i]) / d[i], t2 = (mx[i] - o[i]) / d[i];
+        if(t1 > t2) std::swap(t1, t2);
+        tMin = std::max(tMin, t1);
+        tMax = std::min(tMax, t2);
+        if(tMin > tMax) return false;
+    }
+    return true;
+}
+
+static float distanceToSegment(const QPointF& p, const QPointF& a, const QPointF& b){
+    const QPointF ab = b - a;
+    const double len2 = QPointF::dotProduct(ab, ab);
+    const double t = len2 > 0 ? std::clamp(QPointF::dotProduct(p - a, ab) / len2, 0.0, 1.0) : 0.0;
+    const QPointF d = p - (a + ab * t);
+    return float(std::hypot(d.x(), d.y()));
+}
+
+void Viewport::updateAxisCandidate(int x, int y){
+    AxisCandidate found;
+    const bool overGizmo = m_scene->selectedObjectId() == m_axisPickId && hitTestGizmoAxis(x, y) != -1;
+    const float aspect = float(m_vpW) / float(std::max(m_vpH, 1));
+    QVector3D orig, dir;
+    m_camera.ray((2.0f * x) / m_vpW - 1.0f, 1.0f - (2.0f * y) / m_vpH, aspect, &orig, &dir);
+
+    // Nearest triangle under the cursor over every part
+    int hitTri = -1;
+    float bestT = std::numeric_limits<float>::max();
+    for(auto& [id, obj] : m_scene->allObjects()){
+        if(overGizmo) break;
+        const MeshFeatures* features = featuresFor(obj);
+        if(!features) continue;
+        const QMatrix4x4 wt = m_scene->worldTransform(id);
+        bool invertible = false;
+        const QMatrix4x4 inv = wt.inverted(&invertible);
+        if(!invertible) continue;
+        const QVector3D lo = inv.map(orig), ld = inv.mapVector(dir);
+        if(!rayMeetsBox(lo, ld, obj.aabbMin(), obj.aabbMax())) continue;
+        float t;
+        const int tri = features->intersect(lo, ld, &t);
+        if(tri == -1) continue;
+        const float worldT = QVector3D::dotProduct(wt.map(lo + ld * t) - orig, dir);
+        if(worldT < bestT){ bestT = worldT; hitTri = tri; found.objectId = id; }
+    }
+
+    if(found.objectId != -1){
+        const SceneObject* obj = m_scene->getObject(found.objectId);
+        const MeshFeatures* features = featuresFor(*obj);
+        const QMatrix4x4 wt = m_scene->worldTransform(found.objectId);
+
+        // An edge of the hovered face near the cursor wins over the face itself
+        const AxisFeature* pick = nullptr;
+        float nearest = 8.0f;   // px
+        for(const AxisFeature* edge : features->edgesAround(hitTri)){
+            for(size_t i = 0; i + 1 < edge->outline.size(); i += 2){
+                QPointF a, b;
+                if(!toScreen(wt.map(edge->outline[i]), &a) || !toScreen(wt.map(edge->outline[i + 1]), &b)) continue;
+                const float d = distanceToSegment(QPointF(x, y), a, b);
+                if(d < nearest){ nearest = d; pick = edge; }
+            }
+        }
+        const AxisFeature& face = features->faceFeature(hitTri);
+        if(!pick) pick = &face;   // possibly kind None: outlined, but not pickable
+
+        found.kind = pick->kind;
+        found.origin = wt.map(pick->origin);
+        // Circle and face normals transform as normals, edge and cylinder
+        // directions as directions (they differ under non-uniform scale)
+        const bool isNormal = pick->kind == AxisFeature::Kind::CircularEdge || pick->kind == AxisFeature::Kind::FlatFace;
+        found.axis = (isNormal ? wt.inverted().transposed().mapVector(pick->axis) : wt.mapVector(pick->axis)).normalized();
+        const QVector3D across = QVector3D::crossProduct(pick->axis, std::abs(pick->axis.x()) < 0.9f
+                                                                         ? QVector3D(1, 0, 0) : QVector3D(0, 1, 0)).normalized();
+        found.radius = pick->radius * wt.mapVector(across).length();
+        // The sign is arbitrary: point towards the viewer, so positive
+        // rotation turns counter-clockwise on screen (right-hand rule)
+        const QVector3D toViewer = m_camera.projection() == Camera::Projection::Orthographic
+                                       ? -m_camera.forward() : (m_camera.position() - found.origin).normalized();
+        const float facing = QVector3D::dotProduct(found.axis, toViewer);
+        if(facing < -1e-3f) found.axis = -found.axis;
+        else if(std::abs(facing) <= 1e-3f){
+            int major = 0;
+            for(int i = 1; i < 3; ++i) if(std::abs(found.axis[i]) > std::abs(found.axis[major])) major = i;
+            if(found.axis[major] < 0) found.axis = -found.axis;
+        }
+        found.outline.reserve(pick->outline.size());
+        for(const QVector3D& p : pick->outline) found.outline.push_back(wt.map(p));
+    }
+
+    m_axisCandidate = std::move(found);
+    update();
+}
+
+static bool isInSubtree(const SceneGraph* scene, int id, int root){
+    for(const SceneObject* o = scene->getObject(id); o; o = scene->getObject(o->parentId))
+        if(o->id == root) return true;
+    return false;
+}
+
+void Viewport::commitAxisCandidate(){
+    const AxisCandidate c = m_axisCandidate;
+    const SceneObject* child = m_scene->getObject(m_axisPickId);
+    if(!child || c.objectId == -1 || c.kind == AxisFeature::Kind::None) return;
+
+    QVector3D origin = c.origin, axis = c.axis;
+    QMatrix4x4 parentWorld;
+    if(child->parentId != -1) parentWorld = m_scene->worldTransform(child->parentId);
+    // Geometry on the moving side is seen in its jogged pose: take the joint's
+    // own motion back out so the axis lands where that geometry is at zero
+    const Joint* joint = m_scene->jointForChild(m_axisPickId);
+    if(joint && isInSubtree(m_scene, c.objectId, m_axisPickId)){
+        const QMatrix4x4 rest = parentWorld * SceneGraph::jointMotion(*joint).inverted() * parentWorld.inverted();
+        origin = rest.map(origin);
+        axis   = rest.mapVector(axis);
+    }
+    const QMatrix4x4 toParent = parentWorld.inverted();
+    const int pickedId = m_axisPickId;
+    cancelAxisPick();
+    emit axisPicked(pickedId, toParent.mapVector(axis).normalized(), toParent.map(origin), true);
+}
+
+// Filled arrowhead with its point at `tip`, pointing along `direction`
+static void drawArrowHead(QPainter& p, const QPointF& tip, QPointF direction, double size){
+    const double len = std::hypot(direction.x(), direction.y());
+    if(len < 1e-6) return;
+    direction /= len;
+    const QPointF side(-direction.y(), direction.x());
+    const QPointF back = tip - direction * size;
+    p.drawPolygon(QPolygonF{tip, back + side * (size * 0.45), back - side * (size * 0.45)});
+}
+
+// An arrow from `origin` along `axis` over a dashed line marking the axis;
+// revolute joints also get a curled arrow around it showing which way
+// positive rotation turns (right-hand rule: thumb along the arrow)
+void Viewport::drawAxisArrow(QPainter& p, const QVector3D& origin, const QVector3D& axis, bool revolute,
+                             const QColor& color){
+    const float length = 90.0f * m_camera.worldPerPixel(origin, float(m_vpH));
+    QPointF o, tip, lineFrom, lineTo;
+    if(!toScreen(origin, &o) || !toScreen(origin + axis * length, &tip) ||
+       !toScreen(origin - axis * (length * 0.8f), &lineFrom) || !toScreen(origin + axis * (length * 1.5f), &lineTo))
+        return;
+
+    p.save();
+    p.setRenderHint(QPainter::Antialiasing);
+    QColor halo = Theme::colors().viewport;
+    halo.setAlpha(200);
+    p.setPen(QPen(color, 1.2, Qt::DashLine));
+    p.drawLine(lineFrom, lineTo);
+    for(const QPen& pen : {QPen(halo, 5.0, Qt::SolidLine, Qt::RoundCap), QPen(color, 2.4, Qt::SolidLine, Qt::RoundCap)}){
+        p.setPen(pen);
+        p.drawLine(o, tip);
+    }
+    p.setPen(Qt::NoPen);
+    p.setBrush(color);
+    drawArrowHead(p, tip, tip - o, 12);
+    p.drawEllipse(o, 3.5, 3.5);
+
+    if(revolute){
+        const QVector3D u = QVector3D::crossProduct(axis, std::abs(axis.x()) < 0.9f ? QVector3D(1, 0, 0)
+                                                                                    : QVector3D(0, 1, 0)).normalized();
+        const QVector3D v = QVector3D::crossProduct(axis, u);   // u → v turns positively about axis
+        const QVector3D center = origin + axis * (length * 0.6f);
+        const float r = length * 0.3f;
+        constexpr int kSteps = 40;
+        constexpr float kSweep = 300.0f * float(M_PI) / 180.0f;
+        QPolygonF arc;
+        for(int i = 0; i <= kSteps; ++i){
+            const float a = kSweep * i / kSteps;
+            QPointF s;
+            if(toScreen(center + (u * std::cos(a) + v * std::sin(a)) * r, &s)) arc << s;
+        }
+        if(arc.size() > 2){
+            p.setBrush(Qt::NoBrush);
+            for(const QPen& pen : {QPen(halo, 4.5, Qt::SolidLine, Qt::RoundCap), QPen(color, 2.0, Qt::SolidLine, Qt::RoundCap)}){
+                p.setPen(pen);
+                p.drawPolyline(arc);
+            }
+            p.setPen(Qt::NoPen);
+            p.setBrush(color);
+            drawArrowHead(p, arc.last(), arc.last() - arc[arc.size() - 3], 10);
+        }
+    }
+    p.restore();
+}
+
+void Viewport::drawJointAxes(QPainter& p){
+    const Theme::Colors& c = Theme::colors();
+
+    // The selected part's joint, as it is now
+    const int selId = m_scene->selectedObjectId();
+    const SceneObject* sel = m_scene->getObject(selId);
+    if(const Joint* joint = sel ? m_scene->jointForChild(selId) : nullptr){
+        QMatrix4x4 parentWorld;
+        if(sel->parentId != -1) parentWorld = m_scene->worldTransform(sel->parentId);
+        const QVector3D origin = joint->type == JointType::Revolute
+                                     ? parentWorld.map(joint->pivot) : m_scene->worldTransform(selId).map(QVector3D());
+        const QVector3D axis = parentWorld.mapVector(joint->axis).normalized();
+        if(!axis.isNull()){
+            QColor col = c.warning;
+            if(m_axisPickId != -1) col.setAlpha(110);   // the candidate is what matters now
+            drawAxisArrow(p, origin, axis, joint->type == JointType::Revolute, col);
+        }
+    }
+
+    if(m_axisPickId == -1 || m_axisCandidate.objectId == -1) return;
+    const AxisCandidate& cand = m_axisCandidate;
+    const bool usable = cand.kind != AxisFeature::Kind::None;
+
+    // Outline the edge or face the axis comes from
+    p.save();
+    p.setRenderHint(QPainter::Antialiasing);
+    QColor outline = usable ? c.info : c.muted;
+    p.setPen(QPen(outline, usable ? 3.0 : 1.5, Qt::SolidLine, Qt::RoundCap));
+    for(size_t i = 0; i + 1 < cand.outline.size(); i += 2){
+        QPointF a, b;
+        if(toScreen(cand.outline[i], &a) && toScreen(cand.outline[i + 1], &b)) p.drawLine(a, b);
+    }
+    p.restore();
+
+    const Joint* joint = m_scene->jointForChild(m_axisPickId);
+    if(usable) drawAxisArrow(p, cand.origin, cand.axis, !joint || joint->type == JointType::Revolute, c.info);
+
+    QString label;
+    const QString diameter = QString("Ø %1 mm").arg(double(cand.radius) * 2000.0, 0, 'f', 1);
+    switch(cand.kind){
+        case AxisFeature::Kind::CircularEdge:    label = "Circular edge · " + diameter + " · centre line";   break;
+        case AxisFeature::Kind::CylindricalFace: label = "Cylindrical face · " + diameter + " · centre line"; break;
+        case AxisFeature::Kind::StraightEdge:    label = "Straight edge · along the edge";                   break;
+        case AxisFeature::Kind::FlatFace:        label = "Flat face · normal through its centre";            break;
+        case AxisFeature::Kind::None:            label = "No axis on this face — try a round edge or cylinder"; break;
+    }
+    QFont f = font(); f.setPointSize(8); f.setBold(true);
+    p.setFont(f);
+    drawPill(p, QPointF(m_lastMouse) + QPointF(16, 14), label, usable ? c.info : QColor());
 }

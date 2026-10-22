@@ -46,6 +46,7 @@
         <file alias="icons/hourglass.svg">resources/icons/hourglass.svg</file>
         <file alias="icons/house.svg">resources/icons/house.svg</file>
         <file alias="icons/maximize.svg">resources/icons/maximize.svg</file>
+        <file alias="icons/arrow-left-right.svg">resources/icons/arrow-left-right.svg</file>
         <file alias="icons/info.svg">resources/icons/info.svg</file>
         <file alias="icons/layout-template.svg">resources/icons/layout-template.svg</file>
         <file alias="icons/list-ordered.svg">resources/icons/list-ordered.svg</file>

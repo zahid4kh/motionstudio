@@ -9,7 +9,9 @@
 #include <QSet>
 #include <QStringList>
 #include <unordered_map>
+#include <memory>
 #include "Camera.h"
+#include "MeshFeatures.h"
 #include "LightingPanel.h"
 #include "../scene/SceneGraph.h"
 
@@ -34,10 +36,11 @@ public:
     // Frames every object, keeping the view direction
     void fitAll();
 
-    // Axis-pick mode: click one of the translate gizmo's arrows (drawn along
-    // world X/Y/Z at the object's origin) to set a joint's rotation axis
-    // instead of dragging. No isolation needed — the gizmo is already shown
-    // for the selected object.
+    // Axis-pick mode for the joint of `objectId`: hovering any part shows the
+    // axis its geometry defines (round edge or cylindrical face → centre line,
+    // straight edge → the edge, flat face → its normal) and a click sets the
+    // joint's axis and rotation origin. Clicking one of the translate gizmo's
+    // arrows still picks that world axis, keeping the origin.
     void beginAxisPick(int objectId);
     void cancelAxisPick();
 
@@ -47,7 +50,8 @@ public:
 
 signals:
     void keyPointSelected(const QString& name, const QVector3D& worldPos);
-    void axisPicked(int objectId, const QVector3D& localAxis);
+    // Axis (and, when `setPivot`, rotation origin) in the parent's local frame
+    void axisPicked(int objectId, const QVector3D& localAxis, const QVector3D& localPivot, bool setPivot);
 
 protected:
     void initializeGL()          override;
@@ -86,6 +90,11 @@ private:
     void drawPhysicsOverlays();
     void drawKeyPoints (QPainter& p);
     void drawAxisPickBanner(QPainter& p);
+    // The selected object's joint axis and, in axis-pick mode, the hovered candidate
+    void drawJointAxes(QPainter& p);
+    void drawAxisArrow(QPainter& p, const QVector3D& origin, const QVector3D& axis, bool revolute,
+                       const QColor& color);
+    bool toScreen(const QVector3D& world, QPointF* out) const;
     void drawWireLines(const std::vector<float>& verts, const QVector3D& color,
                        const QMatrix4x4& model, float alpha = 1.0f);
     void repositionOverlays();
@@ -137,6 +146,28 @@ private:
 
     // Axis-pick mode (see beginAxisPick/cancelAxisPick)
     int          m_axisPickId     = -1;
+    // The axis under the cursor, in world space (objectId -1: nothing hovered)
+    struct AxisCandidate {
+        int objectId = -1;
+        AxisFeature::Kind kind = AxisFeature::Kind::None;
+        QVector3D origin, axis;
+        float radius = 0.0f;
+        std::vector<QVector3D> outline;
+    };
+    AxisCandidate m_axisCandidate;
+    void updateAxisCandidate(int x, int y);
+    void commitAxisCandidate();
+
+    // Faces and edges recognised on each part's mesh, built on first use.
+    // The weak pointer notices a freed geometry whose address was reused.
+    struct FeatureCache {
+        std::weak_ptr<MeshGeometry>   geometry;
+        std::unique_ptr<MeshFeatures> features;
+    };
+    std::unordered_map<const MeshGeometry*, FeatureCache> m_meshFeatures;
+    std::vector<float>            m_primitiveVertices[6];   // by PrimitiveType, kept by make*()
+    std::unique_ptr<MeshFeatures> m_primitiveFeatures[6];
+    const MeshFeatures* featuresFor(const SceneObject& obj);
 
     // Gizmo: set in drawAxisGizmo(), read in drawAxisLabels()
     QMatrix4x4 m_gizmoView, m_gizmoProj;

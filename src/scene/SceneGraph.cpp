@@ -364,18 +364,24 @@ QMatrix4x4 SceneGraph::worldTransform(int id) const {
     QMatrix4x4 jointT;
     for (auto& [jid, joint] : m_joints) {
         if (joint.childBodyId == id) {
-            if (joint.type == JointType::Revolute) {
-                jointT.translate(joint.pivot);
-                jointT.rotate(joint.currentValue, joint.axis);
-                jointT.translate(-joint.pivot);
-            } else {
-                jointT.translate(joint.axis * joint.currentValue);
-            }
+            jointT = jointMotion(joint);
             break;
         }
     }
 
     return worldTransform(obj->parentId) * jointT * local;
+}
+
+QMatrix4x4 SceneGraph::jointMotion(const Joint& joint) {
+    QMatrix4x4 m;
+    if (joint.type == JointType::Revolute) {
+        m.translate(joint.pivot);
+        m.rotate(joint.currentValue, joint.axis);
+        m.translate(-joint.pivot);
+    } else {
+        m.translate(joint.axis * joint.currentValue);
+    }
+    return m;
 }
 
 void SceneGraph::addRigidBody(int objectId) {

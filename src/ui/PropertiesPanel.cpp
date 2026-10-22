@@ -4,6 +4,7 @@
 #include <QFormLayout>
 #include <QScrollArea>
 #include <QInputDialog>
+#include <cmath>
 #include "Theme.h"
 #include "PrimitiveIcons.h"
 
@@ -309,12 +310,25 @@ void PropertiesPanel::buildJointSection() {
     m_jAxisX = makeSpin(-1, 1, 0.1f);
     m_jAxisY = makeSpin(-1, 1, 0.1f);
     m_jAxisZ = makeSpin(-1, 1, 0.1f);
+    for (auto* s : {m_jAxisX, m_jAxisY, m_jAxisZ}) {
+        s->setDecimals(4);   // picked axes are rarely round numbers
+        s->setToolTip("Joint axis in the parent's frame");
+    }
     m_jAxisY->setValue(1);
     vb->addLayout(xyzRow("Axis", m_jAxisX, m_jAxisY, m_jAxisZ));
 
-    m_jPickAxisBtn = iconButton("crosshair", "Pick Axis in 3D…");
-    m_jPickAxisBtn->setToolTip("Click one of the gizmo's arrows on the selected part to set this axis");
-    vb->addWidget(m_jPickAxisBtn);
+    m_jPickAxisBtn = iconButton("crosshair", "Pick Axis on Model…");
+    m_jPickAxisBtn->setToolTip("Click a round edge or cylindrical face (its centre line), a straight edge, or a "
+                               "flat face (its normal) on any part. Sets the axis and the rotation origin.\n"
+                               "Clicking one of the gizmo's arrows picks that world axis instead.");
+    m_jFlipAxisBtn = iconButton("arrow-left-right", "Flip");
+    m_jFlipAxisBtn->setToolTip("Reverse the axis, so positive values turn (or slide) the other way");
+    {
+        auto* row = new QHBoxLayout;
+        row->addWidget(m_jPickAxisBtn, 1);
+        row->addWidget(m_jFlipAxisBtn);
+        vb->addLayout(row);
+    }
 
     // Suffix "°" for revolute, " m" for prismatic — set in updateJointUnits()
     m_jLimitMin  = makeSpin(-1e4, 1e4, 1.0f, "°"); m_jLimitMin->setValue(-180);
@@ -382,6 +396,12 @@ void PropertiesPanel::buildJointSection() {
     connect(m_jAxisY,     &QDoubleSpinBox::valueChanged,    this, &PropertiesPanel::onJointEdited);
     connect(m_jAxisZ,     &QDoubleSpinBox::valueChanged,    this, &PropertiesPanel::onJointEdited);
     connect(m_jPickAxisBtn, &QPushButton::clicked, this, &PropertiesPanel::pickAxisRequested);
+    connect(m_jFlipAxisBtn, &QPushButton::clicked, this, [this]{
+        Joint* j = m_scene->jointForChild(m_currentId);
+        if (!j) return;
+        j->axis = -j->axis;
+        emit m_scene->objectChanged(m_currentId);
+    });
     connect(m_jLimitMin,  &QDoubleSpinBox::valueChanged,    this, &PropertiesPanel::onJointEdited);
     connect(m_jLimitMax,  &QDoubleSpinBox::valueChanged,    this, &PropertiesPanel::onJointEdited);
     connect(m_jInitAngle, &QDoubleSpinBox::valueChanged,    this, &PropertiesPanel::onJointEdited);
@@ -841,12 +861,18 @@ void PropertiesPanel::onJointEdited() {
     if (!j) return;
     j->type = m_jType->currentIndex() == 0 ? JointType::Revolute : JointType::Prismatic;
     const double f = (j->type == JointType::Revolute) ? 1.0 : unitFactor();
-    j->axis         = { float(m_jAxisX->value()), float(m_jAxisY->value()), float(m_jAxisZ->value()) };
+    // A field still showing the stored value rounded keeps the exact stored
+    // value, so editing one field doesn't round away a picked axis or origin
+    auto read = [](float stored, const QDoubleSpinBox* s, double factor) {
+        const double shown = std::round(stored * factor * std::pow(10.0, s->decimals())) / std::pow(10.0, s->decimals());
+        return std::abs(shown - s->value()) < 1e-9 ? stored : float(s->value() / factor);
+    };
+    j->axis         = { read(j->axis.x(), m_jAxisX, 1.0), read(j->axis.y(), m_jAxisY, 1.0), read(j->axis.z(), m_jAxisZ, 1.0) };
     j->limitMin     = float(m_jLimitMin->value() / f);
     j->limitMax     = float(m_jLimitMax->value() / f);
     j->initialAngle = float(m_jInitAngle->value() / f);
     const double lf = unitFactor();  // pivot is always a length quantity, regardless of joint type
-    j->pivot        = { float(m_jPivotX->value() / lf), float(m_jPivotY->value() / lf), float(m_jPivotZ->value() / lf) };
+    j->pivot        = { read(j->pivot.x(), m_jPivotX, lf), read(j->pivot.y(), m_jPivotY, lf), read(j->pivot.z(), m_jPivotZ, lf) };
     j->continuous   = m_jContinuous->isChecked();
     bool isRevolute = (j->type == JointType::Revolute);
     m_jLimitMin->setEnabled(!(isRevolute && j->continuous));
