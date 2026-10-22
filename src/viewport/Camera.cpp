@@ -1,73 +1,115 @@
 #include "Camera.h"
 #include <QtMath>
 #include <algorithm>
+#include <cmath>
+
+namespace {
+constexpr float kOrbitDegreesPerPixel = 0.5f;
+constexpr float kMinDistance = 0.05f;
+constexpr float kMaxDistance = 500.0f;
+constexpr float kZoomFactorPerStep = 0.9f;
+// How far in front of and behind the target an orthographic view sees
+constexpr float kOrthoDepth = 1000.0f;
+} // namespace
 
 Camera::Camera() { reset(); }
 
-void Camera::orbit(float dx, float dy) {
-    m_azimuth   -= dx * 0.5f;   // negate: drag right → camera orbits left (scene follows right)
-    m_elevation += dy * 0.5f;
-    m_elevation  = std::clamp(m_elevation, -89.0f, 89.0f);
+QQuaternion Camera::lookRotation(const QVector3D& back, const QVector3D& up) {
+    const QVector3D b = back.normalized();
+    QVector3D u = up - b * QVector3D::dotProduct(up, b);
+    if (u.lengthSquared() < 1e-12f)   // up along back: any perpendicular will do
+        u = std::abs(b.y()) < 0.9f ? QVector3D(0, 1, 0) - b * b.y() : QVector3D(0, 0, -1) + b * b.z();
+    u.normalize();
+    return QQuaternion::fromAxes(QVector3D::crossProduct(u, b), u, b);
 }
 
-void Camera::pan(float dx, float dy) {
-    QMatrix4x4 v = viewMatrix();
-    QVector3D right(v.row(0).x(), v.row(0).y(), v.row(0).z());
-    QVector3D up   (v.row(1).x(), v.row(1).y(), v.row(1).z());
-    float speed = m_distance * 0.002f;
-    m_target -= right * dx * speed;
-    m_target += up    * dy * speed;
-}
-
-void Camera::zoom(float delta) {
-    m_distance -= delta * m_distance * 0.1f;
-    m_distance  = std::max(0.5f, m_distance);
+QQuaternion Camera::homeRotation() {
+    return lookRotation(QVector3D(1, 1, 1), QVector3D(0, 1, 0));
 }
 
 void Camera::reset() {
-    m_target    = {0, 0, 0};
-    m_distance  = 10.0f;
-    m_azimuth   = 45.0f;
-    m_elevation = 30.0f;
+    m_target   = {0, 0, 0};
+    m_distance = 10.0f;
+    m_rotation = homeRotation();
 }
 
-void Camera::setView(float az, float el) {
-    m_azimuth   = az;
-    m_elevation = std::clamp(el, -89.0f, 89.0f);
+QVector3D Camera::forward() const { return -m_rotation.rotatedVector(QVector3D(0, 0, 1)); }
+QVector3D Camera::right()   const { return  m_rotation.rotatedVector(QVector3D(1, 0, 0)); }
+QVector3D Camera::up()      const { return  m_rotation.rotatedVector(QVector3D(0, 1, 0)); }
+
+QVector3D Camera::position() const {
+    return m_target - forward() * m_distance;
+}
+
+void Camera::setDistance(float d) {
+    m_distance = std::clamp(d, kMinDistance, kMaxDistance);
+}
+
+void Camera::orbit(float dx, float dy) {
+    m_rotation = (QQuaternion::fromAxisAndAngle(QVector3D(0, 1, 0), -dx * kOrbitDegreesPerPixel) * m_rotation)
+                     .normalized();
+    float pitch = dy * kOrbitDegreesPerPixel;   // positive raises the eye
+    const QVector3D r = right(), u = up(), back = -forward();
+    // An upright camera (not rolled, not upside down) stops at straight
+    // above / below instead of tipping over.
+    if (std::abs(r.y()) < 1e-3f && u.y() > -1e-3f) {
+        const float elevation = qRadiansToDegrees(std::asin(std::clamp(back.y(), -1.0f, 1.0f)));
+        pitch = std::clamp(pitch, -90.0f - elevation, 90.0f - elevation);
+    }
+    m_rotation = (QQuaternion::fromAxisAndAngle(r, -pitch) * m_rotation).normalized();
+}
+
+void Camera::pan(float dx, float dy, float viewportHeight) {
+    if (viewportHeight <= 0.0f) return;
+    // World units per pixel on the plane through the target
+    const float wpp = 2.0f * m_distance * std::tan(qDegreesToRadians(kFov) * 0.5f) / viewportHeight;
+    m_target += (-right() * dx + up() * dy) * wpp;
+}
+
+void Camera::zoomAt(float steps, float ndcX, float ndcY, float aspect) {
+    const float halfHeight = std::tan(qDegreesToRadians(kFov) * 0.5f);
+    // Offset of the cursor's point on the plane through the target, per unit
+    // of distance (the same for both projections)
+    const QVector3D offsetPerUnit = right() * (ndcX * halfHeight * aspect) + up() * (ndcY * halfHeight);
+    const float newDistance = std::clamp(m_distance * std::pow(kZoomFactorPerStep, steps),
+                                         kMinDistance, kMaxDistance);
+    m_target  += offsetPerUnit * (m_distance - newDistance);
+    m_distance = newDistance;
 }
 
 void Camera::frame(const QVector3D& center, float radius) {
-    m_target   = center;
-    radius     = std::max(radius, 0.05f);
+    m_target = center;
+    radius   = std::max(radius, 0.05f);
     // Distance so the bounding sphere fits comfortably within the vertical FOV.
-    m_distance = (radius / qSin(qDegreesToRadians(m_fov * 0.5f))) * 1.35f;
-}
-
-QVector3D Camera::position() const {
-    float el = qDegreesToRadians(m_elevation);
-    float az = qDegreesToRadians(m_azimuth);
-    return m_target + QVector3D(
-        m_distance * qCos(el) * qSin(az),
-        m_distance * qSin(el),
-        m_distance * qCos(el) * qCos(az)
-    );
+    setDistance(radius / std::sin(qDegreesToRadians(kFov * 0.5f)) * 1.2f);
 }
 
 QMatrix4x4 Camera::viewMatrix() const {
     QMatrix4x4 v;
-    v.lookAt(position(), m_target, {0, 1, 0});
+    v.lookAt(position(), m_target, up());
     return v;
 }
 
 QMatrix4x4 Camera::projectionMatrix(float aspect) const {
     QMatrix4x4 p;
-    p.perspective(m_fov, aspect, m_near, m_far);
+    if (m_projection == Projection::Orthographic) {
+        const float h = m_distance * std::tan(qDegreesToRadians(kFov) * 0.5f);
+        // Depth is measured from the eye, which sits m_distance in front of the target
+        p.ortho(-h * aspect, h * aspect, -h, h, m_distance - kOrthoDepth, m_distance + kOrthoDepth);
+    } else {
+        p.perspective(kFov, aspect, std::clamp(m_distance * 0.01f, 0.005f, 0.1f), 1000.0f);
+    }
     return p;
 }
 
-QVector3D Camera::rayFromNDC(float ndcX, float ndcY, float aspect) const {
-    QMatrix4x4 invVP = (projectionMatrix(aspect) * viewMatrix()).inverted();
-    QVector4D nearPt = invVP * QVector4D(ndcX, ndcY, -1.0f, 1.0f);
-    QVector4D farPt  = invVP * QVector4D(ndcX, ndcY,  1.0f, 1.0f);
-    return (farPt.toVector3DAffine() - nearPt.toVector3DAffine()).normalized();
+void Camera::ray(float ndcX, float ndcY, float aspect, QVector3D* origin, QVector3D* dir) const {
+    const float halfHeight = std::tan(qDegreesToRadians(kFov) * 0.5f);
+    const QVector3D offset = right() * (ndcX * halfHeight * aspect) + up() * (ndcY * halfHeight);
+    if (m_projection == Projection::Orthographic) {
+        *dir    = forward();
+        *origin = m_target + offset * m_distance - forward() * kOrthoDepth;
+    } else {
+        *origin = position();
+        *dir    = (forward() + offset).normalized();
+    }
 }

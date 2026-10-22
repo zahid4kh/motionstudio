@@ -1,5 +1,7 @@
 #include "Viewport.h"
 #include "ui/Theme.h"
+#include "ViewCube.h"
+#include <QVariantAnimation>
 #include <QLabel>
 #include <QMouseEvent>
 #include <QWheelEvent>
@@ -272,14 +274,45 @@ Viewport::Viewport(SceneGraph* scene, QWidget* parent)
     m_btnFloor->setProperty("active", true);
     m_btnFloor->raise();
 
+    m_btnFront->setToolTip("Look at the front (along -Z)");
+    m_btnTop->setToolTip("Look straight down from the top");
+    m_btnSide->setToolTip("Look at the right side (along -X)");
     connect(m_btnFront, &QPushButton::clicked, this, [this]{
-        m_camera.setView(0.0f, 0.0f); update();
+        animateTo(Camera::lookRotation({0, 0, 1}, {0, 1, 0}), true);
     });
     connect(m_btnTop, &QPushButton::clicked, this, [this]{
-        m_camera.setView(0.0f, 89.0f); update();
+        animateTo(Camera::lookRotation({0, 1, 0}, {0, 0, -1}), true);
     });
     connect(m_btnSide, &QPushButton::clicked, this, [this]{
-        m_camera.setView(90.0f, 0.0f); update();
+        animateTo(Camera::lookRotation({1, 0, 0}, {0, 1, 0}), true);
+    });
+
+    // View cube (top right): click a face / edge / corner to turn there,
+    // drag it to orbit, the house goes back to the home view
+    m_viewCube = new ViewCube(this);
+    m_viewCube->setCameraRotation(m_camera.rotation());
+    connect(m_viewCube, &ViewCube::rotationRequested, this, &Viewport::animateTo);
+    connect(m_viewCube, &ViewCube::homeRequested, this, [this]{
+        animateTo(Camera::homeRotation(), true);
+    });
+    connect(m_viewCube, &ViewCube::orbitRequested, this, [this](float dx, float dy){
+        m_viewAnimation->stop();
+        m_camera.orbit(dx, dy);
+        cameraChanged();
+    });
+    m_viewAnimation = new QVariantAnimation(this);
+    m_viewAnimation->setStartValue(0.0);
+    m_viewAnimation->setEndValue(1.0);
+    m_viewAnimation->setDuration(320);
+    m_viewAnimation->setEasingCurve(QEasingCurve::InOutCubic);
+    connect(m_viewAnimation, &QVariantAnimation::valueChanged, this, [this](const QVariant& value){
+        const float t = value.toFloat();
+        const Camera &a = m_animationFrom, &b = m_animationTo;
+        m_camera.setRotation(QQuaternion::slerp(a.rotation(), b.rotation(), t));
+        m_camera.setTarget(a.target() + (b.target() - a.target()) * t);
+        // Zoom at a constant rate: interpolate the distance's logarithm
+        m_camera.setDistance(a.distance() * std::pow(b.distance() / a.distance(), t));
+        cameraChanged();
     });
     connect(m_btnFloor, &QPushButton::clicked, this, [this]{
         bool now = !m_scene->floorEnabled();
@@ -374,6 +407,59 @@ void Viewport::repositionOverlays() {
     }
     m_btnFloor->move(m_vpW - m_btnFloor->width() - mg, mg);
     m_btnLight->move(m_btnFloor->x() - m_btnLight->width() - gap, mg);
+    m_viewCube->move(m_vpW - m_viewCube->width() - 2, m_btnFloor->y() + m_btnFloor->height() + gap);
+}
+
+// ── Camera ───────────────────────────────────────────────────────────────────
+
+void Viewport::setProjection(Camera::Projection projection) {
+    m_camera.setProjection(projection);
+    m_animationFrom.setProjection(projection);
+    m_animationTo.setProjection(projection);
+    cameraChanged();
+}
+
+void Viewport::animateTo(const QQuaternion& rotation, bool fit) {
+    m_viewAnimation->stop();
+    m_animationFrom = m_camera;
+    m_animationTo   = m_camera;
+    m_animationTo.setRotation(rotation);
+    if (fit) frameScene(&m_animationTo);
+    if (!isVisible()) {
+        m_camera = m_animationTo;
+        cameraChanged();
+        return;
+    }
+    m_viewAnimation->start();
+}
+
+void Viewport::cameraChanged() {
+    m_viewCube->setCameraRotation(m_camera.rotation());
+    update();
+}
+
+void Viewport::fitAll() {
+    m_viewAnimation->stop();
+    frameScene(&m_camera);
+    cameraChanged();
+}
+
+void Viewport::frameScene(Camera* camera) const {
+    constexpr float inf = std::numeric_limits<float>::max();
+    QVector3D lo(inf, inf, inf), hi(-inf, -inf, -inf);
+    for (auto& [id, obj] : m_scene->allObjects()) {
+        if (obj.type == PrimitiveType::ImportedMesh && !obj.mesh) continue;   // frames only
+        const QMatrix4x4 wt = m_scene->worldTransform(id);
+        const QVector3D mn = obj.aabbMin(), mx = obj.aabbMax();
+        for (int i = 0; i < 8; ++i) {
+            const QVector3D c = wt.map(QVector3D(i & 1 ? mx.x() : mn.x(), i & 2 ? mx.y() : mn.y(),
+                                                 i & 4 ? mx.z() : mn.z()));
+            lo = QVector3D(std::min(lo.x(), c.x()), std::min(lo.y(), c.y()), std::min(lo.z(), c.z()));
+            hi = QVector3D(std::max(hi.x(), c.x()), std::max(hi.y(), c.y()), std::max(hi.z(), c.z()));
+        }
+    }
+    if (lo.x() > hi.x()) { lo = QVector3D(-2, 0, -2); hi = QVector3D(2, 2, 2); }   // empty scene
+    camera->frame((lo + hi) / 2, (hi - lo).length() / 2);
 }
 
 void Viewport::paintGL() {
@@ -998,13 +1084,14 @@ float Viewport::projectOntoAxis(int axis, const QVector3D& center, int mx, int m
     float aspect = float(m_vpW) / float(std::max(m_vpH, 1));
     float ndcX = (2.0f * mx) / m_vpW - 1.0f;
     float ndcY = 1.0f - (2.0f * my) / m_vpH;
-    QVector3D rayOrig = m_camera.position();
-    QVector3D rayDir  = m_camera.rayFromNDC(ndcX, ndcY, aspect).normalized();
+    QVector3D rayOrig, rayDir;
+    m_camera.ray(ndcX, ndcY, aspect, &rayOrig, &rayDir);
 
     static const float kAxData[3][3] = {{1,0,0},{0,1,0},{0,0,1}};
     QVector3D axisDir(kAxData[axis][0], kAxData[axis][1], kAxData[axis][2]);
 
-    QVector3D toCam = (rayOrig - center).normalized();
+    QVector3D toCam = (m_camera.projection() == Camera::Projection::Orthographic
+                       ? -m_camera.forward() : m_camera.position() - center).normalized();
     // Plane normal = component of toCam perpendicular to axis (most camera-facing plane)
     QVector3D planeNorm = (toCam - axisDir * QVector3D::dotProduct(toCam, axisDir)).normalized();
     if (planeNorm.length() < 1e-6f) return 0.f;
@@ -1212,6 +1299,7 @@ void Viewport::drawKeyHints(QPainter& p){
         "RMB  Pan",
         "Scroll  Zoom",
         "Click  Select",
+        "F  Fit all",
     };
     QFont f = font();
     f.setPointSize(8);
@@ -1276,14 +1364,18 @@ static std::pair<int,float> pickNearest(SceneGraph* scene, const QVector3D& orig
 void Viewport::tryPickObject(int x, int y){
     float aspect=float(m_vpW)/float(std::max(m_vpH,1));
     float ndcX=(2.0f*x)/m_vpW-1.0f, ndcY=1.0f-(2.0f*y)/m_vpH;
-    auto [id,t]=pickNearest(m_scene, m_camera.position(), m_camera.rayFromNDC(ndcX,ndcY,aspect));
+    QVector3D orig, dir;
+    m_camera.ray(ndcX, ndcY, aspect, &orig, &dir);
+    auto [id,t]=pickNearest(m_scene, orig, dir);
     m_scene->selectObject(id);
 }
 
 void Viewport::updateHover(int x, int y){
     float aspect=float(m_vpW)/float(std::max(m_vpH,1));
     float ndcX=(2.0f*x)/m_vpW-1.0f, ndcY=1.0f-(2.0f*y)/m_vpH;
-    auto [id,t]=pickNearest(m_scene, m_camera.position(), m_camera.rayFromNDC(ndcX,ndcY,aspect));
+    QVector3D orig, dir;
+    m_camera.ray(ndcX, ndcY, aspect, &orig, &dir);
+    auto [id,t]=pickNearest(m_scene, orig, dir);
     if(id!=m_hoveredId){
         m_hoveredId=id;
         setCursor(id!=-1 ? Qt::PointingHandCursor : Qt::ArrowCursor);
@@ -1296,6 +1388,7 @@ void Viewport::updateHover(int x, int y){
 void Viewport::mousePressEvent(QMouseEvent* e){
     m_lastMouse=e->pos();
     m_dragBtn=e->button();
+    if(m_dragBtn!=Qt::LeftButton || (e->modifiers()&Qt::AltModifier)) m_viewAnimation->stop();   // orbiting or panning takes over
 
     if(m_axisPickId != -1){
         // Axis-pick mode: clicking a gizmo arrow commits its world direction
@@ -1399,13 +1492,13 @@ void Viewport::mouseMoveEvent(QMouseEvent* e){
     bool alt=e->modifiers()&Qt::AltModifier;
     if(m_dragBtn==Qt::MiddleButton || (m_dragBtn==Qt::LeftButton&&alt)){
         if(e->modifiers()&Qt::ShiftModifier)
-            m_camera.pan(delta.x(), delta.y());
+            m_camera.pan(delta.x(), delta.y(), float(m_vpH));
         else
             m_camera.orbit(delta.x(), delta.y());
-        update();
+        cameraChanged();
     } else if(m_dragBtn==Qt::RightButton){
-        m_camera.pan(delta.x(), delta.y());
-        update();
+        m_camera.pan(delta.x(), delta.y(), float(m_vpH));
+        cameraChanged();
     }
 }
 
@@ -1422,14 +1515,18 @@ void Viewport::mouseReleaseEvent(QMouseEvent* e){
 }
 
 void Viewport::wheelEvent(QWheelEvent* e){
-    m_camera.zoom(e->angleDelta().y()/120.0f);
-    update();
+    const QPointF pos = e->position();
+    m_viewAnimation->stop();
+    m_camera.zoomAt(e->angleDelta().y()/120.0f, float(2.0*pos.x()/m_vpW - 1.0), float(1.0 - 2.0*pos.y()/m_vpH),
+                    float(m_vpW)/float(std::max(m_vpH,1)));
+    cameraChanged();
 }
 
 void Viewport::keyPressEvent(QKeyEvent* e){
     if(e->key() == Qt::Key_Escape){
         if(m_axisPickId != -1){ cancelAxisPick(); return; }
     }
+    if(e->key() == Qt::Key_F && e->modifiers() == Qt::NoModifier){ fitAll(); return; }
     QOpenGLWidget::keyPressEvent(e);
 }
 

@@ -27,6 +27,7 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QSet>
+#include <QSettings>
 #include <functional>
 
 // ── Constructor ───────────────────────────────────────────────────────────────
@@ -176,6 +177,35 @@ void MainWindow::buildViewMenu() {
             a->setChecked(Theme::mode() == mode);
         });
     }
+
+    // Orthographic by default, as in CAD tools: Front / Top / Side are true 2D
+    // views. An app-wide preference, remembered like the theme.
+    auto* projections = view->addMenu(Theme::icon("box"), "&Projection");
+    auto* projectionGroup = new QActionGroup(projections);
+    const bool perspective = QSettings("MotionStudio", "MotionStudio")
+                                 .value("viewport/projection").toString() == "perspective";
+    m_viewport->setProjection(perspective ? Camera::Projection::Perspective : Camera::Projection::Orthographic);
+    const struct { const char* name; const char* tip; Camera::Projection projection; const char* key; } projectionModes[] = {
+        {"&Orthographic", "No foreshortening: sizes do not shrink with depth, so the Front, Top and Side "
+                          "views are flat 2D views", Camera::Projection::Orthographic, "orthographic"},
+        {"&Perspective",  "Farther things look smaller, as in a photo", Camera::Projection::Perspective, "perspective"},
+    };
+    for (const auto& m : projectionModes) {
+        QAction* a = projections->addAction(m.name, this, [this, projection = m.projection, key = m.key]{
+            m_viewport->setProjection(projection);
+            QSettings("MotionStudio", "MotionStudio").setValue("viewport/projection", QString(key));
+        });
+        a->setToolTip(m.tip);
+        a->setStatusTip(m.tip);
+        a->setCheckable(true);
+        a->setChecked(m_viewport->projection() == m.projection);
+        projectionGroup->addAction(a);
+    }
+    projections->setToolTipsVisible(true);
+    QAction* fit = view->addAction(Theme::icon("maximize"), "&Fit All", m_viewport, &Viewport::fitAll);
+    fit->setShortcut(Qt::Key_F);
+    fit->setShortcutContext(Qt::WidgetShortcut);   // the viewport handles F itself; shown here as a hint
+
     view->addSeparator();
     const struct { QDockWidget* dock; const char* icon; } panels[] = {
         {m_hierarchyDock,  "list-tree"},
@@ -438,6 +468,7 @@ bool MainWindow::openFile(const QString& path) {
         m_dirty = false;
         updateTitle();
         m_undo->reset();
+        m_viewport->fitAll();
         showStatus("Opened: " + QFileInfo(path).fileName());
         return true;
     }
@@ -465,6 +496,7 @@ void MainWindow::openTemplate() {
         m_dirty = false;
         updateTitle();
         m_undo->reset();
+        m_viewport->fitAll();
         showStatus("Template loaded — open the Automation panel (Ctrl+J) to see its logic, then press Play");
     } else {
         showStatus("Failed to load template", false);

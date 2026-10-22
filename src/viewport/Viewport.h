@@ -27,6 +27,13 @@ public:
 
     Camera& camera() { return m_camera; }
 
+    // Orthographic (no foreshortening: Front / Top / Side are flat 2D views)
+    // or perspective
+    void setProjection(Camera::Projection projection);
+    Camera::Projection projection() const { return m_camera.projection(); }
+    // Frames every object, keeping the view direction
+    void fitAll();
+
     // Axis-pick mode: click one of the translate gizmo's arrows (drawn along
     // world X/Y/Z at the object's origin) to set a joint's rotation axis
     // instead of dragging. No isolation needed — the gizmo is already shown
@@ -82,6 +89,12 @@ private:
     void drawWireLines(const std::vector<float>& verts, const QVector3D& color,
                        const QMatrix4x4& model, float alpha = 1.0f);
     void repositionOverlays();
+    // After every camera move: the view cube turns and the view repaints
+    void cameraChanged();
+    // Frames every object with the given camera (its rotation is kept)
+    void frameScene(Camera* camera) const;
+    // Animates the camera to `rotation`, framing everything too when `fit`
+    void animateTo(const QQuaternion& rotation, bool fit);
 
     void tryPickObject(int x, int y);
     void updateHover  (int x, int y);
@@ -90,6 +103,9 @@ private:
 
     SceneGraph*            m_scene;
     Camera                 m_camera;
+    class ViewCube*        m_viewCube = nullptr;
+    class QVariantAnimation* m_viewAnimation = nullptr;
+    Camera                 m_animationFrom, m_animationTo;
     QOpenGLShaderProgram*  m_objShader  = nullptr;
     QOpenGLShaderProgram*  m_gridShader = nullptr;
     QOpenGLShaderProgram*  m_wireShader = nullptr;
