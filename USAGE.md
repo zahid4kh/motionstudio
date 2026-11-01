@@ -61,6 +61,15 @@ The templates (**File › Open Template…**) are complete working examples. *Ro
 | Zoom   | Scroll wheel |
 | Select | Left click on object |
 
+### Viewport buttons (top right)
+
+| Button | Does |
+|--------|------|
+| **IK** | Dragging a robot tool's gizmo moves its joints by inverse kinematics instead of moving the part |
+| **Section** | Cuts the model with a plane (X, Y or Z, at a position you slide) to see inside assemblies; cut faces show in a flat colour. *Keep the other side* flips it |
+| **Lighting** | Ambient, key, fill and specular light and the light's direction, per theme |
+| **Floor** | Turns the floor collider on or off |
+
 ---
 
 ## Toolbar reference

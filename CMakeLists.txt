@@ -95,6 +95,7 @@ set(SOURCES
     src/viewport/Camera.cpp
     src/viewport/Viewport.cpp
     src/viewport/LightingPanel.cpp
+    src/viewport/SectionPanel.cpp
     src/viewport/ViewCube.cpp
     src/viewport/MeshFeatures.cpp
     src/ui/HierarchyPanel.cpp

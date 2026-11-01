@@ -13,6 +13,7 @@
 #include "Camera.h"
 #include "MeshFeatures.h"
 #include "LightingPanel.h"
+#include "SectionPanel.h"
 #include "../scene/SceneGraph.h"
 
 struct MeshData {
@@ -156,6 +157,12 @@ private:
     QPushButton* m_btnFloor  = nullptr;
     QPushButton* m_btnLight  = nullptr;
     QPushButton* m_btnIk     = nullptr;
+    QPushButton* m_btnSection = nullptr;
+    SectionPanel* m_sectionPanel = nullptr;
+    SectionPlane m_section;
+    void drawSectionOutline();
+    // World-space bounds of everything with geometry
+    void sceneBounds(QVector3D* min, QVector3D* max) const;
     bool         m_ikAvailable = true;
     bool ikDragActive() const;
 

@@ -12,6 +12,8 @@
 | Fit everything in view | F |
 | Front, Top or Side view | The buttons at the top of the viewport, or click a face of the view cube |
 | Cancel axis picking | Esc |
+| Move a robot tool by its joints (inverse kinematics) | Turn **IK** on, then drag the tool's gizmo |
+| Look inside an assembly | **Section**, then *Cut the model* |
 
 ## Application
 

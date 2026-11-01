@@ -4,6 +4,7 @@
 #include "scene/MeshWeld.h"
 #include "scene/PrimitiveMesh.h"
 #include "scene/SceneQuery.h"
+#include <QVector4D>
 #include "automation/Sensors.h"
 #include "automation/Kinematics.h"
 #include <QVariantAnimation>
@@ -55,8 +56,16 @@ uniform bool  isSelected;
 uniform bool  isHovered;
 uniform bool  isActive;
 uniform bool  isAlert;
+uniform bool  clipOn;
+uniform vec4  clipPlane;
+uniform vec3  sectionColor;
 out vec4 fragColor;
 void main(){
+    if(clipOn){
+        if(dot(vec4(fragPos, 1.0), clipPlane) < 0.0) discard;
+        // Through the cut we see the inside (back faces): fill it flat
+        if(!gl_FrontFacing){ fragColor = vec4(sectionColor, 1.0); return; }
+    }
     vec3 n = normalize(normal);
     vec3 l = normalize(keyDir);
     float diff = max(dot(n,l), 0.0);
@@ -352,6 +361,35 @@ Viewport::Viewport(SceneGraph* scene, QWidget* parent)
         Theme::repolish(m_btnIk);
         update();
     });
+    m_sectionPanel = new SectionPanel(this);
+    m_btnSection = new QPushButton(Theme::icon("scissors"), "Section", this);
+    m_btnSection->setObjectName("viewButton");
+    m_btnSection->setToolTip("Cut the model with a plane to see inside assemblies");
+    m_btnSection->setFixedSize(84, 26);
+    m_btnSection->setCursor(Qt::PointingHandCursor);
+    m_btnSection->raise();
+    connect(m_btnSection, &QPushButton::clicked, this, [this]{
+        QVector3D mn, mx;
+        sceneBounds(&mn, &mx);
+        m_sectionPanel->setBounds(mn, mx);
+        if (!m_section.enabled && m_section.position == 0.0f) {
+            // First use: through the middle, on the camera's sideways axis
+            m_section.axis = 0;
+            m_section.position = (mn.x() + mx.x()) * 0.5f;
+        }
+        m_sectionPanel->setPlane(m_section);
+        m_sectionPanel->adjustSize();
+        m_sectionPanel->move(m_btnSection->mapToGlobal(QPoint(m_btnSection->width() - m_sectionPanel->width(),
+                                                              m_btnSection->height() + 6)));
+        m_sectionPanel->show();
+    });
+    connect(m_sectionPanel, &SectionPanel::planeChanged, this, [this](const SectionPlane& p){
+        m_section = p;
+        m_btnSection->setProperty("active", p.enabled);
+        m_btnSection->setIcon(Theme::icon("scissors", p.enabled ? Theme::Tint::OnAccent : Theme::Tint::Text));
+        Theme::repolish(m_btnSection);
+        update();
+    });
     m_btnLight = new QPushButton(Theme::icon("lightbulb"), "Lighting", this);
     m_btnLight->setObjectName("viewButton");
     m_btnLight->setToolTip("Adjust the viewport lighting for the current theme");
@@ -414,7 +452,8 @@ void Viewport::repositionOverlays() {
     }
     m_btnFloor->move(m_vpW - m_btnFloor->width() - mg, mg);
     m_btnLight->move(m_btnFloor->x() - m_btnLight->width() - gap, mg);
-    m_btnIk->move(m_btnLight->x() - m_btnIk->width() - gap, mg);
+    m_btnSection->move(m_btnLight->x() - m_btnSection->width() - gap, mg);
+    m_btnIk->move(m_btnSection->x() - m_btnIk->width() - gap, mg);
     m_viewCube->move(m_vpW - m_viewCube->width() - 2, m_btnFloor->y() + m_btnFloor->height() + gap);
 }
 
@@ -789,6 +828,12 @@ void Viewport::drawScene(){
     m_objShader->setUniformValue("fillLight", m_light.fill);
     m_objShader->setUniformValue("specular",  m_light.specular);
     m_objShader->setUniformValue("viewPos",  vpos);
+    m_objShader->setUniformValue("clipOn",   m_section.enabled);
+    m_objShader->setUniformValue("clipPlane", m_section.equation());
+    {
+        const QColor sc = Theme::colors().warning;
+        m_objShader->setUniformValue("sectionColor", QVector3D(sc.redF(), sc.greenF(), sc.blueF()) * 0.85f);
+    }
 
     for(auto& [id,obj] : m_scene->allObjects()){
         QMatrix4x4 model=m_scene->worldTransform(id);
@@ -923,7 +968,50 @@ void Viewport::drawPhysicsOverlays() {
     }
 
     drawSensors();
+    drawSectionOutline();
     glLineWidth(1.0f);
+}
+
+void Viewport::sceneBounds(QVector3D* mn, QVector3D* mx) const {
+    *mn = QVector3D(1e30f, 1e30f, 1e30f);
+    *mx = -*mn;
+    for (auto& [id, obj] : m_scene->allObjects()) {
+        if (!surfaceOf(obj)) continue;
+        const QMatrix4x4 w = m_scene->worldTransform(id);
+        const QVector3D a = obj.aabbMin(), b = obj.aabbMax();
+        for (int k = 0; k < 8; ++k) {
+            const QVector3D p = w.map(QVector3D(k & 1 ? b.x() : a.x(), k & 2 ? b.y() : a.y(), k & 4 ? b.z() : a.z()));
+            for (int i = 0; i < 3; ++i) { (*mn)[i] = std::min((*mn)[i], p[i]); (*mx)[i] = std::max((*mx)[i], p[i]); }
+        }
+    }
+    if ((*mn).x() > (*mx).x()) { *mn = QVector3D(-1, -1, -1); *mx = QVector3D(1, 1, 1); }
+}
+
+// The cutting plane's outline, a little larger than the scene
+void Viewport::drawSectionOutline() {
+    if (!m_section.enabled) return;
+    QVector3D mn, mx;
+    sceneBounds(&mn, &mx);
+    const QVector3D pad = (mx - mn) * 0.05f + QVector3D(0.02f, 0.02f, 0.02f);
+    mn -= pad;
+    mx += pad;
+    const int a = m_section.axis, u = (a + 1) % 3, v = (a + 2) % 3;
+    auto corner = [&](float cu, float cv) {
+        QVector3D p;
+        p[a] = m_section.position;
+        p[u] = cu;
+        p[v] = cv;
+        return p;
+    };
+    const QVector3D c[4] = {corner(mn[u], mn[v]), corner(mx[u], mn[v]), corner(mx[u], mx[v]), corner(mn[u], mx[v])};
+    std::vector<float> verts;
+    for (int i = 0; i < 4; ++i) {
+        const QVector3D& p = c[i];
+        const QVector3D& q = c[(i + 1) % 4];
+        verts.insert(verts.end(), {p.x(), p.y(), p.z(), q.x(), q.y(), q.z()});
+    }
+    const QColor sc = Theme::colors().warning;
+    drawWireLines(verts, QVector3D(sc.redF(), sc.greenF(), sc.blueF()), QMatrix4x4(), 0.8f);
 }
 
 // Beams and zones of sensor signals, read live from the current pose:

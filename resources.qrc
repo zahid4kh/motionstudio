@@ -36,6 +36,7 @@
         <file alias="icons/hand-grab.svg">resources/icons/hand-grab.svg</file>
         <file alias="icons/film.svg">resources/icons/film.svg</file>
         <file alias="icons/network.svg">resources/icons/network.svg</file>
+        <file alias="icons/scissors.svg">resources/icons/scissors.svg</file>
         <file alias="icons/move-diagonal-2.svg">resources/icons/move-diagonal-2.svg</file>
         <file alias="icons/crosshair.svg">resources/icons/crosshair.svg</file>
         <file alias="icons/cylinder.svg">resources/icons/cylinder.svg</file>
