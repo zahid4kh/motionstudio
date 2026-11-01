@@ -83,6 +83,7 @@ int SceneGraph::duplicateObject(int id) {
     for (auto& [jid, j] : m_joints)
         if (copyOf.count(j.childBodyId)) jointIds.push_back(jid);
     std::sort(jointIds.begin(), jointIds.end());
+    std::unordered_map<int, int> jointCopyOf;
     for (int jid : jointIds) {
         Joint joint = m_joints.at(jid);
         const float currentValue = joint.currentValue;
@@ -90,11 +91,18 @@ int SceneGraph::duplicateObject(int id) {
         if (copyOf.count(joint.parentBodyId)) joint.parentBodyId = copyOf.at(joint.parentBodyId);
         const int copyJointId = addJoint(joint);
         m_joints.at(copyJointId).currentValue = currentValue;
+        jointCopyOf[jid] = copyJointId;
         if (const Motor* motor = motorForJoint(jid)) {
             Motor copy = *motor;
             copy.jointId = copyJointId;
             addMotor(copy);   // the name is taken, so addMotor picks a free one (J1 → J1_2)
         }
+    }
+    // A copied follower follows the copy of its master when that was copied too
+    for (auto& [original, copy] : jointCopyOf) {
+        Joint& j = m_joints.at(copy);
+        auto it = jointCopyOf.find(j.coupledTo);
+        if (it != jointCopyOf.end()) j.coupledTo = it->second;
     }
 
     for (auto& [originalId, copyId] : copyOf) {
@@ -200,6 +208,8 @@ void SceneGraph::removeJoint(int id) {
     for (int mid : motorsToRemove) removeMotor(mid);
     m_joints.erase(id);
     for (auto& [pid, pose] : m_poses) pose.jointValues.erase(id);
+    for (auto& [jid, j] : m_joints)
+        if (j.coupledTo == id) j.coupledTo = -1;   // its master is gone
 }
 
 Joint* SceneGraph::getJoint(int id) {
@@ -453,6 +463,22 @@ void SceneGraph::setWorldTransform(int id, const QMatrix4x4& world) {
     }
     decomposeMatrix(parentWorld.inverted() * world, obj->transform.position,
                     obj->transform.rotation, obj->transform.scale);
+}
+
+void SceneGraph::applyCouplings() {
+    // Masters before followers: a chain of n couplings settles in n passes
+    // (a loop, which validation reports, stops after as many passes as joints)
+    for (size_t pass = 0; pass <= m_joints.size(); ++pass) {
+        bool changed = false;
+        for (auto& [id, j] : m_joints) {
+            if (j.coupledTo == -1 || j.coupledTo == id) continue;
+            auto master = m_joints.find(j.coupledTo);
+            if (master == m_joints.end()) continue;
+            const float v = j.ratio * master->second.currentValue + j.offset;
+            if (v != j.currentValue) { j.currentValue = v; changed = true; }
+        }
+        if (!changed) break;
+    }
 }
 
 QMatrix4x4 SceneGraph::jointMotion(const Joint& joint) {

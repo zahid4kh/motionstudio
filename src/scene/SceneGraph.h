@@ -86,7 +86,9 @@ public:
     void notifyAutomationChanged() { emit automationChanged(); }
     // Emits jointsMoved() — call after changing Joint::currentValue outside
     // the simulation (jogging), so views redraw without dirtying the project.
-    void notifyJointsMoved() { emit jointsMoved(); }
+    void notifyJointsMoved() { applyCouplings(); emit jointsMoved(); }
+    // Sets every coupled joint from its master (chains in order)
+    void applyCouplings();
 
     // Rigid bodies
     void        addRigidBody(int objectId);

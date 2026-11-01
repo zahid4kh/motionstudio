@@ -82,9 +82,11 @@ QMatrix4x4 toolFrame(const SceneGraph& scene, int toolId) {
 }
 
 QMatrix4x4 toolFrameAt(SceneGraph& scene, int toolId, const std::map<int, float>& jointValues) {
-    std::map<int, float> saved;
+    std::map<int, float> saved;   // every joint: couplings move followers too
+    for (auto& [jid, j] : scene.allJoints()) saved[jid] = j.currentValue;
     for (auto& [jid, v] : jointValues)
-        if (Joint* j = scene.getJoint(jid)) { saved[jid] = j->currentValue; j->currentValue = v; }
+        if (Joint* j = scene.getJoint(jid)) j->currentValue = v;
+    scene.applyCouplings();
     const QMatrix4x4 f = toolFrame(scene, toolId);
     for (auto& [jid, v] : saved) scene.getJoint(jid)->currentValue = v;
     return f;
@@ -110,6 +112,7 @@ Result solve(SceneGraph& scene, int toolId, const std::vector<int>& chain, const
     const double posTol = 1e-5, angTol = 1e-4;   // m, rad
 
     auto measure = [&](double e[6]) {
+        scene.applyCouplings();   // geared joints move with the chain
         frameError(toolFrame(scene, toolId), target, e);
         for (int k = 3; k < 6; ++k) e[k] *= rotWeight;
     };
@@ -188,6 +191,7 @@ Result solve(SceneGraph& scene, int toolId, const std::vector<int>& chain, const
     }
 
     for (int i = 0; i < n; ++i) joints[size_t(i)]->currentValue = float(best[size_t(i)]);
+    scene.applyCouplings();
     double ef[6];
     frameError(toolFrame(scene, toolId), target, ef);
     res.positionError = float(std::sqrt(ef[0] * ef[0] + ef[1] * ef[1] + ef[2] * ef[2]));

@@ -24,6 +24,13 @@ struct Joint {
     // (wheels, turntables, orbits).
     bool      continuous    = false;
 
+    // Coupling (gear, belt, rack and pinion, cam linkage): when `coupledTo`
+    // is another joint, this one follows it: value = ratio · master + offset,
+    // in this joint's units (deg or m). A follower has no actuator.
+    int       coupledTo     = -1;
+    float     ratio         = 1.0f;
+    float     offset        = 0.0f;
+
     // Runtime state (not persisted directly; restored from motor)
     float     currentValue  = 0.0f;    // degrees for revolute, units for prismatic
 };

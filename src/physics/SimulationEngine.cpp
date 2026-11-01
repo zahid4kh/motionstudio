@@ -145,6 +145,9 @@ void SimulationEngine::runScan() {
         for (auto& [jid, _] : m_jointQposAddr) {
             double pos, vel;
             if (m_auto->actuatedJointState(jid, pos, vel)) m_prescribed[jid].first = pos;
+            // Coupled joints are driven kinematically too, from their master
+            else if (const Joint* j = m_scene->getJoint(jid); j && j->coupledTo != -1)
+                m_prescribed[jid].first = j->currentValue;
         }
     }
 #endif
@@ -156,6 +159,7 @@ void SimulationEngine::runScan() {
         for (auto& [jid, fromTo] : m_prescribed) {
             double pos, vel;
             if (m_auto->actuatedJointState(jid, pos, vel)) fromTo.second = pos;
+            else if (const Joint* j = m_scene->getJoint(jid)) fromTo.second = j->currentValue;
         }
         // Run multiple sub-steps for stability (16ms frame / 2ms MuJoCo dt = 8 steps)
         int nSteps = qMax(1, int(kDt / m_mjModel->opt.timestep + 0.5));

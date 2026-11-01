@@ -473,6 +473,92 @@ TEST(moveLFollowsAStraightLine) {
     (void)pa;   // pose A documents the start; the joints are set to it directly
 }
 
+// ── Couplings ───────────────────────────────────────────────────────────────
+
+TEST(couplingFollowsMasterEverywhere) {
+    SceneGraph g;
+    Arm a = makeArm(g);
+    // A second wheel on the base, geared 2:1 the other way, 10° offset
+    int wheel = addBox(g, "Wheel", {0, 0.5f, 0}, {0.5f, 0.5f, 0.5f}, a.base);
+    Joint gear;
+    gear.axis = {0, 1, 0};
+    gear.parentBodyId = a.base;
+    gear.childBodyId = wheel;
+    gear.continuous = true;
+    gear.coupledTo = a.joint;
+    gear.ratio = -0.5f;
+    gear.offset = 10;
+    int gj = g.addJoint(gear);
+    g.getJoint(a.joint)->currentValue = 40;
+    g.notifyJointsMoved();                                      // jogging applies couplings
+    CHECK_NEAR(g.getJoint(gj)->currentValue, -10, 1e-5);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+
+    // In the engine, every scan
+    Sequence q;
+    q.name = "Turn";
+    Operation move = makeOp(g, OperationType::Move);
+    move.actuatorId = a.motor;
+    move.target = "90";
+    q.operations = {move};
+    g.addSequence(q);
+    g.getJoint(a.joint)->currentValue = 0;
+    g.notifyJointsMoved();
+    {
+        AutomationEngine e(&g);
+        CHECK(e.start(nullptr));
+        runFor(e, 0.25);
+        CHECK_NEAR(g.getJoint(gj)->currentValue, -0.5 * g.getJoint(a.joint)->currentValue + 10, 1e-4);
+        runFor(e, 0.5);
+        CHECK_NEAR(g.getJoint(gj)->currentValue, -35, 1e-3);
+    }
+#ifdef MUJOCO_ENABLED
+    // With physics running, the follower is prescribed, not simulated
+    int ball = g.addObject("Ball", PrimitiveType::Sphere);
+    g.getObject(ball)->transform.position = {3, 1, 0};
+    g.addRigidBody(ball);
+    g.getJoint(a.joint)->currentValue = 0;
+    g.notifyJointsMoved();
+    {
+        SimulationEngine sim(&g);
+        for (int i = 0; i < 40; ++i) sim.step();
+        CHECK_NEAR(g.getJoint(a.joint)->currentValue, 90, 1e-3);
+        CHECK_NEAR(g.getJoint(gj)->currentValue, -35, 1e-3);
+        sim.reset();
+    }
+#endif
+    // Saved, and duplicated with the master: the copy follows the copy
+    SceneGraph h;
+    roundTrip(g, h);
+    int followers = 0;
+    for (auto& [id, j] : h.allJoints())
+        if (j.coupledTo != -1) {
+            ++followers;
+            CHECK(h.getJoint(j.coupledTo) && h.motorForJoint(j.coupledTo));
+            CHECK_NEAR(j.ratio, -0.5, 1e-6);
+        }
+    CHECK(followers == 1);
+    const int copy = g.duplicateObject(a.base);
+    int copiedFollowers = 0;
+    for (auto& [id, j] : g.allJoints())
+        if (j.coupledTo != -1 && scenequery::inSubtree(g, j.childBodyId, copy)) {
+            ++copiedFollowers;
+            CHECK(scenequery::inSubtree(g, g.getJoint(j.coupledTo)->childBodyId, copy));
+        }
+    CHECK(copiedFollowers == 1);
+
+    // Problems: an actuator on a follower, a loop
+    g.addActuatorForJoint(gj);
+    CHECK(!AutomationEngine::validateAll(g).isEmpty());
+    g.removeMotor(g.motorForJoint(gj)->id);
+    g.getJoint(a.joint)->coupledTo = gj;
+    CHECK(!AutomationEngine::validateAll(g).isEmpty());
+    g.getJoint(a.joint)->coupledTo = -1;
+    // Removing the master releases the follower
+    g.removeJoint(a.joint);
+    CHECK(g.getJoint(gj)->coupledTo == -1);
+}
+
 // ── Cycle time ──────────────────────────────────────────────────────────────
 
 TEST(criticalPathThroughLongerBranch) {

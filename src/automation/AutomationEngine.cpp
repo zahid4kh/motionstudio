@@ -230,6 +230,21 @@ QStringList AutomationEngine::validateAll(const SceneGraph& scene) {
 
     errs << ModbusServer::validate(scene);
 
+    // Couplings: the master exists, the follower has no actuator, no loops
+    for (auto& [jid, j] : scene.allJoints()) {
+        if (j.coupledTo == -1) continue;
+        const QString name = j.name.isEmpty() ? QString("Joint %1").arg(jid) : j.name;
+        if (!scene.getJoint(j.coupledTo)) { errs << "Joint " + name + ": the joint it follows no longer exists"; continue; }
+        if (const Motor* m = scene.motorForJoint(jid))
+            errs << "Joint " + name + ": it follows another joint, so its actuator " + m->name + " can't drive it";
+        int steps = 0;
+        for (int at = j.coupledTo; at != -1 && steps <= int(scene.allJoints().size()); ++steps) {
+            if (at == jid) { errs << "Joint " + name + ": couplings form a loop"; break; }
+            const Joint* next = scene.getJoint(at);
+            at = next ? next->coupledTo : -1;
+        }
+    }
+
     for (auto& [oid, belt] : scene.allConveyorBelts()) {
         const SceneObject* o = scene.getObject(oid);
         chk("Conveyor " + (o ? o->name : QString::number(oid)) + " speed", belt.speedExpr);
@@ -399,6 +414,7 @@ bool AutomationEngine::start(QStringList* errors) {
     m_time = 0;
     m_scanCount = 0;
     m_warnings.clear();
+    m_scene->applyCouplings();
     publishStatus();
     m_prev = m_cur;
     m_active = true;
@@ -909,6 +925,7 @@ void AutomationEngine::integrate(double dt) {
         if (Joint* j = m_scene->getJoint(a.jointId))
             j->currentValue = float(a.st.pos);
     }
+    m_scene->applyCouplings();
 }
 
 // ── Runtime queries ──────────────────────────────────────────────────────────

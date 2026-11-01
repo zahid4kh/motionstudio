@@ -114,6 +114,19 @@ Parts queue up behind the first one. The belt starts again once the part is pick
 
 A **Zone** sensor `AtGripper` mounted on the gripper detects *Rigid bodies*. Then **Grip** with Part *Detected by AtGripper*, move, and **Release**. See [Sensors & Gripping](help:sensors).
 
+## Gears, belts and mirrored fingers
+
+To make one joint move with another, select the second joint's part and, under **Joint** in Properties, set **Follows** to the first joint. Then set its **Ratio** and **Offset**:
+
+| Mechanism | Ratio | Notes |
+|---|---|---|
+| Gear pair, 2:1, the other way round | `-0.5` | the follower turns half as far, opposite |
+| Belt or chain, same size pulleys | `1` | |
+| Rack on a pinion of radius 0.02 m (prismatic follower) | `0.000349` | 2π · 0.02 / 360 metres per degree |
+| Second gripper finger, mirrored | `-1` | one actuator closes both fingers |
+
+The follower needs no actuator. It moves whenever its master moves: while jogging, on Play, and in physics.
+
 ## Two-speed spindle with ramps
 
 Speed mode, *Accel* 360 °/s², and a Bool input `Fast`. *Velocity =*

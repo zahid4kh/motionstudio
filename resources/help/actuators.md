@@ -76,3 +76,7 @@ Speed * 0.5
 ```
 Run && !EStop
 ```
+
+## Coupled joints
+
+A joint can **follow** another joint instead of having its own actuator. Under **Joint** in Properties, set *Follows*, a *Ratio* and an *Offset*. This is how gears, belts, a rack and pinion, or two mirrored gripper fingers are modelled. See [Recipes](help:recipes) for typical ratios.

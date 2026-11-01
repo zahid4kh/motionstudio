@@ -206,6 +206,11 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene, MeshPool* pool) {
         o["continuous"]   = j.continuous;
         o["parentBodyId"] = j.parentBodyId;
         o["childBodyId"]  = j.childBodyId;
+        if (j.coupledTo != -1) {
+            o["coupledTo"] = j.coupledTo;
+            o["ratio"]     = double(j.ratio);
+            o["offset"]    = double(j.offset);
+        }
         joints.append(o);
     }
 
@@ -400,8 +405,9 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root, con
         }
     }
 
-    // Joints
+    // Joints (couplings resolved once every joint has its new id)
     QHash<int, int> jointIdMap;
+    std::vector<std::pair<int, int>> couplings;   // new joint id → old master id
     for (auto v : root["joints"].toArray()) {
         auto o = v.toObject();
         Joint j;
@@ -415,8 +421,16 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root, con
         j.continuous   = o["continuous"].toBool(false);
         j.parentBodyId = idMap.value(o["parentBodyId"].toInt(-1), -1);
         j.childBodyId  = idMap.value(o["childBodyId"].toInt(-1), -1);
-        jointIdMap[o["id"].toInt(-1)] = scene.addJoint(j);
+        j.ratio        = float(o["ratio"].toDouble(1.0));
+        j.offset       = float(o["offset"].toDouble(0.0));
+        const int newId = scene.addJoint(j);
+        jointIdMap[o["id"].toInt(-1)] = newId;
+        if (o.contains("coupledTo")) couplings.push_back({newId, o["coupledTo"].toInt(-1)});
     }
+
+    for (auto& [id, master] : couplings)
+        scene.getJoint(id)->coupledTo = jointIdMap.value(master, -1);
+    scene.applyCouplings();
 
     // Actuators (motors)
     QHash<int, int> motorIdMap;

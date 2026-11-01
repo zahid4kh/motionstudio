@@ -99,6 +99,7 @@ While the simulation is active (from the first Play/Step until Reset), automatio
 | Continuous | Revolute only: unlimited rotation (limits ignored) |
 | Limit Min / Max | Angle range (degrees) or displacement range (m). Motion stops at a limit |
 | Init angle | Value the joint is set to when the project loads |
+| Follows | Couple this joint to another: value = **Ratio** × that joint + **Offset** (gears, belts, rack and pinion, mirrored gripper fingers). A follower needs no actuator; it moves whenever its master does, also while jogging and in physics |
 | Position | The joint's current value. Jog it to pose the mechanism; Play starts from here |
 | Rotation Origin | Pivot of a revolute joint, in the parent's local frame |
 

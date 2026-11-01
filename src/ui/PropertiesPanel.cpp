@@ -473,6 +473,41 @@ void PropertiesPanel::buildJointSection() {
         vb->addLayout(row);
     }
 
+    // Coupling: follow another joint (gears, belts, rack and pinion)
+    m_jCouple = new QComboBox;
+    m_jCouple->setToolTip("Make this joint follow another one: value = ratio × that joint + offset. "
+                          "For gears, belts, rack and pinion, or two fingers of a gripper. "
+                          "A follower needs no actuator.");
+    {
+        auto* row = new QHBoxLayout;
+        auto* l = new QLabel("Follows"); l->setFixedWidth(70);
+        l->setObjectName("fieldLabel");
+        row->addWidget(l); row->addWidget(m_jCouple, 1);
+        vb->addLayout(row);
+    }
+    m_jCoupleRow = new QWidget;
+    {
+        auto* row = new QHBoxLayout(m_jCoupleRow);
+        row->setContentsMargins(0, 0, 0, 0);
+        auto* l = new QLabel("Ratio"); l->setFixedWidth(70);
+        l->setObjectName("fieldLabel");
+        m_jRatio = makeSpin(-1e4, 1e4, 0.1f);
+        m_jRatio->setDecimals(5);
+        m_jRatio->setToolTip("Follower value per unit of the master: −0.5 is a 2:1 gear turning the other "
+                             "way; a rack on a pinion of radius r moves 2πr/360 m per degree");
+        m_jOffset = makeSpin(-1e4, 1e4, 1.0f);
+        m_jOffset->setDecimals(4);
+        m_jOffset->setToolTip("Added to the follower's value, in its own units");
+        auto* lo = new QLabel("Offset");
+        lo->setObjectName("fieldLabel");
+        row->addWidget(l); row->addWidget(m_jRatio, 1);
+        row->addWidget(lo); row->addWidget(m_jOffset, 1);
+    }
+    vb->addWidget(m_jCoupleRow);
+    connect(m_jCouple, &QComboBox::currentIndexChanged, this, &PropertiesPanel::onCouplingEdited);
+    connect(m_jRatio,  &QDoubleSpinBox::valueChanged,   this, &PropertiesPanel::onCouplingEdited);
+    connect(m_jOffset, &QDoubleSpinBox::valueChanged,   this, &PropertiesPanel::onCouplingEdited);
+
     m_addMotorBtn = iconButton("cog", "Add Actuator to this Joint");
     m_addMotorBtn->setToolTip("Attach an actuator so automation logic can drive this joint");
     vb->addWidget(m_addMotorBtn);
@@ -916,6 +951,12 @@ void PropertiesPanel::loadObject(int id) {
         m_jLimitMin->setEnabled(limited);
         m_jLimitMax->setEnabled(limited);
         m_jPosition->setValue(joint->currentValue * jf);
+        fillCouplingCombo(*joint);
+        m_jRatio->setValue(joint->ratio);
+        m_jOffset->setValue(joint->offset * jf);
+        m_jOffset->setSuffix(isRevolute ? "°" : " " + m_jPosition->suffix().trimmed());
+        m_jCoupleRow->setVisible(joint->coupledTo != -1);
+        m_jPosition->setEnabled(joint->coupledTo == -1 && !m_simActive);
         showJointGroup(true);
 
         Motor* motor = m_scene->motorForJoint(joint->id);
@@ -985,6 +1026,44 @@ void PropertiesPanel::onJointEdited() {
     m_jLimitMax->setEnabled(!(isRevolute && j->continuous));
     m_jPivotRow->setVisible(isRevolute);
     updateJointUnits(isRevolute);
+    emit m_scene->objectChanged(m_currentId);
+}
+
+void PropertiesPanel::fillCouplingCombo(const Joint& joint) {
+    const QSignalBlocker block(m_jCouple);
+    m_jCouple->clear();
+    m_jCouple->addItem("Nothing (moves on its own)", -1);
+    std::vector<int> ids;
+    for (auto& [jid, j] : m_scene->allJoints()) if (jid != joint.id) ids.push_back(jid);
+    std::sort(ids.begin(), ids.end());
+    for (int jid : ids) {
+        const Joint* j = m_scene->getJoint(jid);
+        const Motor* m = m_scene->motorForJoint(jid);
+        const SceneObject* child = m_scene->getObject(j->childBodyId);
+        m_jCouple->addItem(QString("%1  (%2)").arg(m ? m->name : (j->name.isEmpty() ? QString("Joint %1").arg(jid) : j->name),
+                                                   child ? child->name : QString("?")), jid);
+    }
+    m_jCouple->setCurrentIndex(std::max(0, m_jCouple->findData(joint.coupledTo)));
+}
+
+void PropertiesPanel::onCouplingEdited() {
+    if (m_loading) return;
+    Joint* j = m_scene->jointForChild(m_currentId);
+    if (!j) return;
+    const int master = m_jCouple->currentData().toInt();
+    const bool wasFollower = j->coupledTo != -1;
+    if (master != -1 && !wasFollower && m_jRatio->value() == 0.0) {
+        const QSignalBlocker block(m_jRatio);
+        m_jRatio->setValue(1.0);
+    }
+    j->coupledTo = master;
+    j->ratio     = float(m_jRatio->value());
+    const double f = (j->type == JointType::Revolute) ? 1.0 : unitFactor();
+    j->offset    = float(m_jOffset->value() / f);
+    m_jCoupleRow->setVisible(master != -1);
+    m_jPosition->setEnabled(master == -1 && !m_simActive);
+    m_scene->notifyJointsMoved();
+    m_scene->notifyAutomationChanged();
     emit m_scene->objectChanged(m_currentId);
 }
 

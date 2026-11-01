@@ -133,6 +133,12 @@ private:
     QCheckBox*      m_jContinuous = nullptr;
     QDoubleSpinBox* m_jPosition   = nullptr;   // live joint value (jog)
     QLabel*         m_jPosLabel   = nullptr;
+    QComboBox*      m_jCouple     = nullptr;   // master joint (gear / coupling), or none
+    QDoubleSpinBox* m_jRatio      = nullptr;
+    QDoubleSpinBox* m_jOffset     = nullptr;
+    QWidget*        m_jCoupleRow  = nullptr;
+    void onCouplingEdited();
+    void fillCouplingCombo(const Joint& joint);
     QPushButton*    m_addMotorBtn = nullptr;
 
     // Joint — rotation origin (revolute only)
