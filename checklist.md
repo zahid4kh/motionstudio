@@ -103,19 +103,19 @@ Goal: Projects persist.
 - [ ] CAD import (STEP, SolidWorks)
   - STEP is done (OpenCASCADE XCAF, keeps the assembly tree, File › Import STEP… or drag and drop). Native SolidWorks files aren't supported.
 - [x] Collision editing (Collision Body section in Properties: add/remove, shape type, dimensions)
-- [ ] Inverse Kinematics
+- [x] Inverse Kinematics (damped least squares on the joint tree: Cartesian jog, IK gizmo drag, MoveL straight-line moves)
 - [ ] Path Planning
-- [ ] PLC Integration
-  - There is an internal PLC-style scan engine (signals, sequences, expressions), but nothing connects to an external PLC yet (no Modbus/OPC UA).
+- [x] PLC Integration
+  - Modbus TCP server (Tools › External I/O): a real PLC writes Input signals and reads everything else, sensors included. OPC UA is not supported.
 - [ ] Robot Programming
-- [ ] Sensors
+- [x] Sensors (beam and zone/contact sensors as Bool signals; actuator limit flags like `J1.atMax`)
 - [ ] Digital Twin
 - [x] Undo / Redo (whole-scene snapshots, Ctrl+Z / Ctrl+Shift+Z)
 - [x] Object duplication (Ctrl+D, or Duplicate in the hierarchy menu): copies the subtree with its joints, actuators, rigid bodies and conveyor belts
 - [x] File › Open Recent
 - [ ] Multi-select
   - Partly done: the hierarchy has extended selection (Ctrl/Shift click) for deleting several items. The viewport and Properties panel still work on one object.
-- [ ] Timeline scrubbing
+- [x] Timeline scrubbing (every run is recorded; drag back through it, export MP4/GIF/PNG frames)
 
 ---
 
@@ -123,6 +123,14 @@ Goal: Projects persist.
 
 - [x] Automation system: signals, actuators and poses, sequences with a Gantt view, a runtime page with signal traces, and an expression language
 - [x] Starter templates (File › Open Template…)
+- [x] Grip / Release operations (fixed part or whatever a sensor detects; held rigid bodies fall when released)
+- [x] Cycle time with critical path; interference check between moving parts
+- [x] Joint couplings (gears, belts, rack and pinion, mirrored fingers)
+- [x] Colours per part (presets, inherited by children, read from STEP)
+- [x] Section view and measure tool (snaps to hole centres, bore axes, corners)
+- [x] Component library (File › Insert Component…)
+- [x] URDF / MJCF import and export
+- [x] Headless regression tests (`-DMOTIONSTUDIO_TESTS=ON`)
 - [x] Conveyor belts
 - [x] Translate gizmo (drag along X/Y/Z)
 - [x] Joint axis picking on model geometry (round edges, cylinders, straight edges, faces), with an arrow showing the rotation direction and a Flip button

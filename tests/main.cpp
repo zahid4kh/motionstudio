@@ -757,6 +757,36 @@ TEST(stlWriteAndRead) {
     CHECK(quad && quad->interleaved.size() == 2 * 18);
 }
 
+// ── Templates ───────────────────────────────────────────────────────────────
+
+TEST(everyTemplateValidatesAndRuns) {
+    const QStringList files = QDir(MS_SOURCE_DIR "/templates").entryList({"*.mstudio"});
+    CHECK(files.size() >= 7);
+    for (const QString& f : files) {
+        SceneGraph g;
+        CHECK(ProjectSerializer::load(g, MS_SOURCE_DIR "/templates/" + f));
+        const QStringList errs = AutomationEngine::validateAll(g);
+        if (!errs.isEmpty()) std::printf("  %s: %s\n", qPrintable(f), qPrintable(errs.join("; ")));
+        CHECK(errs.isEmpty());
+        SimulationEngine sim(&g);
+        bool moved = false;
+        std::map<int, float> start;
+        for (auto& [id, j] : g.allJoints()) start[id] = j.currentValue;
+        // Switch every Bool input on (templates wait for Start)
+        sim.step();
+        for (auto& [id, s] : g.allSignals())
+            if (s.kind == SignalKind::Input && s.type == SignalType::Bool && s.name != "Stop" && s.name != "Hold")
+                sim.automation()->setInput(s.name, 1);
+        for (int i = 0; i < 250; ++i) sim.step();
+        for (auto& [id, j] : g.allJoints()) if (std::fabs(j.currentValue - start[id]) > 1e-3f) moved = true;
+        if (!moved) std::printf("  %s: nothing moved\n", qPrintable(f));
+        CHECK(moved);
+        CHECK(sim.automation()->warnings().isEmpty());
+        sim.reset();
+        for (auto& [id, j] : g.allJoints()) CHECK_NEAR(j.currentValue, start[id], 1e-6);
+    }
+}
+
 // ── Cycle time ──────────────────────────────────────────────────────────────
 
 TEST(criticalPathThroughLongerBranch) {
