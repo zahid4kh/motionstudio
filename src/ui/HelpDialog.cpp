@@ -29,6 +29,7 @@ const Topic kTopics[] = {
     {"poses",       "Poses",                  "camera"},
     {"sequences",   "Sequences & Operations", "list-ordered"},
     {"signals",     "Signals",                "toggle-right"},
+    {"sensors",     "Sensors",                "radio"},
     {"expressions", "Expression Reference",   "code-xml"},
     {"recipes",     "Recipes",                "copy"},
     {"runtime",     "Running & Debugging",    "activity"},

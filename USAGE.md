@@ -124,8 +124,20 @@ The panel at the bottom works like the signal and operation editors of a mechatr
 | **Input** | Set by you while the simulation runs (Runtime tab buttons, switches, numbers) or by operation actions |
 | **Internal** | State or flags written by operation actions, e.g. `Gripper = true`, `Count = Count + 1` |
 | **Derived** | Recomputed every scan from an expression, e.g. `Ready = J1.inPosition && !EStop` |
+| **Sensor** | Read from the scene every scan: true while something is in its beam or zone |
 
 Types are **Bool**, **Int** or **Real**. Renaming a signal rewrites every expression that uses it.
+
+**Sensors** close the loop between physics and logic. Add one with **New Sensor** (mounted on the selected object), or right-click an object in the Hierarchy and choose **Add Sensor Here…**. **Configure…** sets:
+
+| Setting | Meaning |
+|---------|---------|
+| Type | **Beam**: a ray along a direction, up to a range (light barrier, part present). **Zone**: a box, or the mounted object's own bounds (contact sensor) |
+| Mounted on | The sensor moves with this object; *World* keeps it fixed. It never detects its mount, the mount's children or the objects the mount hangs from |
+| Offset / Direction / Range / Size | In metres, in the mount's frame (its scale is ignored) |
+| Detects | Anything, rigid bodies only (parts), or one specific object |
+
+The viewport draws beams and zones green while clear and orange while detecting. Example: give a conveyor's actuator the Active binding `!PartAtEnd`, so the belt stops when a part reaches the end.
 
 ### Actuators & Poses tab
 
@@ -185,7 +197,7 @@ functions   abs min max clamp sin cos tan sqrt floor ceil round sign
 ### How a scan works (every 16 ms)
 
 1. Apply action writes from the previous scan and queued Runtime inputs
-2. Publish actuator and sequence status signals
+2. Read sensors, then publish actuator and sequence status signals
 3. Evaluate derived signals (in dependency order)
 4. Advance sequences: finish operations, then start ready ones
 5. Evaluate actuator bindings
@@ -202,7 +214,7 @@ With MuJoCo installed, scenes that contain rigid bodies also simulate physics. A
 - Shows parent-child tree of all objects
 - **Click** an item to select it
 - **Double-click** to rename
-- **Right-click** → Delete
+- **Right-click** → Rename, Duplicate, **Add Sensor Here…**, Delete
 
 ---
 

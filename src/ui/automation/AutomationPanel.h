@@ -22,6 +22,8 @@ public:
     void showRuntime();
     void showProblems(const QStringList& problems);
     void showActuatorForJoint(int jointId);
+    // Signals tab: a new sensor mounted on `objectId`, with its settings open
+    void addSensorOn(int objectId);
 
 signals:
     void statusMessage(const QString& msg, bool ok);

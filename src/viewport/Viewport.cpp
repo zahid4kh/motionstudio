@@ -2,6 +2,9 @@
 #include "ui/Theme.h"
 #include "ViewCube.h"
 #include "scene/MeshWeld.h"
+#include "scene/PrimitiveMesh.h"
+#include "scene/SceneQuery.h"
+#include "automation/Sensors.h"
 #include <QVariantAnimation>
 #include <QLabel>
 #include <QMouseEvent>
@@ -213,15 +216,7 @@ static std::vector<float> wireBasket() {
     return v;
 }
 
-// Strip non-uniform scale from a world transform, preserving position + rotation
-static QMatrix4x4 stripScale(const QMatrix4x4& m) {
-    QMatrix4x4 r = m;
-    for (int col = 0; col < 3; col++) {
-        float len = sqrtf(m(0,col)*m(0,col) + m(1,col)*m(1,col) + m(2,col)*m(2,col));
-        if (len > 1e-6f) { r(0,col)/=len; r(1,col)/=len; r(2,col)/=len; }
-    }
-    return r;
-}
+using scenequery::stripScale;
 
 // ── Constructor / Destructor ─────────────────────────────────────────────────
 
@@ -252,6 +247,7 @@ Viewport::Viewport(SceneGraph* scene, QWidget* parent)
     connect(scene, &SceneGraph::conveyorBeltChanged,this, [this](int){ update(); });
     connect(scene, &SceneGraph::floorChanged,       this, [this](bool){ update(); });
     connect(scene, &SceneGraph::jointsMoved,        this, [this]{ update(); });
+    connect(scene, &SceneGraph::automationChanged,  this, [this]{ update(); });
 
     // View-snap overlay buttons
     auto mkBtn = [&](const QString& label) -> QPushButton* {
@@ -491,6 +487,7 @@ void Viewport::paintGL() {
     drawAxisLabels(p);
     drawKeyHints(p);
     drawKeyPoints(p);
+    drawSensorLabels(p);
     drawJointAxes(p);
     drawAxisPickBanner(p);
 }
@@ -573,11 +570,11 @@ void Viewport::uploadMesh(MeshData& m, const std::vector<float>& v) {
 }
 
 void Viewport::buildMeshes() {
-    m_cube     = makeCube();
-    m_cylinder = makeCylinder();
-    m_sphere   = makeSphere();
-    m_capsule  = makeCapsule();
-    m_basket   = makeBasket();
+    uploadMesh(m_cube,     primitiveSoup(PrimitiveType::Cube));
+    uploadMesh(m_cylinder, primitiveSoup(PrimitiveType::Cylinder));
+    uploadMesh(m_sphere,   primitiveSoup(PrimitiveType::Sphere));
+    uploadMesh(m_capsule,  primitiveSoup(PrimitiveType::Capsule));
+    uploadMesh(m_basket,   primitiveSoup(PrimitiveType::Basket));
 }
 
 // Imported CAD meshes are triangle soup; welded, they need a third to a fifth
@@ -638,131 +635,6 @@ void Viewport::buildAxisGizmo() {
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
     glBindVertexArray(0);
-}
-
-// ── Mesh generators ──────────────────────────────────────────────────────────
-
-MeshData Viewport::makeCube() {
-    static const float v[] = {
-        -0.5f,-0.5f, 0.5f, 0,0,1,  0.5f,-0.5f, 0.5f, 0,0,1,  0.5f, 0.5f, 0.5f, 0,0,1,
-        -0.5f,-0.5f, 0.5f, 0,0,1,  0.5f, 0.5f, 0.5f, 0,0,1, -0.5f, 0.5f, 0.5f, 0,0,1,
-        -0.5f,-0.5f,-0.5f, 0,0,-1,  0.5f, 0.5f,-0.5f, 0,0,-1,  0.5f,-0.5f,-0.5f, 0,0,-1,
-        -0.5f,-0.5f,-0.5f, 0,0,-1, -0.5f, 0.5f,-0.5f, 0,0,-1,  0.5f, 0.5f,-0.5f, 0,0,-1,
-         0.5f,-0.5f,-0.5f, 1,0,0,  0.5f, 0.5f,-0.5f, 1,0,0,  0.5f, 0.5f, 0.5f, 1,0,0,
-         0.5f,-0.5f,-0.5f, 1,0,0,  0.5f, 0.5f, 0.5f, 1,0,0,  0.5f,-0.5f, 0.5f, 1,0,0,
-        -0.5f,-0.5f,-0.5f,-1,0,0, -0.5f, 0.5f, 0.5f,-1,0,0, -0.5f, 0.5f,-0.5f,-1,0,0,
-        -0.5f,-0.5f,-0.5f,-1,0,0, -0.5f,-0.5f, 0.5f,-1,0,0, -0.5f, 0.5f, 0.5f,-1,0,0,
-        -0.5f, 0.5f,-0.5f, 0,1,0, -0.5f, 0.5f, 0.5f, 0,1,0,  0.5f, 0.5f, 0.5f, 0,1,0,
-        -0.5f, 0.5f,-0.5f, 0,1,0,  0.5f, 0.5f, 0.5f, 0,1,0,  0.5f, 0.5f,-0.5f, 0,1,0,
-        -0.5f,-0.5f,-0.5f, 0,-1,0,  0.5f,-0.5f, 0.5f, 0,-1,0, -0.5f,-0.5f, 0.5f, 0,-1,0,
-        -0.5f,-0.5f,-0.5f, 0,-1,0,  0.5f,-0.5f,-0.5f, 0,-1,0,  0.5f,-0.5f, 0.5f, 0,-1,0,
-    };
-    MeshData m;
-    m_primitiveVertices[int(PrimitiveType::Cube)].assign(std::begin(v), std::end(v));
-    uploadMesh(m, m_primitiveVertices[int(PrimitiveType::Cube)]);
-    return m;
-}
-
-MeshData Viewport::makeCylinder(int segs) {
-    std::vector<float> v;
-    const float r = 0.5f, h = 0.5f;
-    auto push = [&](float x,float y,float z, float nx,float ny,float nz){
-        v.insert(v.end(), {x,y,z,nx,ny,nz});
-    };
-    for(int i = 0; i < segs; i++){
-        float a0 = float(i)   / segs * 2*M_PI;
-        float a1 = float(i+1) / segs * 2*M_PI;
-        float x0=r*cosf(a0),z0=r*sinf(a0), nx0=cosf(a0),nz0=sinf(a0);
-        float x1=r*cosf(a1),z1=r*sinf(a1), nx1=cosf(a1),nz1=sinf(a1);
-        push(x0,-h,z0, nx0,0,nz0); push(x1,-h,z1, nx1,0,nz1); push(x1, h,z1, nx1,0,nz1);
-        push(x0,-h,z0, nx0,0,nz0); push(x1, h,z1, nx1,0,nz1); push(x0, h,z0, nx0,0,nz0);
-        push(0,h,0, 0,1,0); push(r*cosf(a0),h,r*sinf(a0), 0,1,0); push(r*cosf(a1),h,r*sinf(a1), 0,1,0);
-        push(0,-h,0, 0,-1,0); push(r*cosf(a1),-h,r*sinf(a1), 0,-1,0); push(r*cosf(a0),-h,r*sinf(a0), 0,-1,0);
-    }
-    m_primitiveVertices[int(PrimitiveType::Cylinder)] = v;
-    MeshData m; uploadMesh(m, v); return m;
-}
-
-MeshData Viewport::makeSphere(int rings, int sectors) {
-    std::vector<float> v;
-    const float r = 0.5f;
-    auto push = [&](float phi, float theta){
-        float nx=sinf(phi)*cosf(theta), ny=cosf(phi), nz=sinf(phi)*sinf(theta);
-        v.insert(v.end(), {r*nx,r*ny,r*nz,nx,ny,nz});
-    };
-    for(int i=0;i<rings;i++){
-        float p0=float(i)/rings*M_PI, p1=float(i+1)/rings*M_PI;
-        for(int j=0;j<sectors;j++){
-            float t0=float(j)/sectors*2*M_PI, t1=float(j+1)/sectors*2*M_PI;
-            push(p0,t0); push(p1,t0); push(p1,t1);
-            push(p0,t0); push(p1,t1); push(p0,t1);
-        }
-    }
-    m_primitiveVertices[int(PrimitiveType::Sphere)] = v;
-    MeshData m; uploadMesh(m, v); return m;
-}
-
-MeshData Viewport::makeCapsule(int rings, int sectors) {
-    std::vector<float> v;
-    const float r=0.25f, hcy=0.25f;
-    auto pushS=[&](float phi,float theta,float yOff,bool flipY){
-        float nx=cosf(phi)*cosf(theta), ny=flipY?-sinf(phi):sinf(phi), nz=cosf(phi)*sinf(theta);
-        v.insert(v.end(), {r*nx,r*ny+yOff,r*nz,nx,ny,nz});
-    };
-    for(int j=0;j<sectors;j++){
-        float a0=float(j)/sectors*2*M_PI, a1=float(j+1)/sectors*2*M_PI;
-        float x0=r*cosf(a0),z0=r*sinf(a0),nx0=cosf(a0),nz0=sinf(a0);
-        float x1=r*cosf(a1),z1=r*sinf(a1),nx1=cosf(a1),nz1=sinf(a1);
-        v.insert(v.end(),{x0,-hcy,z0,nx0,0,nz0}); v.insert(v.end(),{x1,-hcy,z1,nx1,0,nz1}); v.insert(v.end(),{x1,hcy,z1,nx1,0,nz1});
-        v.insert(v.end(),{x0,-hcy,z0,nx0,0,nz0}); v.insert(v.end(),{x1,hcy,z1,nx1,0,nz1}); v.insert(v.end(),{x0,hcy,z0,nx0,0,nz0});
-    }
-    for(int i=0;i<rings;i++){
-        float p0=float(i)/rings*M_PI/2, p1=float(i+1)/rings*M_PI/2;
-        for(int j=0;j<sectors;j++){
-            float t0=float(j)/sectors*2*M_PI, t1=float(j+1)/sectors*2*M_PI;
-            pushS(p0,t0,hcy,false); pushS(p1,t0,hcy,false); pushS(p1,t1,hcy,false);
-            pushS(p0,t0,hcy,false); pushS(p1,t1,hcy,false); pushS(p0,t1,hcy,false);
-            pushS(p0,t1,-hcy,true); pushS(p1,t1,-hcy,true); pushS(p1,t0,-hcy,true);
-            pushS(p0,t1,-hcy,true); pushS(p1,t0,-hcy,true); pushS(p0,t0,-hcy,true);
-        }
-    }
-    m_primitiveVertices[int(PrimitiveType::Capsule)] = v;
-    MeshData m; uploadMesh(m, v); return m;
-}
-
-// Helper: append one axis-aligned box (pos+normal) to a flat vertex array
-static void appendBox(std::vector<float>& v, QVector3D c, QVector3D hs) {
-    auto push = [&](float x,float y,float z, float nx,float ny,float nz){
-        v.insert(v.end(), {x,y,z,nx,ny,nz});
-    };
-    float x0=c.x()-hs.x(), x1=c.x()+hs.x();
-    float y0=c.y()-hs.y(), y1=c.y()+hs.y();
-    float z0=c.z()-hs.z(), z1=c.z()+hs.z();
-    push(x0,y0,z1,0,0,1); push(x1,y0,z1,0,0,1); push(x1,y1,z1,0,0,1);
-    push(x0,y0,z1,0,0,1); push(x1,y1,z1,0,0,1); push(x0,y1,z1,0,0,1);
-    push(x1,y0,z0,0,0,-1); push(x0,y0,z0,0,0,-1); push(x0,y1,z0,0,0,-1);
-    push(x1,y0,z0,0,0,-1); push(x0,y1,z0,0,0,-1); push(x1,y1,z0,0,0,-1);
-    push(x1,y0,z0,1,0,0); push(x1,y0,z1,1,0,0); push(x1,y1,z1,1,0,0);
-    push(x1,y0,z0,1,0,0); push(x1,y1,z1,1,0,0); push(x1,y1,z0,1,0,0);
-    push(x0,y0,z1,-1,0,0); push(x0,y0,z0,-1,0,0); push(x0,y1,z0,-1,0,0);
-    push(x0,y0,z1,-1,0,0); push(x0,y1,z0,-1,0,0); push(x0,y1,z1,-1,0,0);
-    push(x0,y1,z0,0,1,0); push(x0,y1,z1,0,1,0); push(x1,y1,z1,0,1,0);
-    push(x0,y1,z0,0,1,0); push(x1,y1,z1,0,1,0); push(x1,y1,z0,0,1,0);
-    push(x0,y0,z1,0,-1,0); push(x0,y0,z0,0,-1,0); push(x1,y0,z0,0,-1,0);
-    push(x0,y0,z1,0,-1,0); push(x1,y0,z0,0,-1,0); push(x1,y0,z1,0,-1,0);
-}
-
-MeshData Viewport::makeBasket() {
-    // Unit basket: 1×1×1 bounding box, 5-sided open-top container
-    // t=0.05 wall/floor thickness in unit space
-    std::vector<float> v;
-    appendBox(v, {0.f,    -0.475f, 0.f},    {0.5f,  0.025f, 0.5f});   // floor
-    appendBox(v, {-0.475f, 0.025f, 0.f},    {0.025f,0.475f, 0.5f});   // left  wall
-    appendBox(v, { 0.475f, 0.025f, 0.f},    {0.025f,0.475f, 0.5f});   // right wall
-    appendBox(v, {0.f,     0.025f, 0.475f}, {0.45f, 0.475f, 0.025f}); // front wall
-    appendBox(v, {0.f,     0.025f,-0.475f}, {0.45f, 0.475f, 0.025f}); // back  wall
-    m_primitiveVertices[int(PrimitiveType::Basket)] = v;
-    MeshData m; uploadMesh(m, v); return m;
 }
 
 void Viewport::buildGrid() {
@@ -1014,7 +886,61 @@ void Viewport::drawPhysicsOverlays() {
         drawWireLines(av, {0.05f, 0.82f, 0.72f}, wt);
     }
 
+    drawSensors();
     glLineWidth(1.0f);
+}
+
+// Beams and zones of sensor signals, read live from the current pose:
+// green while clear, orange while something is detected
+void Viewport::drawSensors() {
+    const QVector3D clear(0.20f, 0.85f, 0.45f), detected(1.0f, 0.42f, 0.10f);
+    QMatrix4x4 ident;
+    for (auto& [id, sg] : m_scene->allSignals()) {
+        if (sg.kind != SignalKind::Sensor || !sensors::problem(*m_scene, sg.sensor).isEmpty()) continue;
+        const sensors::Reading r = sensors::read(*m_scene, sg.sensor);
+        const QVector3D col = r.active ? detected : clear;
+        if (sg.sensor.type == SensorType::Beam) {
+            QVector3D from, dir;
+            sensors::beam(*m_scene, sg.sensor, &from, &dir);
+            const QVector3D to = from + dir * r.distance;
+            // The beam, plus a small cross at the emitter
+            const QVector3D u = QVector3D::crossProduct(dir, std::abs(dir.y()) < 0.9f ? QVector3D(0, 1, 0)
+                                                                                     : QVector3D(1, 0, 0)).normalized();
+            const QVector3D w = QVector3D::crossProduct(dir, u);
+            const float k = std::max(0.01f, sg.sensor.range * 0.04f);
+            std::vector<float> v;
+            auto line = [&](QVector3D a, QVector3D b) { v.insert(v.end(), {a.x(), a.y(), a.z(), b.x(), b.y(), b.z()}); };
+            line(from, to);
+            line(from - u * k, from + u * k);
+            line(from - w * k, from + w * k);
+            if (r.active) { line(to - u * k, to + u * k); line(to - w * k, to + w * k); }
+            glLineWidth(2.5f);
+            drawWireLines(v, col, ident);
+            glLineWidth(1.5f);
+        } else {
+            const scenequery::Obb z = sensors::zone(*m_scene, sg.sensor);
+            QMatrix4x4 m;
+            m.setColumn(0, QVector4D(z.axis[0], 0));
+            m.setColumn(1, QVector4D(z.axis[1], 0));
+            m.setColumn(2, QVector4D(z.axis[2], 0));
+            m.setColumn(3, QVector4D(z.center, 1));
+            drawWireLines(wireBox(z.half.x() * 1.01f, z.half.y() * 1.01f, z.half.z() * 1.01f), col, m);
+        }
+    }
+}
+
+void Viewport::drawSensorLabels(QPainter& p) {
+    const Theme::Colors& c = Theme::colors();
+    for (auto& [id, sg] : m_scene->allSignals()) {
+        if (sg.kind != SignalKind::Sensor || !sensors::problem(*m_scene, sg.sensor).isEmpty()) continue;
+        const QVector3D at = sg.sensor.type == SensorType::Beam
+                                 ? sensors::frame(*m_scene, sg.sensor).column(3).toVector3D()
+                                 : sensors::zone(*m_scene, sg.sensor).center;
+        QPointF pt;
+        if (!toScreen(at, &pt)) continue;
+        const bool on = sensors::read(*m_scene, sg.sensor).active;
+        drawPill(p, pt + QPointF(8, -24), sg.name + (on ? "  ●" : "  ○"), on ? c.warning : QColor());
+    }
 }
 
 // ── Key point overlay ─────────────────────────────────────────────────────────
@@ -1365,83 +1291,10 @@ bool Viewport::rayAABB(const QVector3D& orig,const QVector3D& dir,
     t=tMin; return tMin>=0;
 }
 
-// Whether a ray from `o` along `d` meets the box (an origin inside counts);
-// `tEnter` gets the ray parameter where it enters (0 when inside)
-static bool rayMeetsBox(const QVector3D& o, const QVector3D& d, const QVector3D& mn, const QVector3D& mx,
-                        float* tEnter = nullptr){
-    float tMin = 0.0f, tMax = std::numeric_limits<float>::max();
-    for(int i = 0; i < 3; ++i){
-        if(std::abs(d[i]) < 1e-12f){ if(o[i] < mn[i] || o[i] > mx[i]) return false; continue; }
-        float t1 = (mn[i] - o[i]) / d[i], t2 = (mx[i] - o[i]) / d[i];
-        if(t1 > t2) std::swap(t1, t2);
-        tMin = std::max(tMin, t1);
-        tMax = std::min(tMax, t2);
-        if(tMin > tMax) return false;
-    }
-    if(tEnter) *tEnter = tMin;
-    return true;
-}
-
-// Nearest hit (t > 0, either side) of a ray on a pos+normal triangle soup
-// closer than `maxT`; Möller–Trumbore
-static bool rayHitsSoup(const std::vector<float>& v, const QVector3D& o, const QVector3D& d,
-                        float maxT, float* tOut){
-    bool hit = false;
-    const size_t triCount = v.size() / 18;
-    for(size_t i = 0; i < triCount; ++i){
-        const float* f = &v[i * 18];
-        const QVector3D a(f[0], f[1], f[2]);
-        const QVector3D e1 = QVector3D(f[6], f[7], f[8]) - a, e2 = QVector3D(f[12], f[13], f[14]) - a;
-        const QVector3D p = QVector3D::crossProduct(d, e2);
-        const float det = QVector3D::dotProduct(e1, p);
-        if(std::abs(det) < 1e-20f) continue;
-        const float inv = 1.0f / det;
-        const QVector3D s = o - a;
-        const float u = QVector3D::dotProduct(s, p) * inv;
-        if(u < 0.0f || u > 1.0f) continue;
-        const QVector3D q = QVector3D::crossProduct(s, e1);
-        const float w = QVector3D::dotProduct(d, q) * inv;
-        if(w < 0.0f || u + w > 1.0f) continue;
-        const float t = QVector3D::dotProduct(e2, q) * inv;
-        if(t > 0.0f && t < maxT){ maxT = t; hit = true; }
-    }
-    if(hit) *tOut = maxT;
-    return hit;
-}
-
-// The object whose drawn surface the ray meets first. Bounding boxes only
-// prefilter: overlapping boxes (links, cables, housings of an imported
-// assembly) would otherwise pick whatever box starts nearest, not what
-// is visible under the cursor. Box entry and triangle hits share the ray
-// parameter (the local ray is the world ray mapped affinely), so a box
-// entered beyond the best hit so far is skipped without testing triangles.
+// The object whose drawn surface the ray meets first (see scenequery::rayCast)
 std::pair<int,float> Viewport::pickNearest(const QVector3D& orig, const QVector3D& dir) const {
-    struct Candidate { int id; float tBox; QVector3D lo, ld; const std::vector<float>* soup; };
-    std::vector<Candidate> candidates;
-    for(auto& [id,obj] : m_scene->allObjects()){
-        // Assembly group nodes have no geometry — selectable via hierarchy only
-        const std::vector<float>* soup = obj.type == PrimitiveType::ImportedMesh
-                                             ? (obj.mesh ? &obj.mesh->interleaved : nullptr)
-                                             : &m_primitiveVertices[int(obj.type)];
-        if(!soup || soup->empty()) continue;
-        bool invertible = false;
-        const QMatrix4x4 inv = m_scene->worldTransform(id).inverted(&invertible);
-        if(!invertible) continue;
-        const QVector3D lo = inv.map(orig), ld = inv.mapVector(dir);
-        float tBox;
-        if(rayMeetsBox(lo, ld, obj.aabbMin(), obj.aabbMax(), &tBox))
-            candidates.push_back({id, tBox, lo, ld, soup});
-    }
-    std::sort(candidates.begin(), candidates.end(),
-              [](const Candidate& a, const Candidate& b){ return a.tBox < b.tBox; });
-
-    int bestId=-1; float bestT=std::numeric_limits<float>::max();
-    for(const Candidate& c : candidates){
-        if(c.tBox >= bestT) break;
-        float t;
-        if(rayHitsSoup(*c.soup, c.lo, c.ld, bestT, &t)){ bestT = t; bestId = c.id; }
-    }
-    return {bestId,bestT};
+    const scenequery::RayHit hit = scenequery::rayCast(*m_scene, orig, dir);
+    return {hit.objectId, hit.t};
 }
 
 void Viewport::tryPickObject(int x, int y){
@@ -1652,8 +1505,8 @@ const MeshFeatures* Viewport::featuresFor(const SceneObject& obj){
         return cache.features.get();
     }
     const int k = int(obj.type);
-    if(!m_primitiveFeatures[k] && !m_primitiveVertices[k].empty())
-        m_primitiveFeatures[k] = std::make_unique<MeshFeatures>(m_primitiveVertices[k]);
+    if(!m_primitiveFeatures[k] && !primitiveSoup(obj.type).empty())
+        m_primitiveFeatures[k] = std::make_unique<MeshFeatures>(primitiveSoup(obj.type));
     return m_primitiveFeatures[k].get();
 }
 
@@ -1693,7 +1546,7 @@ void Viewport::updateAxisCandidate(int x, int y){
         const QMatrix4x4 inv = wt.inverted(&invertible);
         if(!invertible) continue;
         const QVector3D lo = inv.map(orig), ld = inv.mapVector(dir);
-        if(!rayMeetsBox(lo, ld, obj.aabbMin(), obj.aabbMax())) continue;
+        if(!scenequery::rayMeetsBox(lo, ld, obj.aabbMin(), obj.aabbMax())) continue;
         float t;
         const int tri = features->intersect(lo, ld, &t);
         if(tri == -1) continue;
@@ -1748,11 +1601,6 @@ void Viewport::updateAxisCandidate(int x, int y){
     update();
 }
 
-static bool isInSubtree(const SceneGraph* scene, int id, int root){
-    for(const SceneObject* o = scene->getObject(id); o; o = scene->getObject(o->parentId))
-        if(o->id == root) return true;
-    return false;
-}
 
 void Viewport::commitAxisCandidate(){
     const AxisCandidate c = m_axisCandidate;
@@ -1765,7 +1613,7 @@ void Viewport::commitAxisCandidate(){
     // Geometry on the moving side is seen in its jogged pose: take the joint's
     // own motion back out so the axis lands where that geometry is at zero
     const Joint* joint = m_scene->jointForChild(m_axisPickId);
-    if(joint && isInSubtree(m_scene, c.objectId, m_axisPickId)){
+    if(joint && scenequery::inSubtree(*m_scene, c.objectId, m_axisPickId)){
         const QMatrix4x4 rest = parentWorld * SceneGraph::jointMotion(*joint).inverted() * parentWorld.inverted();
         origin = rest.map(origin);
         axis   = rest.mapVector(axis);

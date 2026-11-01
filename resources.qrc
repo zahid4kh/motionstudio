@@ -30,6 +30,8 @@
         <file alias="icons/component.svg">resources/icons/component.svg</file>
         <file alias="icons/copy.svg">resources/icons/copy.svg</file>
         <file alias="icons/history.svg">resources/icons/history.svg</file>
+        <file alias="icons/scan-line.svg">resources/icons/scan-line.svg</file>
+        <file alias="icons/radio.svg">resources/icons/radio.svg</file>
         <file alias="icons/crosshair.svg">resources/icons/crosshair.svg</file>
         <file alias="icons/cylinder.svg">resources/icons/cylinder.svg</file>
         <file alias="icons/disc-3.svg">resources/icons/disc-3.svg</file>
@@ -105,6 +107,8 @@
         <file alias="help/poses.md">resources/help/poses.md</file>
         <file alias="help/sequences.md">resources/help/sequences.md</file>
         <file alias="help/signals.md">resources/help/signals.md</file>
+
+        <file alias="help/sensors.md">resources/help/sensors.md</file>
         <file alias="help/expressions.md">resources/help/expressions.md</file>
         <file alias="help/recipes.md">resources/help/recipes.md</file>
         <file alias="help/runtime.md">resources/help/runtime.md</file>

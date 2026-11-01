@@ -7,6 +7,7 @@
 #include "automation/AutomationEngine.h"
 
 class SimulationEngine;
+class QComboBox;
 
 namespace autoui {
 
@@ -28,6 +29,12 @@ QBrush opStateBrush(AutomationEngine::OpState state);
 // Unit suffix for a joint's position ("°" or " m") and velocity
 QString posUnit(const Joint* j);
 QString velUnit(const Joint* j);
+
+// Fills `combo` with the scene's objects in hierarchy order (indented), each
+// item's data its object id, preceded by `noneLabel` (data -1) when not
+// empty; selects `currentId`.
+void fillObjectCombo(QComboBox* combo, const SceneGraph& scene, int currentId,
+                     const QString& noneLabel = QString());
 
 // Base for the panel pages: coalesced refresh on scene changes (skipping
 // changes the page made itself), and an edit lock while the simulation is active.

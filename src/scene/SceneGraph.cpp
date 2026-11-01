@@ -282,6 +282,7 @@ int SceneGraph::addSignal(Signal sig) {
     sig.id = m_nextId++;
     if (!expr::isValidName(sig.name) || isSymbolNameTaken(sig.name, sig.id))
         sig.name = makeSymbolName(sig.name.isEmpty() ? QString("Signal") : sig.name, sig.id);
+    if (sig.kind == SignalKind::Sensor) sig.type = SignalType::Bool;
     sig.initialValue = coerceSignal(sig.type, sig.initialValue);
     m_signals[sig.id] = sig;
     emit automationChanged();

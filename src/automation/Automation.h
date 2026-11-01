@@ -1,5 +1,6 @@
 #pragma once
 #include <QString>
+#include <QVector3D>
 #include <map>
 #include <vector>
 
@@ -13,6 +14,32 @@ enum class SignalKind {
     Input,     // set by the user from the Runtime panel, or by operation actions
     Internal,  // state/flag written by operation actions
     Derived,   // recomputed every scan from `expression`
+    Sensor,    // Bool read from the scene every scan (see SensorConfig)
+};
+
+// What a sensor signal looks at. A sensor is mounted on an object (or the
+// world) and moves with it; offsets and sizes are in metres in the mount's
+// frame, ignoring the mount's scale.
+enum class SensorType {
+    Beam,   // a ray from `offset` along `direction`, up to `range`: light barrier, part present
+    Zone,   // a box of `size` at `offset` (or the mount's own bounds): contact, presence
+};
+enum class SensorTarget {
+    Any,          // any object with geometry
+    RigidBodies,  // only objects with a rigid body (or inside a rigid-body group)
+    Object,       // only `targetId` and its children
+};
+
+struct SensorConfig {
+    SensorType   type         = SensorType::Beam;
+    int          objectId     = -1;              // mount; -1 = world
+    QVector3D    offset;
+    QVector3D    direction    = {1, 0, 0};       // Beam
+    float        range        = 0.5f;            // Beam, m
+    QVector3D    size         = {0.1f, 0.1f, 0.1f};   // Zone, full extents in m
+    bool         objectBounds = false;           // Zone: use the mount's bounding box instead
+    SensorTarget target       = SensorTarget::Any;
+    int          targetId     = -1;              // SensorTarget::Object
 };
 
 struct Signal {
@@ -23,6 +50,7 @@ struct Signal {
     double     initialValue = 0.0;
     QString    expression;          // Derived only
     QString    description;
+    SensorConfig sensor;            // Sensor only (type is always Bool)
 };
 
 enum class OperationType {
@@ -84,8 +112,16 @@ inline QString signalKindName(SignalKind k) {
         case SignalKind::Input:    return "Input";
         case SignalKind::Internal: return "Internal";
         case SignalKind::Derived:  return "Derived";
+        case SignalKind::Sensor:   return "Sensor";
     }
     return "Internal";
+}
+
+inline SignalKind signalKindFromName(const QString& s) {
+    if (s == "Input")   return SignalKind::Input;
+    if (s == "Derived") return SignalKind::Derived;
+    if (s == "Sensor")  return SignalKind::Sensor;
+    return SignalKind::Internal;
 }
 
 inline QString operationTypeName(OperationType t) {

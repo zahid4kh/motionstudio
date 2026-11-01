@@ -208,6 +208,7 @@ QPushButton:hover { border-color: @handle@; background: @hoverstrong@; }
 QPushButton:pressed { background: @sel@; }
 QPushButton:checked { background: @accent@; color: @onaccent@; border-color: @accent@; font-weight: 700; }
 QPushButton:disabled { color: @muted@; background: transparent; }
+QLabel[error="true"] { color: @danger@; }
 QPushButton[danger="true"] { color: @danger@; }
 QPushButton[danger="true"]:hover { background: @dangersoft@; border-color: @danger@; }
 QPushButton[danger="true"]:disabled { color: @muted@; }

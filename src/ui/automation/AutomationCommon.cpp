@@ -1,7 +1,9 @@
 #include "AutomationCommon.h"
 #include "physics/SimulationEngine.h"
 #include "ui/Theme.h"
+#include <QComboBox>
 #include <QTimer>
+#include <functional>
 #include <cmath>
 
 namespace autoui {
@@ -42,6 +44,25 @@ QBrush opStateBrush(AutomationEngine::OpState state) {
 
 QString posUnit(const Joint* j) { return (j && j->type == JointType::Prismatic) ? " m" : "°"; }
 QString velUnit(const Joint* j) { return (j && j->type == JointType::Prismatic) ? " m/s" : "°/s"; }
+
+void fillObjectCombo(QComboBox* combo, const SceneGraph& scene, int currentId, const QString& noneLabel) {
+    const QSignalBlocker block(combo);
+    combo->clear();
+    if (!noneLabel.isEmpty()) combo->addItem(noneLabel, -1);
+    std::function<void(int, int)> add = [&](int id, int depth) {
+        const SceneObject* o = scene.getObject(id);
+        if (!o) return;
+        combo->addItem(QString(depth * 3, QChar(' ')) + o->name, id);
+        for (int c : o->childIds) add(c, depth + 1);
+    };
+    for (int r : scene.rootObjects()) add(r, 0);
+    int idx = combo->findData(currentId);
+    if (idx < 0 && currentId != -1) {
+        combo->addItem("(deleted object)", currentId);
+        idx = combo->count() - 1;
+    }
+    combo->setCurrentIndex(std::max(0, idx));
+}
 
 Page::Page(SceneGraph* scene, SimulationEngine* sim, QWidget* parent)
     : QWidget(parent), m_scene(scene), m_sim(sim)

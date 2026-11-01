@@ -7,8 +7,9 @@ Signals are the variables of your automation. Signals, actuators and sequences s
 | **Input** | You, in the Runtime tab (buttons, switches, number fields) | `Start`, `Stop`, `EStop`, `SpeedPct`, `Amplitude` |
 | **Internal** | Operation actions (*On start* / *On finish*) | `Gripper`, `PartCount`, `State` |
 | **Derived** | A formula, recomputed every scan | `Safe`, `GripperDone`, `AllHome` |
+| **Sensor** | The scene: true while something is in its beam or zone ([Sensors](help:sensors)) | `PartPresent`, `PartAtEnd`, `Touching` |
 
-Each signal has a type: **Bool** (true/false), **Int** (rounded) or **Real**.
+Each signal has a type: **Bool** (true/false), **Int** (rounded) or **Real**. Sensors are always Bool.
 
 ## Examples
 

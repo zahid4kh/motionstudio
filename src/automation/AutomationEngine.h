@@ -16,7 +16,7 @@ class SceneGraph;
 // sequences, poses) as a deterministic PLC-style scan cycle:
 //
 //   0. apply operation action writes from the previous scan + queued user inputs
-//   1. publish actuator / sequence status signals
+//   1. read sensors, publish actuator / sequence status signals
 //   2. evaluate derived signals (dependency order)
 //   3. advance sequences (finish / start operations, issue actuator commands)
 //   4. evaluate actuator expression bindings
@@ -95,6 +95,8 @@ public:
     };
     SeqStatus seqStatus(int sequenceId) const;
 
+    // Object the sensor signal `signalId` detected at the start of this scan, or -1
+    int sensorDetection(int signalId) const;
     // Motors whose actuator is moving this scan (for viewport highlighting)
     std::vector<int> movingMotors() const;
     // Velocity of an actuated joint this scan (deg/s or m/s)
@@ -149,6 +151,13 @@ private:
         int     slotBase = -1;      // running, done, cycles
     };
 
+    struct SensorRt {
+        int          signalId = -1;
+        int          slot     = -1;
+        SensorConfig cfg;
+        int          detected = -1;
+    };
+
     struct DerivedRt {
         int slot = -1;
         SignalType type = SignalType::Real;
@@ -178,6 +187,7 @@ private:
     std::vector<SignalType> m_slotType;
 
     std::vector<DerivedRt>  m_derived;
+    std::vector<SensorRt>   m_sensors;
     std::vector<ActuatorRt> m_actuators;
     std::vector<SeqRt>      m_sequences;
     std::map<int, int>      m_actIndexByMotor;

@@ -1,5 +1,6 @@
 #include "AutomationEngine.h"
 #include "../scene/SceneGraph.h"
+#include "Sensors.h"
 #include <QSet>
 #include <algorithm>
 #include <cmath>
@@ -47,7 +48,7 @@ std::vector<AutomationEngine::Symbol> AutomationEngine::buildSymbols(const Scene
         sym.name     = s.name;
         sym.kind     = SymbolKind::Signal;
         sym.ownerId  = id;
-        sym.writable = s.kind != SignalKind::Derived;
+        sym.writable = s.kind == SignalKind::Input || s.kind == SignalKind::Internal;
         sym.type     = s.type;
         sym.isBool   = s.type == SignalType::Bool;
         sym.help     = signalKindName(s.kind) + " " + signalTypeName(s.type) +
@@ -140,6 +141,10 @@ QStringList AutomationEngine::validateAll(const SceneGraph& scene) {
         if (s.kind == SignalKind::Derived) {
             if (s.expression.trimmed().isEmpty()) errs << "Signal " + s.name + ": derived signal has no expression";
             else chk("Signal " + s.name, s.expression);
+        }
+        if (s.kind == SignalKind::Sensor) {
+            QString p = sensors::problem(scene, s.sensor);
+            if (!p.isEmpty()) errs << "Sensor " + s.name + ": " + p;
         }
     }
     for (int mid : scene.motorIdsSorted()) {
@@ -250,6 +255,8 @@ bool AutomationEngine::start(QStringList* errors) {
     for (auto& [id, s] : m_scene->allSignals()) {
         int slot = res.read.value(s.name);
         m_cur[size_t(slot)] = coerceSignal(s.type, s.initialValue);
+        if (s.kind == SignalKind::Sensor)
+            m_sensors.push_back({id, slot, s.sensor, -1});
         if (s.kind == SignalKind::Derived) {
             DerivedRt d;
             d.slot = slot;
@@ -361,6 +368,7 @@ void AutomationEngine::stop() {
     m_prev.clear();
     m_slotType.clear();
     m_derived.clear();
+    m_sensors.clear();
     m_actuators.clear();
     m_sequences.clear();
     m_actIndexByMotor.clear();
@@ -431,6 +439,11 @@ void AutomationEngine::scan(double dt) {
 }
 
 void AutomationEngine::publishStatus() {
+    for (auto& sn : m_sensors) {
+        const sensors::Reading r = sensors::read(*m_scene, sn.cfg);
+        m_cur[size_t(sn.slot)] = r.active ? 1 : 0;
+        sn.detected = r.objectId;
+    }
     for (auto& a : m_actuators) {
         double* v = m_cur.data() + a.slotBase;
         v[AF_Pos]    = a.st.pos;
@@ -724,6 +737,12 @@ AutomationEngine::OpStatus AutomationEngine::opStatus(int sequenceId, int operat
         }
     }
     return {};
+}
+
+int AutomationEngine::sensorDetection(int signalId) const {
+    for (const auto& sn : m_sensors)
+        if (sn.signalId == signalId) return sn.detected;
+    return -1;
 }
 
 AutomationEngine::SeqStatus AutomationEngine::seqStatus(int sequenceId) const {

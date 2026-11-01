@@ -49,6 +49,42 @@ else()
     set(OCCT_FOUND FALSE)
 endif()
 
+# Everything that does not need widgets or OpenGL: scene, automation,
+# physics, file I/O. The app and the (optional) tests link it.
+add_library(MotionStudioCore STATIC
+    src/scene/SceneGraph.cpp
+    src/scene/UndoManager.cpp
+    src/scene/MeshWeld.cpp
+    src/scene/PrimitiveMesh.cpp
+    src/scene/SceneQuery.cpp
+    src/physics/SimulationEngine.cpp
+    src/automation/Expression.cpp
+    src/automation/AutomationEngine.cpp
+    src/automation/Sensors.cpp
+    src/serialization/ProjectSerializer.cpp
+    src/import/StepImporter.cpp
+)
+target_include_directories(MotionStudioCore PUBLIC src)
+target_link_libraries(MotionStudioCore PUBLIC Qt6::Core Qt6::Gui)
+
+if(MUJOCO_FOUND)
+    target_link_libraries(MotionStudioCore PUBLIC mujoco)
+    target_compile_definitions(MotionStudioCore PUBLIC MUJOCO_ENABLED)
+endif()
+
+if(OCCT_FOUND)
+    target_include_directories(MotionStudioCore PRIVATE "${OCCT_INCLUDE_DIR}/opencascade")
+    get_filename_component(OCCT_LIB_DIR "${OCCT_TKXDESTEP_LIB}" DIRECTORY)
+    target_link_directories(MotionStudioCore PUBLIC "${OCCT_LIB_DIR}")
+    target_link_libraries(MotionStudioCore PUBLIC
+        TKernel TKMath TKG2d TKG3d TKGeomBase TKBRep
+        TKGeomAlgo TKTopAlgo TKShHealing TKMesh
+        TKXSBase TKSTEPBase TKSTEPAttr TKSTEP209 TKSTEP
+        TKCDF TKLCAF TKCAF TKXCAF TKXDESTEP
+    )
+    target_compile_definitions(MotionStudioCore PUBLIC OCCT_ENABLED)
+endif()
+
 set(SOURCES
     src/main.cpp
     src/MainWindow.cpp
@@ -57,12 +93,6 @@ set(SOURCES
     src/viewport/LightingPanel.cpp
     src/viewport/ViewCube.cpp
     src/viewport/MeshFeatures.cpp
-    src/scene/SceneGraph.cpp
-    src/scene/UndoManager.cpp
-    src/scene/MeshWeld.cpp
-    src/physics/SimulationEngine.cpp
-    src/automation/Expression.cpp
-    src/automation/AutomationEngine.cpp
     src/ui/HierarchyPanel.cpp
     src/ui/PropertiesPanel.cpp
     src/ui/TemplateDialog.cpp
@@ -73,22 +103,20 @@ set(SOURCES
     src/ui/automation/AutomationPanel.cpp
     src/ui/automation/ExpressionEdit.cpp
     src/ui/automation/SignalsPage.cpp
+    src/ui/automation/SensorDialog.cpp
     src/ui/automation/ActuatorsPage.cpp
     src/ui/automation/SequencesPage.cpp
     src/ui/automation/RuntimePage.cpp
     src/ui/automation/GanttView.cpp
     src/ui/automation/SignalTracePlot.cpp
-    src/serialization/ProjectSerializer.cpp
-    src/import/StepImporter.cpp
     resources.qrc
 )
 
 add_executable(MotionStudio ${SOURCES})
 
-target_include_directories(MotionStudio PRIVATE src)
-
 target_link_libraries(MotionStudio
     PRIVATE
+    MotionStudioCore
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
@@ -98,20 +126,11 @@ target_link_libraries(MotionStudio
     nlohmann_json::nlohmann_json
 )
 
-if(MUJOCO_FOUND)
-    target_link_libraries(MotionStudio PRIVATE mujoco)
-    target_compile_definitions(MotionStudio PRIVATE MUJOCO_ENABLED)
-endif()
-
-if(OCCT_FOUND)
-    target_include_directories(MotionStudio PRIVATE "${OCCT_INCLUDE_DIR}/opencascade")
-    get_filename_component(OCCT_LIB_DIR "${OCCT_TKXDESTEP_LIB}" DIRECTORY)
-    target_link_directories(MotionStudio PRIVATE "${OCCT_LIB_DIR}")
-    target_link_libraries(MotionStudio PRIVATE
-        TKernel TKMath TKG2d TKG3d TKGeomBase TKBRep
-        TKGeomAlgo TKTopAlgo TKShHealing TKMesh
-        TKXSBase TKSTEPBase TKSTEPAttr TKSTEP209 TKSTEP
-        TKCDF TKLCAF TKCAF TKXCAF TKXDESTEP
-    )
-    target_compile_definitions(MotionStudio PRIVATE OCCT_ENABLED)
+# Headless regression tests for the core: cmake -DMOTIONSTUDIO_TESTS=ON,
+# then ./build/MotionStudioTests (exit code 0 = all passed)
+option(MOTIONSTUDIO_TESTS "Build the core regression tests" OFF)
+if(MOTIONSTUDIO_TESTS)
+    add_executable(MotionStudioTests tests/main.cpp)
+    target_link_libraries(MotionStudioTests PRIVATE MotionStudioCore)
+    target_compile_definitions(MotionStudioTests PRIVATE MS_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 endif()

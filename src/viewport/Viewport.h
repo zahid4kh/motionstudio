@@ -74,12 +74,6 @@ private:
     void buildAxisGizmo();
     void buildWireResources();
 
-    MeshData makeCube();
-    MeshData makeCylinder(int segs = 20);
-    MeshData makeSphere  (int rings = 16, int sectors = 24);
-    MeshData makeCapsule (int rings = 8,  int sectors = 20);
-    MeshData makeBasket  ();
-
     void uploadMesh(MeshData& m, const std::vector<float>& v);
     void drawMesh (const MeshData& m);
     void drawScene();
@@ -89,6 +83,8 @@ private:
     void drawKeyHints  (QPainter& p);
     void drawPill(QPainter& p, const QPointF& topLeft, const QString& text, const QColor& border = QColor());
     void drawPhysicsOverlays();
+    void drawSensors();
+    void drawSensorLabels(QPainter& p);
     void drawKeyPoints (QPainter& p);
     void drawAxisPickBanner(QPainter& p);
     // The selected object's joint axis and, in axis-pick mode, the hovered candidate
@@ -179,7 +175,6 @@ private:
         std::unique_ptr<MeshFeatures> features;
     };
     std::unordered_map<const MeshGeometry*, FeatureCache> m_meshFeatures;
-    std::vector<float>            m_primitiveVertices[6];   // by PrimitiveType, kept by make*()
     std::unique_ptr<MeshFeatures> m_primitiveFeatures[6];
     const MeshFeatures* featuresFor(const SceneObject& obj);
 

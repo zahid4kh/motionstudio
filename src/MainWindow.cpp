@@ -450,6 +450,12 @@ void MainWindow::buildDocks() {
         QTimer::singleShot(0, this, [this]{ resizeDocks({m_automationDock}, {320}, Qt::Vertical); });
     });
     connect(m_automation, &AutomationPanel::statusMessage, this, &MainWindow::showStatus);
+    connect(m_hierarchy, &HierarchyPanel::addSensorRequested, this, [this](int objectId){
+        if (m_sim->isActive()) { showStatus("Reset the simulation to add a sensor", false); return; }
+        m_automationDock->show();
+        m_automationDock->raise();
+        m_automation->addSensorOn(objectId);
+    });
     connect(m_properties, &PropertiesPanel::openActuatorRequested, this, [this](int jointId){
         m_automationDock->show();
         m_automationDock->raise();

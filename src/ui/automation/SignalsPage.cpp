@@ -1,4 +1,6 @@
 #include "SignalsPage.h"
+#include "SensorDialog.h"
+#include "automation/Sensors.h"
 #include "automation/Expression.h"
 #include "physics/SimulationEngine.h"
 #include "ui/Theme.h"
@@ -34,12 +36,15 @@ SignalsPage::SignalsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* pare
     m_addInput    = new QPushButton(Theme::icon("log-in"),   "New Input");
     m_addInternal = new QPushButton(Theme::icon("variable"), "New Internal");
     m_addDerived  = new QPushButton(Theme::icon("sigma"),    "New Derived");
+    m_addSensor   = new QPushButton(Theme::icon("radio"),    "New Sensor");
     m_delete      = new QPushButton(Theme::icon("trash-2", Theme::Tint::Danger), "Delete");
     m_delete->setProperty("danger", true);
     m_addInput->setToolTip("A signal you set by hand from the Runtime tab (buttons, switches, set-points)");
     m_addInternal->setToolTip("A state/flag written by operation actions (e.g. Gripper = true; Count = Count + 1)");
     m_addDerived->setToolTip("A signal recomputed every scan from an expression (e.g. Ready = J1.inPosition && !EStop)");
-    for (auto* b : {m_addInput, m_addInternal, m_addDerived}) bar->addWidget(b);
+    m_addSensor->setToolTip("A Bool that is true while something is in a beam or zone in the scene "
+                            "(part present, light barrier, contact). Mount it on the selected object.");
+    for (auto* b : {m_addInput, m_addInternal, m_addDerived, m_addSensor}) bar->addWidget(b);
     bar->addStretch();
     auto* hint = new QLabel("Double-click a cell to edit. Names are used in expressions.");
     hint->setObjectName("hint");
@@ -48,7 +53,7 @@ SignalsPage::SignalsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* pare
     vb->addLayout(bar);
 
     m_table = new QTableWidget(0, C_Count);
-    m_table->setHorizontalHeaderLabels({"Name", "Kind", "Type", "Initial", "Expression (Derived)", "Description", "Value"});
+    m_table->setHorizontalHeaderLabels({"Name", "Kind", "Type", "Initial", "Expression / Sensor", "Description", "Value"});
     m_table->verticalHeader()->hide();
     m_table->setAlternatingRowColors(true);
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -72,6 +77,7 @@ SignalsPage::SignalsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* pare
     connect(m_addInput,    &QPushButton::clicked, this, [this]{ addSignal(SignalKind::Input); });
     connect(m_addInternal, &QPushButton::clicked, this, [this]{ addSignal(SignalKind::Internal); });
     connect(m_addDerived,  &QPushButton::clicked, this, [this]{ addSignal(SignalKind::Derived); });
+    connect(m_addSensor,   &QPushButton::clicked, this, [this]{ addSensorOn(m_scene->selectedObjectId()); });
     connect(m_delete,      &QPushButton::clicked, this, &SignalsPage::deleteSelected);
     connect(m_table, &QTableWidget::cellChanged, this, &SignalsPage::onItemChanged);
 
@@ -98,13 +104,17 @@ void SignalsPage::refresh() {
         m_table->setItem(row, C_Name, name);
 
         auto* kind = new QComboBox;
-        kind->addItems({"Input", "Internal", "Derived"});
+        kind->addItems({"Input", "Internal", "Derived", "Sensor"});
         kind->setCurrentIndex(int(sg.kind));
         kind->setEnabled(!m_locked);
         connect(kind, &QComboBox::currentIndexChanged, this, [this, sid](int k){
             Signal* s = m_scene->getSignal(sid);
             if (!s) return;
-            edit([&]{ s->kind = SignalKind(k); m_scene->notifyAutomationChanged(); });
+            edit([&]{
+                s->kind = SignalKind(k);
+                if (s->kind == SignalKind::Sensor) s->type = SignalType::Bool;
+                m_scene->notifyAutomationChanged();
+            });
             scheduleRefresh();
         });
         m_table->setCellWidget(row, C_Kind, kind);
@@ -112,7 +122,7 @@ void SignalsPage::refresh() {
         auto* type = new QComboBox;
         type->addItems({"Bool", "Int", "Real"});
         type->setCurrentIndex(int(sg.type));
-        type->setEnabled(!m_locked);
+        type->setEnabled(!m_locked && sg.kind != SignalKind::Sensor);
         connect(type, &QComboBox::currentIndexChanged, this, [this, sid](int t){
             Signal* s = m_scene->getSignal(sid);
             if (!s) return;
@@ -125,9 +135,10 @@ void SignalsPage::refresh() {
         });
         m_table->setCellWidget(row, C_Type, type);
 
-        auto* init = new QTableWidgetItem(sg.kind == SignalKind::Derived ? QString("—")
+        const bool computed = sg.kind == SignalKind::Derived || sg.kind == SignalKind::Sensor;
+        auto* init = new QTableWidgetItem(computed ? QString("—")
                                           : autoui::formatValue(sg.initialValue, false, sg.type));
-        if (sg.kind == SignalKind::Derived) init->setFlags(init->flags() & ~Qt::ItemIsEditable);
+        if (computed) init->setFlags(init->flags() & ~Qt::ItemIsEditable);
         init->setToolTip("Value at the start of the simulation (and after Reset)");
         m_table->setItem(row, C_Initial, init);
 
@@ -142,6 +153,20 @@ void SignalsPage::refresh() {
                 edit([&]{ s->expression = t; m_scene->notifyAutomationChanged(); });
             });
             m_table->setCellWidget(row, C_Expr, ex);
+        } else if (sg.kind == SignalKind::Sensor) {
+            auto* cell = new QWidget;
+            auto* hb = new QHBoxLayout(cell);
+            hb->setContentsMargins(4, 0, 2, 0);
+            const QString problem = sensors::problem(*m_scene, sg.sensor);
+            auto* text = new QLabel(problem.isEmpty() ? sensors::summary(*m_scene, sg.sensor) : "⚠ " + problem);
+            text->setProperty("error", !problem.isEmpty());
+            text->setToolTip(text->text());
+            auto* cfg = new QPushButton(Theme::icon("sliders-horizontal"), "Configure…");
+            cfg->setEnabled(!m_locked);
+            connect(cfg, &QPushButton::clicked, this, [this, sid]{ configureSensor(sid); });
+            hb->addWidget(text, 1);
+            hb->addWidget(cfg);
+            m_table->setCellWidget(row, C_Expr, cell);
         } else {
             auto* na = new QTableWidgetItem(sg.kind == SignalKind::Input ? "set from the Runtime tab"
                                                                          : "set by operation actions");
@@ -185,7 +210,7 @@ void SignalsPage::refreshRuntime() {
 
 void SignalsPage::setLocked(bool locked) {
     Page::setLocked(locked);
-    for (auto* b : {m_addInput, m_addInternal, m_addDerived, m_delete}) b->setEnabled(!locked);
+    for (auto* b : {m_addInput, m_addInternal, m_addDerived, m_addSensor, m_delete}) b->setEnabled(!locked);
     refresh();
 }
 
@@ -196,11 +221,38 @@ void SignalsPage::addSignal(SignalKind kind) {
         case SignalKind::Input:    s.name = "Start";   s.type = SignalType::Bool; break;
         case SignalKind::Internal: s.name = "Flag";    s.type = SignalType::Bool; break;
         case SignalKind::Derived:  s.name = "Ready";   s.type = SignalType::Bool; s.expression = "true"; break;
+        case SignalKind::Sensor:   s.name = "PartPresent"; s.type = SignalType::Bool; break;
     }
     edit([&]{ m_scene->addSignal(s); });
     refresh();
     m_table->selectRow(m_table->rowCount() - 1);
     m_table->editItem(m_table->item(m_table->rowCount() - 1, C_Name));
+}
+
+void SignalsPage::addSensorOn(int objectId) {
+    if (m_locked) return;
+    Signal s;
+    s.kind = SignalKind::Sensor;
+    s.type = SignalType::Bool;
+    s.name = "PartPresent";
+    s.sensor.objectId = m_scene->getObject(objectId) ? objectId : -1;
+    s.sensor.target   = SensorTarget::RigidBodies;
+    int id = -1;
+    edit([&]{ id = m_scene->addSignal(s); });
+    refresh();
+    m_table->selectRow(m_table->rowCount() - 1);
+    configureSensor(id);
+}
+
+void SignalsPage::configureSensor(int signalId) {
+    Signal* s = m_scene->getSignal(signalId);
+    if (!s || m_locked) return;
+    SensorDialog dlg(m_scene, s->name, s->sensor, this);
+    if (dlg.exec() != QDialog::Accepted) return;
+    s = m_scene->getSignal(signalId);
+    if (!s) return;
+    edit([&]{ s->sensor = dlg.config(); m_scene->notifyAutomationChanged(); });
+    scheduleRefresh();
 }
 
 void SignalsPage::deleteSelected() {

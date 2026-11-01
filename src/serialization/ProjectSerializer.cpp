@@ -234,6 +234,21 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene, MeshPool* pool) {
         o["initialValue"] = sg.initialValue;
         o["expression"]   = sg.expression;
         o["description"]  = sg.description;
+        if (sg.kind == SignalKind::Sensor) {
+            const SensorConfig& c = sg.sensor;
+            QJsonObject so;
+            so["type"]         = c.type == SensorType::Zone ? "Zone" : "Beam";
+            so["objectId"]     = c.objectId;
+            so["offset"]       = vec3ToJson(c.offset);
+            so["direction"]    = vec3ToJson(c.direction);
+            so["range"]        = double(c.range);
+            so["size"]         = vec3ToJson(c.size);
+            so["objectBounds"] = c.objectBounds;
+            so["target"]       = c.target == SensorTarget::RigidBodies ? "RigidBodies"
+                               : c.target == SensorTarget::Object ? "Object" : "Any";
+            so["targetId"]     = c.targetId;
+            o["sensor"] = so;
+        }
         signalsArr.append(o);
     }
     for (auto& [id, q] : scene.allSequences()) {
@@ -412,18 +427,37 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root, con
     }
 
     // Signals
+    QHash<int, int> signalIdMap;
     for (auto v : root["signals"].toArray()) {
         auto o = v.toObject();
         Signal sg;
         sg.name         = o["name"].toString();
         QString t = o["type"].toString();
         sg.type         = t == "Int" ? SignalType::Int : (t == "Real" ? SignalType::Real : SignalType::Bool);
-        QString k = o["kind"].toString();
-        sg.kind         = k == "Input" ? SignalKind::Input : (k == "Derived" ? SignalKind::Derived : SignalKind::Internal);
+        sg.kind         = signalKindFromName(o["kind"].toString());
         sg.initialValue = o["initialValue"].toDouble();
         sg.expression   = o["expression"].toString();
         sg.description  = o["description"].toString();
-        scene.addSignal(sg);
+        if (sg.kind == SignalKind::Sensor) {
+            const QJsonObject so = o["sensor"].toObject();
+            SensorConfig& c = sg.sensor;
+            // An object reference that doesn't resolve stays broken (-2)
+            // rather than silently becoming the world
+            auto object = [&](const QJsonValue& v) { int id = v.toInt(-1); return id == -1 ? -1 : idMap.value(id, -2); };
+            c.type         = so["type"].toString() == "Zone" ? SensorType::Zone : SensorType::Beam;
+            c.objectId     = object(so["objectId"]);
+            c.offset       = vec3FromJson(so["offset"].toObject());
+            c.direction    = vec3FromJson(so["direction"].toObject());
+            c.range        = float(so["range"].toDouble(0.5));
+            c.size         = vec3FromJson(so["size"].toObject());
+            c.objectBounds = so["objectBounds"].toBool(false);
+            const QString t = so["target"].toString();
+            c.target       = t == "RigidBodies" ? SensorTarget::RigidBodies
+                           : t == "Object" ? SensorTarget::Object : SensorTarget::Any;
+            c.targetId     = object(so["targetId"]);
+            sg.type        = SignalType::Bool;
+        }
+        signalIdMap[o["id"].toInt(-1)] = scene.addSignal(sg);
     }
 
     // Poses

@@ -144,6 +144,11 @@ void AutomationPanel::showProblems(const QStringList&) {
     m_problems->showMenu();
 }
 
+void AutomationPanel::addSensorOn(int objectId) {
+    m_tabs->setCurrentWidget(m_signals);
+    m_signals->addSensorOn(objectId);
+}
+
 void AutomationPanel::showActuatorForJoint(int jointId) {
     m_tabs->setCurrentWidget(m_actuators);
     m_actuators->selectActuatorForJoint(jointId);
