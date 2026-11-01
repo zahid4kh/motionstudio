@@ -20,6 +20,15 @@ Every scan is recorded from the first Play or Step until **Reset**: the joints, 
 
 Sequence and operation states always show the latest scan. The recording holds up to 20 minutes; after that, the bar shows *FULL*.
 
+## Interference check
+
+Tick **Check interference between moving parts** (under Sequences in the Runtime tab) to be warned when parts pass through each other, for example a robot clipping a fixture. It takes effect at the next Play after Reset. While two parts interfere, both are tinted red and the viewport overlay names them. The Runtime tab lists every pass, with its start time and how long it lasted.
+
+- Only parts that move relative to each other are checked: parts on different joints, or a moving part against the static scene.
+- Parts that already touch when you press Play count as assembled that way (a link in its housing), so they are not reported.
+- Rigid bodies are left to the physics, which handles their contacts.
+- The test uses the actual triangles. A part completely inside another, with no surfaces crossing, isn't reported.
+
 ## Before you press Play
 
 Check the **problems indicator** in the Automation header (top right). *No problems* means every expression and reference is valid. Otherwise click it to see the list in "Where: problem" form. Play refuses to start while there are problems.

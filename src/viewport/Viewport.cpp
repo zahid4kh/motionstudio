@@ -54,6 +54,7 @@ uniform vec3  viewPos;
 uniform bool  isSelected;
 uniform bool  isHovered;
 uniform bool  isActive;
+uniform bool  isAlert;
 out vec4 fragColor;
 void main(){
     vec3 n = normalize(normal);
@@ -65,6 +66,7 @@ void main(){
     float spec = pow(max(dot(n,h), 0.0), 48.0);
     vec3 col = objColor * (ambient + keyLight*diff + fillLight*fillDiff) + vec3(specular)*spec;
     if(isActive)   col = mix(col, vec3(0.15, 0.80, 0.45), 0.30);
+    if(isAlert)    col = mix(col, vec3(1.0, 0.15, 0.12), 0.55);
     if(isHovered)  col = mix(col, vec3(0.45, 0.72, 1.0), 0.28);
     if(isSelected) col = mix(col, vec3(1.0, 0.75, 0.1),  0.40);
     fragColor = vec4(col, 1.0);
@@ -519,9 +521,11 @@ bool Viewport::ikDragActive() const {
     return m_btnIk && m_btnIk->isChecked() && m_ikAvailable;
 }
 
-void Viewport::setSimulationOverlay(const QSet<int>& movingObjects, const QStringList& lines) {
-    if (movingObjects == m_movingObjects && lines == m_overlayLines) return;
+void Viewport::setSimulationOverlay(const QSet<int>& movingObjects, const QStringList& lines,
+                                    const QSet<int>& interfering) {
+    if (movingObjects == m_movingObjects && lines == m_overlayLines && interfering == m_interfering) return;
     m_movingObjects = movingObjects;
+    m_interfering = interfering;
     if (lines != m_overlayLines) {
         m_overlayLines = lines;
         if (!m_simOverlay) {
@@ -529,7 +533,9 @@ void Viewport::setSimulationOverlay(const QSet<int>& movingObjects, const QStrin
             m_simOverlay->setObjectName("viewOverlay");
             m_simOverlay->setAttribute(Qt::WA_TransparentForMouseEvents);
         }
-        m_simOverlay->setText("▶ " + lines.join("\n▶ "));
+        QStringList shown;
+        for (const QString& l : lines) shown << (l.startsWith("⚠") ? l : "▶ " + l);
+        m_simOverlay->setText(shown.join("\n"));
         m_simOverlay->adjustSize();
         m_simOverlay->move(10, 46);
         m_simOverlay->setVisible(!lines.isEmpty());
@@ -792,6 +798,7 @@ void Viewport::drawScene(){
         m_objShader->setUniformValue("isSelected", obj.selected);
         m_objShader->setUniformValue("isHovered",  id == m_hoveredId && !obj.selected);
         m_objShader->setUniformValue("isActive",   m_movingObjects.contains(id));
+        m_objShader->setUniformValue("isAlert",    m_interfering.contains(id));
         switch(obj.type){
             case PrimitiveType::Cube:     drawMesh(m_cube);     break;
             case PrimitiveType::Cylinder: drawMesh(m_cylinder); break;

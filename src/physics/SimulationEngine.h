@@ -6,6 +6,7 @@
 #include "../scene/SceneGraph.h"
 #include "../automation/AutomationEngine.h"
 #include "Recording.h"
+#include "../scene/Interference.h"
 
 #ifdef MUJOCO_ENABLED
 #include <mujoco/mujoco.h>
@@ -35,6 +36,12 @@ public:
     void   seekLive();
     int    viewFrame() const;                 // frame on display (the last one when live)
     bool   isScrubbing() const { return m_viewFrame >= 0; }
+    // Interference check between moving parts, run every other scan while
+    // enabled (takes effect at the next Play/Step from reset)
+    void   setInterferenceCheck(bool on) { m_checkInterference = on; }
+    bool   interferenceCheck() const { return m_checkInterference; }
+    const InterferenceChecker& interference() const { return m_interference; }
+
     // A slot's value on display: the recorded one while scrubbing
     double displayValue(int slot) const;
     double displayValue(const QString& name) const { return displayValue(m_auto->slotOf(name)); }
@@ -105,6 +112,9 @@ private:
     double                             m_speed   = 1.0;
     double                             m_accum   = 0.0;
     Recording                          m_rec;
+    InterferenceChecker                m_interference;
+    bool                               m_checkInterference = false;
+    long                               m_scans = 0;
     int                                m_viewFrame = -1;   // -1 = live
     // The live state, kept while a recorded frame is on display
     std::unordered_map<int, Transform> m_liveTransforms;

@@ -14,6 +14,7 @@
 #include "automation/Kinematics.h"
 #include "physics/SimulationEngine.h"
 #include "serialization/ProjectSerializer.h"
+#include "scene/Interference.h"
 
 namespace {
 
@@ -439,6 +440,90 @@ TEST(moveLFollowsAStraightLine) {
     g.getSequence(sid)->operations[0].toolId = g.rootObjects().front();
     CHECK(!AutomationEngine::validateAll(g).isEmpty());
     (void)pa;   // pose A documents the start; the joints are set to it directly
+}
+
+// ── Cycle time ──────────────────────────────────────────────────────────────
+
+TEST(criticalPathThroughLongerBranch) {
+    // 1 (0.5 s) → { 2 (0.3 s), 3 (0.6 s) } → 4 (0.1 s): 1 → 3 → 4 sets the cycle
+    SceneGraph g;
+    Sequence q;
+    q.name = "Cell";
+    Operation o1 = makeOp(g, OperationType::Wait);
+    o1.duration = "0.5";
+    Operation o2 = makeOp(g, OperationType::Wait, {o1.id});
+    o2.duration = "0.3";
+    Operation o3 = makeOp(g, OperationType::Wait, {o1.id});
+    o3.duration = "0.6";
+    Operation o4 = makeOp(g, OperationType::Wait, {o2.id, o3.id});
+    o4.duration = "0.1";
+    q.operations = {o1, o2, o3, o4};
+    int sid = g.addSequence(q);
+    AutomationEngine e(&g);
+    CHECK(e.start(nullptr));
+    runFor(e, 1.5);
+    const auto st = e.seqStatus(sid);
+    CHECK(st.cycles == 1);
+    CHECK((st.criticalPath == std::vector<int>{o1.id, o3.id, o4.id}));
+    CHECK_NEAR(st.lastCycleTime, 1.2, 0.05);
+    CHECK_NEAR(st.criticalBusy, 1.2, 0.05);
+}
+
+// ── Interference ────────────────────────────────────────────────────────────
+
+TEST(interferenceTrianglesExact) {
+    SceneGraph g;
+    int a = addBox(g, "A", {0, 0, 0}, {1, 1, 1});
+    int b = addBox(g, "B", {0.9f, 0.3f, 0.2f}, {1, 1, 1});   // corners overlap 0.1 m
+    int s = g.addObject("Ball", PrimitiveType::Sphere);
+    g.getObject(s)->transform.position = {0, 0.95f, 0};   // a 0.5 m ball: its bottom pokes 0.05 into A
+    InterferenceChecker c;
+    CHECK(c.intersect(g, a, b));
+    CHECK(c.intersect(g, a, s));
+    g.getObject(b)->transform.position = {1.0f, 0.3f, 0.2f};   // faces touch exactly
+    CHECK(!c.intersect(g, a, b));
+    g.getObject(b)->transform.position = {1.2f, 0.3f, 0.2f};
+    CHECK(!c.intersect(g, a, b));
+    g.getObject(s)->transform.position = {0.9f, 0.9f, 0};   // boxes overlap, the ball misses the edge
+    CHECK(scenequery::overlap(scenequery::worldBox(g, a), scenequery::worldBox(g, s)));
+    CHECK(!c.intersect(g, a, s));
+}
+
+TEST(interferenceFoundDuringRun) {
+    SceneGraph g;
+    Arm a = makeArm(g);
+    g.removeObject(a.part);
+    // A post the arm sweeps through at about 45°
+    const float r = 0.7f;
+    int post = addBox(g, "Post", {r * 0.7071f, 0, -r * 0.7071f}, {0.06f, 1, 0.06f});
+    Sequence q;
+    q.name = "Sweep";
+    Operation move = makeOp(g, OperationType::Move);
+    move.actuatorId = a.motor;
+    move.target = "90";
+    q.operations = {move};
+    g.addSequence(q);
+
+    SimulationEngine sim(&g);
+    sim.setInterferenceCheck(true);
+    sim.step();
+    CHECK(sim.interference().pairCount() > 0);
+    for (int i = 0; i < 40; ++i) sim.step();                 // 0.66 s: done at 0.5 s
+    const auto& ev = sim.interference().events();
+    CHECK(ev.size() == 1);
+    if (ev.size() == 1) {
+        CHECK((std::set<int>{ev[0].a, ev[0].b} == std::set<int>{a.arm, post}));
+        // The arm (0.1 thick) meets the 0.06 post around 45° = 0.25 s at 180°/s
+        std::printf("  arm hits post from %.3f to %.3f s\n", ev[0].start, ev[0].end);
+        CHECK(ev[0].start > 0.18 && ev[0].start < 0.25);
+        CHECK(ev[0].end > 0.25 && ev[0].end < 0.33);
+        CHECK(!ev[0].ongoing);
+    }
+    CHECK(sim.interference().interfering().empty());
+    // The base and arm overlap from the start (assembled): not reported
+    for (const auto& e : ev) CHECK(!(std::set<int>{e.a, e.b} == std::set<int>{a.base, a.arm}));
+    sim.reset();
+    CHECK(sim.interference().events().empty());
 }
 
 // ── Recording ───────────────────────────────────────────────────────────────

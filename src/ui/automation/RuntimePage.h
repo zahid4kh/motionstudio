@@ -48,6 +48,8 @@ private:
     QLabel*         m_header = nullptr;
     QTreeWidget*    m_status = nullptr;
     QLabel*         m_warnings = nullptr;
+    class QCheckBox* m_checkInterference = nullptr;
+    QLabel*         m_interference = nullptr;
 
     SignalTracePlot* m_plot = nullptr;
     QComboBox*       m_window = nullptr;

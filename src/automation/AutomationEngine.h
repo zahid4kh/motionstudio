@@ -95,6 +95,11 @@ public:
         double   cycleStart = 0;
         double   lastCycleTime = 0;
         QString  detail;
+        // The last completed cycle's critical path: the chain of operations
+        // (ids, in order) that set its length: each one waited on the one
+        // before it. Shortening any of them shortens the cycle.
+        std::vector<int> criticalPath;
+        double   criticalBusy = 0;    // seconds those operations ran; the rest was waiting
     };
     SeqStatus seqStatus(int sequenceId) const;
 

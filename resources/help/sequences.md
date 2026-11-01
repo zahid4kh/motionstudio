@@ -48,6 +48,12 @@ Actions are assignments separated by `;`:
 Gripper = true; Cycles = Cycles + 1
 ```
 
+## Cycle time and the critical path
+
+After each completed cycle, the sequence panel shows the **last cycle** time and the cycle's **critical path**, for example `1 → 3 → 5 → 6`. These are the operations that set the cycle's length: each one had to wait for the one before it. They are outlined in the Gantt chart. The time is split into **working** (those operations running) and **waiting** (start conditions, a disabled sequence, gaps).
+
+To make the cycle faster, speed up an operation *on* the critical path, or move work off it into a parallel branch. Speeding up anything else doesn't change the cycle time.
+
 ## Relative moves
 
 *Target* is an expression, so a relative move is just the current target plus an offset:

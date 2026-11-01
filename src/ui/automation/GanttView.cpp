@@ -81,7 +81,7 @@ void GanttView::paintEvent(QPaintEvent*) {
         if (i == m_selected) p.fillRect(0, y, width(), kRowH, c.selection);
         else if (i % 2) p.fillRect(0, y, width(), kRowH, c.island.lighter(c.dark ? 118 : 104));
 
-        p.setPen(c.text);
+        p.setPen(b.critical ? c.warning : c.text);
         p.drawText(QRect(6, y, kLabelW - 10, kRowH), Qt::AlignVCenter | Qt::AlignLeft,
                    p.fontMetrics().elidedText(b.label, Qt::ElideRight, kLabelW - 10));
 
@@ -91,7 +91,7 @@ void GanttView::paintEvent(QPaintEvent*) {
         QRectF r(X(b.start), y + 4, std::max(3.0, X(end) - X(b.start)), kRowH - 8);
         QColor fill = b.state == 2 ? c.success : (b.state == 1 ? c.info : c.handle);
         if (b.fromPreviousCycle) fill.setAlpha(110);
-        p.setPen(Qt::NoPen);
+        p.setPen(b.critical ? QPen(c.warning, 2.0) : QPen(Qt::NoPen));
         p.setBrush(fill);
         p.drawRoundedRect(r, 4, 4);
         if (b.state == 1 && b.progress > 0 && b.progress < 1) {

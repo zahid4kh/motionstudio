@@ -2,7 +2,9 @@
 #include "SignalTracePlot.h"
 #include "physics/SimulationEngine.h"
 #include "ui/Theme.h"
+#include <QCheckBox>
 #include <QComboBox>
+#include <QSettings>
 #include <QDoubleSpinBox>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -85,6 +87,24 @@ RuntimePage::RuntimePage(SceneGraph* scene, SimulationEngine* sim, QWidget* pare
     m_warnings->setWordWrap(true);
     m_warnings->setObjectName("warningText");
     sv->addWidget(m_warnings);
+    m_checkInterference = new QCheckBox("Check interference between moving parts");
+    m_checkInterference->setToolTip("While simulating, report parts that pass through each other (a robot "
+                                    "clipping a fixture). Parts touching at the start, and rigid bodies, are "
+                                    "ignored. Takes effect on the next Play from Reset.");
+    m_checkInterference->setChecked(QSettings("MotionStudio", "MotionStudio").value("simulation/checkInterference", false).toBool());
+    m_sim->setInterferenceCheck(m_checkInterference->isChecked());
+    connect(m_checkInterference, &QCheckBox::toggled, this, [this](bool on){
+        m_sim->setInterferenceCheck(on);
+        QSettings("MotionStudio", "MotionStudio").setValue("simulation/checkInterference", on);
+        if (m_sim->isActive())
+            emit statusMessage(on ? "Interference check starts at the next Play after Reset"
+                                  : "Interference check stops at the next Play after Reset", true);
+    });
+    sv->addWidget(m_checkInterference);
+    m_interference = new QLabel;
+    m_interference->setWordWrap(true);
+    m_interference->setTextFormat(Qt::RichText);
+    sv->addWidget(m_interference);
     right->addWidget(stBox);
 
     auto* trBox = new QGroupBox("Trace");
@@ -374,6 +394,32 @@ void RuntimePage::refreshRuntime() {
             it->setBackground(1, autoui::opStateBrush(st.state));
         }
     }
+    // Interference events, newest first
+    const InterferenceChecker& ic = m_sim->interference();
+    if (!live || !ic.active()) {
+        m_interference->setText(live || !m_checkInterference->isChecked() ? QString()
+            : QString("<span style='color:%1'>Interference is checked from the next Play.</span>")
+                  .arg(Theme::css(Theme::colors().muted)));
+    } else if (ic.events().empty()) {
+        m_interference->setText(QString("<span style='color:%1'>✓ No interference so far (%2 part pairs checked)</span>")
+                                    .arg(Theme::css(Theme::colors().success)).arg(ic.pairCount()));
+    } else {
+        QStringList lines;
+        const auto& ev = ic.events();
+        for (int i = int(ev.size()) - 1; i >= 0 && lines.size() < 6; --i) {
+            const auto& e = ev[size_t(i)];
+            const SceneObject* a = m_scene->getObject(e.a);
+            const SceneObject* b = m_scene->getObject(e.b);
+            lines << QString("%1 ↔ %2 &nbsp;%3 s%4")
+                         .arg((a ? a->name : QString("?")).toHtmlEscaped(), (b ? b->name : QString("?")).toHtmlEscaped())
+                         .arg(e.start, 0, 'f', 2)
+                         .arg(e.ongoing ? " <b>now</b>" : QString(" for %1 s").arg(e.end - e.start, 0, 'f', 2));
+        }
+        if (int(ev.size()) > lines.size()) lines << QString("… %1 more").arg(int(ev.size()) - lines.size());
+        m_interference->setText(QString("<span style='color:%1'><b>⚠ Interference</b></span><br>%2")
+                                    .arg(Theme::css(Theme::colors().danger), lines.join("<br>")));
+    }
+
     m_plot->setPlayhead(m_sim->isScrubbing() ? m_sim->recording().time(m_sim->viewFrame()) : -1.0);
     m_plot->update();
 }

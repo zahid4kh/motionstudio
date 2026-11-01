@@ -13,6 +13,7 @@ public:
         int     state = 0;                // 0 waiting, 1 running, 2 done
         double  progress = 0;
         bool    fromPreviousCycle = false;
+        bool    critical = false;         // on the last cycle's critical path
         QString detail;
     };
 

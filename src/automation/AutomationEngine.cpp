@@ -584,6 +584,23 @@ void AutomationEngine::advanceSequence(SeqRt& seq) {
     if (allDone) {
         st.cycles++;
         st.lastCycleTime = m_time + m_dt - st.cycleStart;
+        // Critical path: back from the operation that finished last, always
+        // through the predecessor that finished last
+        st.criticalPath.clear();
+        st.criticalBusy = 0;
+        int cur = -1;
+        for (int i = 0; i < int(seq.ops.size()); ++i)
+            if (cur < 0 || seq.ops[size_t(i)].status.endTime > seq.ops[size_t(cur)].status.endTime) cur = i;
+        while (cur >= 0) {
+            const OpRt& o = seq.ops[size_t(cur)];
+            st.criticalPath.push_back(o.def.id);
+            st.criticalBusy += std::max(0.0, o.status.endTime - o.status.startTime);
+            int next = -1;
+            for (int p : o.predIdx)
+                if (next < 0 || seq.ops[size_t(p)].status.endTime > seq.ops[size_t(next)].status.endTime) next = p;
+            cur = next;
+        }
+        std::reverse(st.criticalPath.begin(), st.criticalPath.end());
         st.state  = seq.loop ? SeqState::Idle : SeqState::Finished;
         st.detail = seq.loop ? "cycle complete — restarting" : "finished";
     } else {

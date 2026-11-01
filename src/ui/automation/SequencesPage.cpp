@@ -597,9 +597,21 @@ void SequencesPage::refreshRuntime() {
         if (live) {
             auto ss = ae->seqStatus(s->id);
             static const char* names[] = {"idle", "running", "finished"};
-            m_seqState->setText(QString("State: <b>%1</b> — cycles: %2%3<br>%4")
+            QString critical;
+            if (!ss.criticalPath.empty()) {
+                QStringList steps;
+                for (int opId : ss.criticalPath)
+                    for (int i = 0; i < int(s->operations.size()); ++i)
+                        if (s->operations[size_t(i)].id == opId) steps << QString::number(i + 1);
+                const double waiting = std::max(0.0, ss.lastCycleTime - ss.criticalBusy);
+                critical = QString("<br><span style='color:%1'>Critical path</span> %2 — %3 s working, %4 s waiting")
+                               .arg(Theme::css(Theme::colors().warning), steps.join(" → "))
+                               .arg(ss.criticalBusy, 0, 'f', 2).arg(waiting, 0, 'f', 2);
+            }
+            m_seqState->setText(QString("State: <b>%1</b> — cycles: %2%3%4<br>%5")
                 .arg(names[int(ss.state)]).arg(ss.cycles)
-                .arg(ss.lastCycleTime > 0 ? QString(", last cycle %1 s").arg(ss.lastCycleTime, 0, 'f', 2) : QString())
+                .arg(ss.lastCycleTime > 0 ? QString(", last cycle <b>%1 s</b>").arg(ss.lastCycleTime, 0, 'f', 2) : QString())
+                .arg(critical)
                 .arg(ss.detail.toHtmlEscaped()));
         } else {
             m_seqState->setText("Press Play or Step to run.");
@@ -633,6 +645,8 @@ void SequencesPage::refreshRuntime() {
             }
             stateItem->setText(txt);
             stateItem->setBackground(autoui::opStateBrush(st.state));
+            const auto& crit = ae->seqStatus(s->id).criticalPath;
+            b.critical = std::find(crit.begin(), crit.end(), op.id) != crit.end();
             b.state = int(st.state);
             b.progress = st.progress;
             b.detail = st.detail;

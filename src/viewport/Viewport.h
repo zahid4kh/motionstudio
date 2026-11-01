@@ -47,7 +47,8 @@ public:
 
     // Simulation feedback: tint parts driven by a moving actuator and list
     // the running automation operations in the top-left corner.
-    void setSimulationOverlay(const QSet<int>& movingObjects, const QStringList& lines);
+    void setSimulationOverlay(const QSet<int>& movingObjects, const QStringList& lines,
+                              const QSet<int>& interfering = {});
 
     // IK drag: with the IK button on, dragging the gizmo of an object that
     // actuated joints move (a robot's tool) moves the object by inverse
@@ -193,6 +194,7 @@ private:
 
     int              m_hoveredId = -1;
     QSet<int>        m_movingObjects;
+    QSet<int>        m_interfering;      // tinted red: passing through another part
     QStringList      m_overlayLines;
     class QLabel*    m_simOverlay = nullptr;   // a widget, not QPainter text (renders reliably over GL)
     int              m_nearKeyPointIdx = -1;  // index into keyPointsFor(hovered obj type)

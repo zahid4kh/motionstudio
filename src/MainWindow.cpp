@@ -859,7 +859,16 @@ void MainWindow::updateSimulationOverlay() {
         const Joint* j = m ? m_scene->getJoint(m->jointId) : nullptr;
         if (j) addRigid(j->childBodyId);
     }
-    m_viewport->setSimulationOverlay(moving, ae->activeOperationLabels());
+    QStringList lines = ae->activeOperationLabels();
+    QSet<int> interfering;
+    for (int id : m_sim->interference().interfering()) interfering.insert(id);
+    for (const auto& e : m_sim->interference().events()) {
+        if (!e.ongoing) continue;
+        const SceneObject* a = m_scene->getObject(e.a);
+        const SceneObject* b = m_scene->getObject(e.b);
+        lines << QString("⚠ %1 passes through %2").arg(a ? a->name : "?", b ? b->name : "?");
+    }
+    m_viewport->setSimulationOverlay(moving, lines, interfering);
 }
 
 void MainWindow::updateUndoActions() {

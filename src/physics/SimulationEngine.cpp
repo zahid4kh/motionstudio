@@ -54,6 +54,9 @@ bool SimulationEngine::activate() {
     m_rec.clear();
     m_viewFrame = -1;
     capture();
+    m_scans = 0;
+    m_interference.clear();
+    if (m_checkInterference) m_interference.begin(*m_scene);
     emit activeChanged(true);
     return true;
 }
@@ -101,6 +104,7 @@ void SimulationEngine::reset() {
     m_savedTransforms.clear();
     m_savedJointAngles.clear();
     m_rec.clear();
+    m_interference.clear();
     m_viewFrame = -1;
     m_liveTransforms.clear();
     m_liveJoints.clear();
@@ -171,6 +175,7 @@ void SimulationEngine::runScan() {
 #endif
     m_elapsed += kDt;
     capture();
+    if (m_interference.active() && (++m_scans % 2 == 0)) m_interference.check(*m_scene, m_elapsed);
 }
 
 // ── Timeline ─────────────────────────────────────────────────────────────────

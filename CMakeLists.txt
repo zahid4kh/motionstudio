@@ -57,6 +57,7 @@ add_library(MotionStudioCore STATIC
     src/scene/MeshWeld.cpp
     src/scene/PrimitiveMesh.cpp
     src/scene/SceneQuery.cpp
+    src/scene/Interference.cpp
     src/physics/SimulationEngine.cpp
     src/physics/Recording.cpp
     src/automation/Expression.cpp

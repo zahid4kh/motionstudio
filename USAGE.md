@@ -181,7 +181,7 @@ Sequence settings:
 - **Start when** — gate for starting each cycle, e.g. `Start` or `rising(Start)`.
 - **Loop** — start a new cycle after each one completes. Each sequence publishes `<Name>.running`, `<Name>.done` and `<Name>.cycles`.
 
-The **Gantt** chart under the operation table shows each operation's timing in the current cycle, with live progress. The previous cycle is shown faded.
+The **Gantt** chart under the operation table shows each operation's timing in the current cycle, with live progress. The previous cycle is shown faded. After each cycle the sequence panel shows the **cycle time** and the **critical path** (the chain of operations that set it, outlined in the Gantt), split into working and waiting time. Speed up operations on that path to shorten the cycle.
 
 ### Runtime tab
 
@@ -189,6 +189,7 @@ The **Gantt** chart under the operation table shows each operation's timing in t
 - **Watch** — every signal and status value, live; tick **Plot** to trace it
 - **Sequences** — state of every operation, with the reason it is waiting (`after 3`, `start condition: Safe`…)
 - **Trace** — scrolling plot of the ticked signals
+- **Check interference between moving parts** — reports parts that pass through each other while mechanisms move (tinted red, named in the viewport overlay, listed with times). Parts touching at the start and rigid bodies are ignored; applies from the next Play after Reset
 
 The ✓/⚠ indicator in the panel's top-right corner validates all definitions as you edit. Fields with errors get a red outline, and their tooltip explains the problem.
 
