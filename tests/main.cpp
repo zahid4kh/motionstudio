@@ -299,6 +299,59 @@ TEST(beltSpeedBinding) {
     CHECK(g.getConveyorBelt(belt)->speedExpr == "Stop ? 0 : 0.5");
 }
 
+// ── Recording ───────────────────────────────────────────────────────────────
+
+TEST(recordingScrubsAndReturnsLive) {
+    SceneGraph g;
+    Arm a = makeArm(g);
+    Sequence q;
+    q.name = "Swing";
+    Operation grip = makeOp(g, OperationType::Grip);
+    grip.gripperId = a.tool;
+    grip.partId = a.part;
+    Operation move = makeOp(g, OperationType::Move, {grip.id});
+    move.actuatorId = a.motor;
+    move.target = "90";
+    q.operations = {grip, move};
+    g.addSequence(q);
+
+    SimulationEngine sim(&g);
+    for (int i = 0; i < 50; ++i) sim.step();                 // 0.8 s: J1 reaches 90 at 0.5 s
+    const Recording& rec = sim.recording();
+    CHECK(rec.frames() == 51);                              // the start plus one per scan
+    CHECK_NEAR(rec.duration(), 0.8, 1e-9);
+    const float live = g.getJoint(a.joint)->currentValue;
+    const QVector3D livePart = worldPos(g, a.part);
+    CHECK_NEAR(live, 90, 1e-3);
+
+    const int mid = rec.frameAt(0.25);                      // halfway through the move
+    sim.seek(mid);
+    CHECK(sim.isScrubbing());
+    CHECK_NEAR(g.getJoint(a.joint)->currentValue, 180 * rec.time(mid), 1e-3);
+    // Status slots are published at the start of a scan: one scan behind the joint
+    CHECK_NEAR(sim.displayValue("J1.pos"), 180 * (rec.time(mid) - 0.016), 1e-3);
+    CHECK_NEAR(sim.automation()->value("J1.pos"), 90, 1e-3);   // the engine itself stays live
+    CHECK(worldPos(g, a.part).z() > -0.9f);                 // the gripped part was recorded too
+    sim.seek(0);
+    CHECK_NEAR(g.getJoint(a.joint)->currentValue, 0, 1e-6);
+    CHECK_NEAR((worldPos(g, a.part) - QVector3D(1, 0, 0)).length(), 0, 1e-5);
+
+    sim.seekLive();
+    CHECK(!sim.isScrubbing());
+    CHECK_NEAR(g.getJoint(a.joint)->currentValue, live, 1e-6);
+    CHECK_NEAR((worldPos(g, a.part) - livePart).length(), 0, 1e-6);
+
+    sim.seek(10);
+    sim.step();                                             // Step resumes from the live state
+    CHECK(!sim.isScrubbing());
+    CHECK(rec.frames() == 52);
+    CHECK_NEAR(g.getJoint(a.joint)->currentValue, 90, 1e-3);
+
+    sim.reset();
+    CHECK(rec.frames() == 0);
+    CHECK_NEAR(g.getJoint(a.joint)->currentValue, 0, 1e-6);
+}
+
 #ifdef MUJOCO_ENABLED
 TEST(gripLiftsRigidBodyAndDropsIt) {
     SceneGraph g;

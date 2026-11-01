@@ -123,6 +123,7 @@ RuntimePage::RuntimePage(SceneGraph* scene, SimulationEngine* sim, QWidget* pare
     });
     connect(clr, &QPushButton::clicked, m_plot, &SignalTracePlot::clear);
     connect(m_sim->automation(), &AutomationEngine::scanned, this, &RuntimePage::onScanned);
+    connect(m_sim, &SimulationEngine::scrubbed, this, [this]{ refreshRuntime(); });
     connect(m_sim, &SimulationEngine::activeChanged, this, [this](bool active){
         if (active) { m_plot->clear(); m_lastScan = -1; }
         refresh();
@@ -333,7 +334,7 @@ void RuntimePage::refreshRuntime() {
         auto* val  = m_watch->item(r, W_Value);
         if (!live) { val->setText("—"); val->setBackground(QBrush()); continue; }
         bool isBool = name->data(Qt::UserRole).toBool();
-        double v = ae->value(name->text());
+        double v = m_sim->displayValue(name->text());
         val->setText(autoui::formatValue(v, isBool, SignalType(name->data(Qt::UserRole + 1).toInt())));
         if (isBool) val->setBackground(v != 0 ? autoui::boolBrush(true) : QBrush());
     }
@@ -373,5 +374,6 @@ void RuntimePage::refreshRuntime() {
             it->setBackground(1, autoui::opStateBrush(st.state));
         }
     }
+    m_plot->setPlayhead(m_sim->isScrubbing() ? m_sim->recording().time(m_sim->viewFrame()) : -1.0);
     m_plot->update();
 }

@@ -5,6 +5,7 @@
 #include <QStringList>
 #include "../scene/SceneGraph.h"
 #include "../automation/AutomationEngine.h"
+#include "Recording.h"
 
 #ifdef MUJOCO_ENABLED
 #include <mujoco/mujoco.h>
@@ -24,6 +25,20 @@ public:
     double speedFactor()  const { return m_speed; }
     AutomationEngine* automation() const { return m_auto; }
 
+    // ── Recording / timeline ────────────────────────────────────────────────
+    // Every scan since the first Play/Step is recorded until Reset.
+    const Recording& recording() const { return m_rec; }
+    // While paused, shows the recorded state of `frame` in the scene (the
+    // simulation itself stays at its latest scan). Play or Step return to
+    // the latest scan first.
+    void   seek(int frame);
+    void   seekLive();
+    int    viewFrame() const;                 // frame on display (the last one when live)
+    bool   isScrubbing() const { return m_viewFrame >= 0; }
+    // A slot's value on display: the recorded one while scrubbing
+    double displayValue(int slot) const;
+    double displayValue(const QString& name) const { return displayValue(m_auto->slotOf(name)); }
+
     static constexpr int    kTickMs = 16;
     static constexpr double kDt     = kTickMs / 1000.0;
 
@@ -38,6 +53,7 @@ signals:
     void stateChanged(bool running);
     void activeChanged(bool active);
     void timeUpdated(double seconds);
+    void scrubbed(int frame);                 // a recorded frame (or live, -1) is now on display
     void stepped();
     void startFailed(const QStringList& errors);
 
@@ -47,6 +63,7 @@ private slots:
 private:
     bool activate();        // compile automation, snapshot scene, build physics
     void runScan();
+    void capture() { m_rec.capture(*m_scene, m_elapsed, m_auto->values()); }
 
     // ── MuJoCo backend ───────────────────────────────────────────────────────
 #ifdef MUJOCO_ENABLED
@@ -87,6 +104,11 @@ private:
     double                             m_elapsed = 0.0;
     double                             m_speed   = 1.0;
     double                             m_accum   = 0.0;
+    Recording                          m_rec;
+    int                                m_viewFrame = -1;   // -1 = live
+    // The live state, kept while a recorded frame is on display
+    std::unordered_map<int, Transform> m_liveTransforms;
+    std::unordered_map<int, float>     m_liveJoints;
     std::unordered_map<int, Transform> m_savedTransforms;
     std::unordered_map<int, float>     m_savedJointAngles;
 };

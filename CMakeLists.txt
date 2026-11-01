@@ -58,6 +58,7 @@ add_library(MotionStudioCore STATIC
     src/scene/PrimitiveMesh.cpp
     src/scene/SceneQuery.cpp
     src/physics/SimulationEngine.cpp
+    src/physics/Recording.cpp
     src/automation/Expression.cpp
     src/automation/AutomationEngine.cpp
     src/automation/Sensors.cpp
@@ -99,6 +100,7 @@ set(SOURCES
     src/ui/HelpDialog.cpp
     src/ui/Theme.cpp
     src/ui/Island.cpp
+    src/ui/TimelineBar.cpp
     src/ui/automation/AutomationCommon.cpp
     src/ui/automation/AutomationPanel.cpp
     src/ui/automation/ExpressionEdit.cpp

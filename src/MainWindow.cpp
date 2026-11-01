@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "ui/TimelineBar.h"
 #include "serialization/ProjectSerializer.h"
 #include "import/StepImporter.h"
 #include "ui/TemplateDialog.h"
@@ -46,7 +47,18 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_sim      = new SimulationEngine(m_scene, this);
     m_viewport = new Viewport(m_scene);
 
-    setCentralWidget(new Island(m_viewport, this));
+    // Viewport island, with the run timeline as a second island under it
+    // while a simulation is active
+    auto* central = new QWidget(this);
+    auto* centralLayout = new QVBoxLayout(central);
+    centralLayout->setContentsMargins(0, 0, 0, 0);
+    centralLayout->setSpacing(8);
+    centralLayout->addWidget(new Island(m_viewport, central), 1);
+    m_timeline = new TimelineBar(m_sim, m_viewport, central);
+    Island::decorate(m_timeline);
+    centralLayout->addWidget(m_timeline);
+    setCentralWidget(central);
+    connect(m_timeline, &TimelineBar::statusMessage, this, &MainWindow::showStatus);
 
     buildMenu();
     buildToolbar();
@@ -826,6 +838,11 @@ void MainWindow::onSimStartFailed(const QStringList& errors) {
 void MainWindow::updateSimulationOverlay() {
     AutomationEngine* ae = m_sim->automation();
     if (!ae->isActive()) { m_viewport->setSimulationOverlay({}, {}); return; }
+    if (m_sim->isScrubbing()) {
+        m_viewport->setSimulationOverlay({}, {QString("Recorded run at t = %1 s — Play or Live to continue")
+                                                  .arg(m_sim->recording().time(m_sim->viewFrame()), 0, 'f', 2)});
+        return;
+    }
 
     // Tint each moving actuator's driven link plus everything rigidly attached
     // to it (descendants reached without crossing another joint).

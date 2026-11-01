@@ -122,6 +122,8 @@ QStatusBar::item { border: none; }
 QStatusBar QLabel { color: @muted@; padding: 0 8px; }
 QLabel#timeChip { background: @island@; color: @fg@; border: 1px solid @border@; border-radius: 9px;
     padding: 1px 10px; margin: 2px 0; font-family: monospace; }
+QLabel#recChip { color: @muted@; font-weight: 700; padding: 0 2px; }
+QLabel#recChip[active="true"] { color: @danger@; }
 QToolTip { background: @panel@; color: @fg@; border: 1px solid @handle@; border-radius: 8px; padding: 6px 8px; }
 
 QToolBar { background: transparent; border: none; spacing: 2px; padding: 0; }

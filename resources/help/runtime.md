@@ -10,6 +10,16 @@
 
 Definitions are **locked** while the simulation is active (a lock appears in the Automation header). Press **Reset** to edit again.
 
+## Timeline: look back and export
+
+Every scan is recorded from the first Play or Step until **Reset**: the joints, every part's position, and every signal value. While the simulation is active, a timeline bar is shown under the viewport.
+
+- **Look back:** pause, then drag the timeline, or click anywhere on it. The scene shows that moment. The Values list, the Signals tab and the trace plot's playhead show the values at that moment too. The overlay in the viewport says that you are looking at the recording.
+- **Continue:** **Live** returns to the latest scan. **Play** or **Step** also continue from the latest scan, never from the moment on display.
+- **Export Video…** (while paused) renders the run, or part of it, from the viewport as it looks now: the same camera, size and labels. You can save an **MP4** video, an animated **GIF**, or a folder of **PNG** frames. MP4 and GIF need `ffmpeg` installed.
+
+Sequence and operation states always show the latest scan. The recording holds up to 20 minutes; after that, the bar shows *FULL*.
+
 ## Before you press Play
 
 Check the **problems indicator** in the Automation header (top right). *No problems* means every expression and reference is valid. Otherwise click it to see the list in "Where: problem" form. Play refuses to start while there are problems.

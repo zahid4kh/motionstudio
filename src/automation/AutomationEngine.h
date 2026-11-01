@@ -65,6 +65,7 @@ public:
     int    slotOf(const QString& name) const { return m_slotIndex.value(name, -1); }
     double value(int slot) const { return (slot >= 0 && slot < int(m_cur.size())) ? m_cur[size_t(slot)] : 0.0; }
     double value(const QString& name) const { return value(slotOf(name)); }
+    const std::vector<double>& values() const { return m_cur; }   // every slot, this scan
 
     // Queues a write to an Input/Internal signal; applied at the start of
     // the next scan. Writes are applied one per scan per signal, so a quick

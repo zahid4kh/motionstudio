@@ -86,6 +86,7 @@ private:
     HierarchyPanel*   m_hierarchy  = nullptr;
     PropertiesPanel*  m_properties = nullptr;
     AutomationPanel*  m_automation = nullptr;
+    class TimelineBar* m_timeline  = nullptr;
     QDockWidget*      m_hierarchyDock  = nullptr;
     QDockWidget*      m_propertiesDock = nullptr;
     QDockWidget*      m_automationDock = nullptr;

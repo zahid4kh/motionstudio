@@ -51,12 +51,16 @@ bool SimulationEngine::activate() {
     m_elapsed = 0.0;
     m_accum   = 0.0;
     m_active  = true;
+    m_rec.clear();
+    m_viewFrame = -1;
+    capture();
     emit activeChanged(true);
     return true;
 }
 
 void SimulationEngine::play() {
     if (m_running) return;
+    seekLive();
     if (!activate()) return;
     m_running = true;
     m_timer.start();
@@ -72,6 +76,7 @@ void SimulationEngine::pause() {
 
 void SimulationEngine::step() {
     pause();
+    seekLive();
     if (!activate()) return;
     runScan();
     emit timeUpdated(m_elapsed);
@@ -95,6 +100,10 @@ void SimulationEngine::reset() {
     }
     m_savedTransforms.clear();
     m_savedJointAngles.clear();
+    m_rec.clear();
+    m_viewFrame = -1;
+    m_liveTransforms.clear();
+    m_liveJoints.clear();
 
     bool wasActive = m_active;
     m_active = false;
@@ -144,12 +153,14 @@ void SimulationEngine::runScan() {
             double pos, vel;
             if (m_auto->actuatedJointState(jid, pos, vel)) fromTo.second = pos;
         }
-        applyConveyorBelts();
         // Run multiple sub-steps for stability (16ms frame / 2ms MuJoCo dt = 8 steps)
         int nSteps = qMax(1, int(kDt / m_mjModel->opt.timestep + 0.5));
         for (int i = 0; i < nSteps; i++) {
             prescribeActuatedJoints(double(i + 1) / nSteps);
             prescribeHeldParts();
+            // Every sub-step: set once per scan, the static belt's friction
+            // would tip parts over during the remaining sub-steps
+            applyConveyorBelts();
             mj_step(m_mjModel, m_mjData);
         }
         prescribeActuatedJoints(1.0);
@@ -159,6 +170,50 @@ void SimulationEngine::runScan() {
     }
 #endif
     m_elapsed += kDt;
+    capture();
+}
+
+// ── Timeline ─────────────────────────────────────────────────────────────────
+
+void SimulationEngine::seek(int frame) {
+    if (!m_active || m_rec.frames() == 0) return;
+    pause();
+    frame = std::clamp(frame, 0, m_rec.frames() - 1);
+    if (m_viewFrame < 0) {
+        // Leaving the live state: keep it to come back to (a full recording
+        // no longer ends at it)
+        m_liveTransforms.clear();
+        m_liveJoints.clear();
+        for (auto& [id, o] : m_scene->allObjects()) m_liveTransforms[id] = o.transform;
+        for (auto& [id, j] : m_scene->allJoints()) m_liveJoints[id] = j.currentValue;
+    }
+    m_rec.apply(*m_scene, frame);
+    m_viewFrame = frame;
+    emit timeUpdated(m_rec.time(frame));
+    emit scrubbed(m_viewFrame);
+    emit stepped();
+}
+
+void SimulationEngine::seekLive() {
+    if (m_viewFrame < 0) return;
+    for (auto& [id, t] : m_liveTransforms)
+        if (SceneObject* o = m_scene->getObject(id)) o->transform = t;
+    for (auto& [id, v] : m_liveJoints)
+        if (Joint* j = m_scene->getJoint(id)) j->currentValue = v;
+    m_liveTransforms.clear();
+    m_liveJoints.clear();
+    m_viewFrame = -1;
+    emit timeUpdated(m_elapsed);
+    emit scrubbed(-1);
+    emit stepped();
+}
+
+int SimulationEngine::viewFrame() const {
+    return m_viewFrame >= 0 ? m_viewFrame : m_rec.frames() - 1;
+}
+
+double SimulationEngine::displayValue(int slot) const {
+    return isScrubbing() ? m_rec.value(slot, m_viewFrame) : m_auto->value(slot);
 }
 
 // ── MuJoCo backend ────────────────────────────────────────────────────────────

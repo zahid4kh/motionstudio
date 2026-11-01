@@ -17,6 +17,8 @@ public:
     void addSample(double t, const std::vector<double>& values);   // one value per trace
     void clear();
     void setWindow(double seconds) { m_window = seconds; update(); }
+    // Marks a time (scrubbing the recorded run) and keeps it in view; < 0 = none
+    void setPlayhead(double t) { if (t != m_playhead) { m_playhead = t; update(); } }
 
 protected:
     void paintEvent(QPaintEvent*) override;
@@ -31,4 +33,5 @@ private:
     QStringList       m_names;
     double            m_window = 20.0;
     double            m_latest = 0.0;
+    double            m_playhead = -1.0;
 };

@@ -59,7 +59,10 @@ void SignalTracePlot::paintEvent(QPaintEvent*) {
     const int labelW = 120, axisH = 14;
     const int n = int(m_lanes.size());
     const double laneH = double(height() - axisH) / n;
-    const double t1 = std::max(m_latest, m_window), t0 = t1 - m_window;
+    double end = m_latest;
+    if (m_playhead >= 0 && m_playhead < m_latest - m_window * 0.5)
+        end = m_playhead + m_window * 0.5;   // keep the playhead in view
+    const double t1 = std::max(end, m_window), t0 = t1 - m_window;
     const int x0 = labelW, x1 = width() - 6;
     auto X = [&](double t) { return x0 + (x1 - x0) * (t - t0) / m_window; };
 
@@ -85,8 +88,9 @@ void SignalTracePlot::paintEvent(QPaintEvent*) {
         double lo = 1e300, hi = -1e300, last = 0;
         bool any = false;
         for (auto& [t, v] : l.samples) {
-            if (t < t0) continue;
-            lo = std::min(lo, v); hi = std::max(hi, v); last = v; any = true;
+            if (t < t0 || t > t1) continue;
+            lo = std::min(lo, v); hi = std::max(hi, v); any = true;
+            if (m_playhead < 0 || t <= m_playhead + 1e-9) last = v;   // value shown: at the playhead
         }
         if (l.isBool) { lo = 0; hi = 1; }
         if (!any) { lo = 0; hi = 1; }
@@ -114,6 +118,7 @@ void SignalTracePlot::paintEvent(QPaintEvent*) {
         double prevV = 0;
         for (auto& [t, v] : l.samples) {
             if (t < t0) { prevV = v; continue; }
+            if (t > t1) break;
             if (!started) {
                 path.moveTo(X(std::max(t0, t)), Y(l.isBool ? prevV : v));
                 started = true;
@@ -125,5 +130,10 @@ void SignalTracePlot::paintEvent(QPaintEvent*) {
         p.setPen(QPen(col, 1.6));
         p.setBrush(Qt::NoBrush);
         p.drawPath(path);
+    }
+
+    if (m_playhead >= 0 && m_playhead >= t0 && m_playhead <= t1) {
+        p.setPen(QPen(c.accent, 1.5));
+        p.drawLine(QPointF(X(m_playhead), 0), QPointF(X(m_playhead), height() - axisH));
     }
 }

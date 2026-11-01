@@ -190,6 +190,10 @@ The **Gantt** chart under the operation table shows each operation's timing in t
 
 The ✓/⚠ indicator in the panel's top-right corner validates all definitions as you edit. Fields with errors get a red outline, and their tooltip explains the problem.
 
+### Timeline (under the viewport while simulating)
+
+Every scan is recorded until **Reset**. Pause, then drag or click the timeline to see any earlier moment: the 3D view, the watch values, the Signals tab and the trace playhead follow. **Live** (or Play/Step) returns to the latest scan. **Export Video…** saves the run, or a time range of it, as MP4, an animated GIF (both need `ffmpeg`) or PNG frames. Frames are rendered from the current camera at 15–60 fps, at 50–100 % of the viewport size.
+
 ### Expressions
 
 ```

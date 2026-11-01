@@ -201,7 +201,7 @@ void SignalsPage::refreshRuntime() {
         if (!ae->isActive()) { it->setText("—"); it->setBackground(QBrush()); continue; }
         Signal* s = m_scene->getSignal(nm->data(Qt::UserRole).toInt());
         if (!s) continue;
-        double v = ae->value(s->name);
+        double v = m_sim->displayValue(s->name);
         it->setText(autoui::formatValue(v, false, s->type));
         if (s->type == SignalType::Bool)
             it->setBackground(autoui::boolBrush(v != 0.0));
