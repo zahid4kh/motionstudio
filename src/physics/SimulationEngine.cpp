@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <cmath>
 #include <QtMath>
+#include <QQuaternion>
+#include "../scene/SceneQuery.h"
 
 // ── Constructor / Destructor ─────────────────────────────────────────────────
 
@@ -147,9 +149,11 @@ void SimulationEngine::runScan() {
         int nSteps = qMax(1, int(kDt / m_mjModel->opt.timestep + 0.5));
         for (int i = 0; i < nSteps; i++) {
             prescribeActuatedJoints(double(i + 1) / nSteps);
+            prescribeHeldParts();
             mj_step(m_mjModel, m_mjData);
         }
         prescribeActuatedJoints(1.0);
+        prescribeHeldParts();
         mj_forward(m_mjModel, m_mjData);
         syncFromMuJoCo();
     }
@@ -462,6 +466,7 @@ void SimulationEngine::applyConveyorBelts() {
         if (!belt.enabled) continue;
         const SceneObject* beltObj = m_scene->getObject(beltId);
         if (!beltObj) continue;
+        const double speed = m_auto->beltSpeed(beltId, belt.velocity);
 
         // Belt top surface in world space
         QMatrix4x4 bw = m_scene->worldTransform(beltId);
@@ -475,7 +480,7 @@ void SimulationEngine::applyConveyorBelts() {
 
         for (auto& [oid, dofAdr] : m_freeJointDofAddr) {
             const SceneObject* obj = m_scene->getObject(oid);
-            if (!obj) continue;
+            if (!obj || m_auto->holderOf(oid) != -1) continue;
 
             float bodyBottomY = obj->transform.position.y() - obj->transform.scale.y() * 0.5f;
             float dy = bodyBottomY - beltTopY;
@@ -486,8 +491,8 @@ void SimulationEngine::applyConveyorBelts() {
                 float dz = fabsf(obj->transform.position.z() - beltPos.z());
                 if (dx < beltHalfX && dz < beltHalfZ) {
                     // Override linear velocity along belt direction
-                    m_mjData->qvel[dofAdr + 0] = double(worldDir.x() * belt.velocity);
-                    m_mjData->qvel[dofAdr + 2] = double(worldDir.z() * belt.velocity);
+                    m_mjData->qvel[dofAdr + 0] = double(worldDir.x()) * speed;
+                    m_mjData->qvel[dofAdr + 2] = double(worldDir.z()) * speed;
                     // Zero angular velocity so the object slides, not rolls
                     m_mjData->qvel[dofAdr + 3] = 0.0;
                     m_mjData->qvel[dofAdr + 4] = 0.0;
@@ -511,6 +516,24 @@ void SimulationEngine::prescribeActuatedJoints(double alpha) {
         double pos = fromTo.first + (fromTo.second - fromTo.first) * alpha;
         m_mjData->qpos[qa->second] = pos * k;
         m_mjData->qvel[da->second] = (fromTo.second - fromTo.first) * inv * k;
+    }
+}
+
+void SimulationEngine::prescribeHeldParts() {
+    // A gripped free body goes where the automation engine put it (with its
+    // gripper) and carries no velocity, so it drops straight when released
+    for (int oid : m_auto->heldObjects()) {
+        auto qa = m_freeJointQposAddr.find(oid);
+        auto da = m_freeJointDofAddr.find(oid);
+        const SceneObject* obj = m_scene->getObject(oid);
+        if (!obj || qa == m_freeJointQposAddr.end() || da == m_freeJointDofAddr.end()) continue;
+        const QMatrix4x4 w = m_scene->worldTransform(oid);
+        const QQuaternion q = QQuaternion::fromRotationMatrix(
+            scenequery::stripScale(w).toGenericMatrix<3, 3>()).normalized();
+        mjtNum* qpos = m_mjData->qpos + qa->second;
+        qpos[0] = w(0, 3); qpos[1] = w(1, 3); qpos[2] = w(2, 3);
+        qpos[3] = q.scalar(); qpos[4] = q.x(); qpos[5] = q.y(); qpos[6] = q.z();
+        for (int k = 0; k < 6; ++k) m_mjData->qvel[da->second + k] = 0;
     }
 }
 

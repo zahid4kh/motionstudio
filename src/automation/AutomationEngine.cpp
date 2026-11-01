@@ -191,6 +191,24 @@ QStringList AutomationEngine::validateAll(const SceneGraph& scene) {
                     break;
                 case OperationType::Set:
                     break;
+                case OperationType::Grip: {
+                    const SceneObject* gripper = scene.getObject(op.gripperId);
+                    if (!gripper) errs << where + (op.gripperId == -1 ? ": no gripper selected" : ": the gripper no longer exists");
+                    if (op.sensorId != -1) {
+                        auto it = scene.allSignals().find(op.sensorId);
+                        if (it == scene.allSignals().end() || it->second.kind != SignalKind::Sensor)
+                            errs << where + ": the sensor no longer exists";
+                    } else if (!scene.getObject(op.partId)) {
+                        errs << where + (op.partId == -1 ? ": no part selected" : ": the part no longer exists");
+                    } else if (gripper && scenequery::inSubtree(scene, op.gripperId, op.partId)) {
+                        errs << where + ": the part is the gripper or holds it";
+                    }
+                    break;
+                }
+                case OperationType::Release:
+                    if (!scene.getObject(op.gripperId))
+                        errs << where + (op.gripperId == -1 ? ": no gripper selected" : ": the gripper no longer exists");
+                    break;
             }
             chk(where + " start condition", op.startCondition);
             chkA(where + " on start", op.onStart);
@@ -198,6 +216,11 @@ QStringList AutomationEngine::validateAll(const SceneGraph& scene) {
             for (int p : op.predecessors)
                 if (!opIds.contains(p)) errs << where + ": predecessor no longer exists";
         }
+    }
+
+    for (auto& [oid, belt] : scene.allConveyorBelts()) {
+        const SceneObject* o = scene.getObject(oid);
+        chk("Conveyor " + (o ? o->name : QString::number(oid)) + " speed", belt.speedExpr);
     }
 
     // Cycles among derived signals
@@ -319,6 +342,16 @@ bool AutomationEngine::start(QStringList* errors) {
         m_actuators.push_back(std::move(a));
     }
 
+    // Conveyor belt speed bindings
+    for (auto& [oid, belt] : m_scene->allConveyorBelts()) {
+        if (belt.speedExpr.trimmed().isEmpty()) continue;
+        BeltRt b;
+        b.objectId = oid;
+        b.speed.compile(belt.speedExpr, res.r());
+        b.value = belt.velocity;
+        m_belts.push_back(std::move(b));
+    }
+
     // Sequences
     for (auto& [qid, q] : m_scene->allSequences()) {
         SeqRt s;
@@ -369,6 +402,8 @@ void AutomationEngine::stop() {
     m_slotType.clear();
     m_derived.clear();
     m_sensors.clear();
+    m_holds.clear();
+    m_belts.clear();
     m_actuators.clear();
     m_sequences.clear();
     m_actIndexByMotor.clear();
@@ -430,8 +465,9 @@ void AutomationEngine::scan(double dt) {
     // 4. Bindings
     applyBindings();
 
-    // 5. Motion
+    // 5. Motion, then gripped parts follow their grippers
     integrate(dt);
+    applyHolds();
 
     m_time += dt;
     ++m_scanCount;
@@ -637,6 +673,14 @@ void AutomationEngine::startOperation(SeqRt& seq, OpRt& op) {
             break;
         case OperationType::Set:
             break;
+        case OperationType::Grip:
+            op.status.detail = "waiting for a part";
+            break;
+        case OperationType::Release:
+            m_holds.erase(std::remove_if(m_holds.begin(), m_holds.end(),
+                                         [&](const Hold& h) { return h.gripperId == op.def.gripperId; }),
+                          m_holds.end());
+            break;
     }
 }
 
@@ -676,8 +720,49 @@ bool AutomationEngine::operationFinished(OpRt& op) {
         }
         case OperationType::WaitFor:
             return op.condition.test(ctx());
+        case OperationType::Grip: {
+            const int gripper = op.def.gripperId;
+            int part = op.def.partId;
+            if (op.def.sensorId != -1) {
+                part = sensorDetection(op.def.sensorId);
+                if (part == -1) {
+                    const Signal* sg = m_scene->getSignal(op.def.sensorId);
+                    op.status.detail = QString("waiting for %1 to detect a part").arg(sg ? sg->name : QString("the sensor"));
+                    return false;
+                }
+            }
+            if (!m_scene->getObject(part) || !m_scene->getObject(gripper)) return true;
+            if (scenequery::inSubtree(*m_scene, gripper, part)) {
+                op.status.detail = "can't grip the gripper itself or what it hangs from";
+                return false;
+            }
+            attach(gripper, part);
+            return true;
+        }
+        case OperationType::Release:
+            return true;
     }
     return true;
+}
+
+void AutomationEngine::attach(int gripperId, int partId) {
+    m_holds.erase(std::remove_if(m_holds.begin(), m_holds.end(),
+                                 [&](const Hold& h) { return h.partId == partId; }),
+                  m_holds.end());
+    Hold h;
+    h.gripperId = gripperId;
+    h.partId    = partId;
+    h.relative  = scenequery::stripScale(m_scene->worldTransform(gripperId)).inverted() *
+                  m_scene->worldTransform(partId);
+    m_holds.push_back(h);
+}
+
+void AutomationEngine::applyHolds() {
+    for (const Hold& h : m_holds) {
+        if (!m_scene->getObject(h.gripperId) || !m_scene->getObject(h.partId)) continue;
+        m_scene->setWorldTransform(h.partId,
+                                   scenequery::stripScale(m_scene->worldTransform(h.gripperId)) * h.relative);
+    }
 }
 
 void AutomationEngine::finishOperation(OpRt& op) {
@@ -690,6 +775,7 @@ void AutomationEngine::finishOperation(OpRt& op) {
 
 void AutomationEngine::applyBindings() {
     auto c = ctx();
+    for (auto& b : m_belts) b.value = b.speed.eval(c);
     for (auto& a : m_actuators) {
         if (!a.bindTarget.isEmpty()) {
             a.mode   = ActuatorMode::Position;
@@ -737,6 +823,24 @@ AutomationEngine::OpStatus AutomationEngine::opStatus(int sequenceId, int operat
         }
     }
     return {};
+}
+
+std::vector<int> AutomationEngine::heldObjects() const {
+    std::vector<int> out;
+    for (const Hold& h : m_holds) out.push_back(h.partId);
+    return out;
+}
+
+int AutomationEngine::holderOf(int objectId) const {
+    for (const Hold& h : m_holds)
+        if (h.partId == objectId) return h.gripperId;
+    return -1;
+}
+
+double AutomationEngine::beltSpeed(int objectId, double fallback) const {
+    for (const BeltRt& b : m_belts)
+        if (b.objectId == objectId) return b.value;
+    return fallback;
 }
 
 int AutomationEngine::sensorDetection(int signalId) const {

@@ -100,6 +100,20 @@ Run && !EStop
 Reverse ? -Speed : Speed
 ```
 
+## Belt that stops at a sensor
+
+A conveyor belt (Properties › **Conveyor Belt**) with a beam sensor `PartAtEnd` across its end. Set the belt's *Speed expr*:
+
+```
+PartAtEnd ? 0 : 0.4
+```
+
+Parts queue up behind the first one. The belt starts again once the part is picked up.
+
+## Pick what a sensor sees
+
+A **Zone** sensor `AtGripper` mounted on the gripper detects *Rigid bodies*. Then **Grip** with Part *Detected by AtGripper*, move, and **Release**. See [Sensors & Gripping](help:sensors).
+
 ## Two-speed spindle with ramps
 
 Speed mode, *Accel* 360 °/s², and a Bool input `Fast`. *Velocity =*

@@ -61,6 +61,8 @@ enum class OperationType {
     Set,         // only runs its actions; done immediately
     Wait,        // done after `duration` seconds
     WaitFor,     // done when `condition` is true
+    Grip,        // gripper picks up a part (from a sensor or a fixed object); done when held
+    Release,     // gripper lets go of everything it holds; done immediately
 };
 
 struct Operation {
@@ -70,6 +72,9 @@ struct Operation {
 
     int           actuatorId = -1;   // Move / Run / Stop  (Motor id)
     int           poseId     = -1;   // MoveToPose
+    int           gripperId  = -1;   // Grip / Release: object that holds parts
+    int           partId     = -1;   // Grip: the object to pick up, or
+    int           sensorId   = -1;   // Grip: a sensor signal: pick up what it detects
 
     // All numeric/boolean fields are expressions (a constant is a valid expression)
     QString       target;            // Move: position
@@ -133,6 +138,8 @@ inline QString operationTypeName(OperationType t) {
         case OperationType::Set:        return "Set";
         case OperationType::Wait:       return "Wait";
         case OperationType::WaitFor:    return "WaitFor";
+        case OperationType::Grip:       return "Grip";
+        case OperationType::Release:    return "Release";
     }
     return "Move";
 }
@@ -144,6 +151,8 @@ inline OperationType operationTypeFromName(const QString& s) {
     if (s == "Set")        return OperationType::Set;
     if (s == "Wait")       return OperationType::Wait;
     if (s == "WaitFor")    return OperationType::WaitFor;
+    if (s == "Grip")       return OperationType::Grip;
+    if (s == "Release")    return OperationType::Release;
     return OperationType::Move;
 }
 

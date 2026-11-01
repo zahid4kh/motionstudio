@@ -1,0 +1,701 @@
+{
+  "version": 3,
+  "objects": [
+    {
+      "id": 1,
+      "name": "Conveyor",
+      "type": "Cube",
+      "parentId": -1,
+      "transform": {
+        "position": {
+          "x": -0.6,
+          "y": 0.1,
+          "z": 0
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 2.0,
+          "y": 0.2,
+          "z": 0.5
+        }
+      }
+    },
+    {
+      "id": 2,
+      "name": "Sensor Post",
+      "type": "Cube",
+      "parentId": -1,
+      "transform": {
+        "position": {
+          "x": 0.31,
+          "y": 0.3,
+          "z": 0.32
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.04,
+          "y": 0.2,
+          "z": 0.04
+        }
+      }
+    },
+    {
+      "id": 3,
+      "name": "Part 1",
+      "type": "Cube",
+      "parentId": -1,
+      "transform": {
+        "position": {
+          "x": -0.2,
+          "y": 0.265,
+          "z": 0
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.12,
+          "y": 0.12,
+          "z": 0.12
+        }
+      }
+    },
+    {
+      "id": 4,
+      "name": "Part 2",
+      "type": "Cube",
+      "parentId": -1,
+      "transform": {
+        "position": {
+          "x": -0.6,
+          "y": 0.265,
+          "z": 0
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.12,
+          "y": 0.12,
+          "z": 0.12
+        }
+      }
+    },
+    {
+      "id": 5,
+      "name": "Part 3",
+      "type": "Cube",
+      "parentId": -1,
+      "transform": {
+        "position": {
+          "x": -1.0,
+          "y": 0.265,
+          "z": 0
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.12,
+          "y": 0.12,
+          "z": 0.12
+        }
+      }
+    },
+    {
+      "id": 6,
+      "name": "Gantry",
+      "type": "ImportedMesh",
+      "parentId": -1,
+      "transform": {
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        }
+      }
+    },
+    {
+      "id": 7,
+      "name": "Beam",
+      "type": "Cube",
+      "parentId": 6,
+      "transform": {
+        "position": {
+          "x": 0.7,
+          "y": 1.25,
+          "z": 0
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.5,
+          "y": 0.08,
+          "z": 0.12
+        }
+      }
+    },
+    {
+      "id": 8,
+      "name": "Leg A",
+      "type": "Cube",
+      "parentId": 6,
+      "transform": {
+        "position": {
+          "x": -0.05,
+          "y": 0.62,
+          "z": 0
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.08,
+          "y": 1.25,
+          "z": 0.08
+        }
+      }
+    },
+    {
+      "id": 9,
+      "name": "Leg B",
+      "type": "Cube",
+      "parentId": 6,
+      "transform": {
+        "position": {
+          "x": 1.45,
+          "y": 0.62,
+          "z": 0
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.08,
+          "y": 1.25,
+          "z": 0.08
+        }
+      }
+    },
+    {
+      "id": 10,
+      "name": "Carriage",
+      "type": "ImportedMesh",
+      "parentId": 6,
+      "transform": {
+        "position": {
+          "x": 0.25,
+          "y": 1.25,
+          "z": 0
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        }
+      }
+    },
+    {
+      "id": 11,
+      "name": "Carriage Block",
+      "type": "Cube",
+      "parentId": 10,
+      "transform": {
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.16,
+          "y": 0.12,
+          "z": 0.2
+        }
+      }
+    },
+    {
+      "id": 12,
+      "name": "Lift",
+      "type": "ImportedMesh",
+      "parentId": 10,
+      "transform": {
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        }
+      }
+    },
+    {
+      "id": 13,
+      "name": "Rod",
+      "type": "Cylinder",
+      "parentId": 12,
+      "transform": {
+        "position": {
+          "x": 0,
+          "y": -0.25,
+          "z": 0
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.04,
+          "y": 0.5,
+          "z": 0.04
+        }
+      }
+    },
+    {
+      "id": 14,
+      "name": "Gripper",
+      "type": "Cube",
+      "parentId": 12,
+      "transform": {
+        "position": {
+          "x": 0,
+          "y": -0.52,
+          "z": 0
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.14,
+          "y": 0.04,
+          "z": 0.14
+        }
+      }
+    },
+    {
+      "id": 15,
+      "name": "Bin",
+      "type": "Basket",
+      "parentId": -1,
+      "transform": {
+        "position": {
+          "x": 1.15,
+          "y": 0.15,
+          "z": 0
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.3,
+          "z": 0.4
+        }
+      }
+    }
+  ],
+  "joints": [
+    {
+      "id": 101,
+      "name": "X",
+      "type": "Prismatic",
+      "axis": {
+        "x": 1,
+        "y": 0,
+        "z": 0
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "limitMin": 0,
+      "limitMax": 1.1,
+      "initialAngle": 0,
+      "continuous": false,
+      "parentBodyId": 6,
+      "childBodyId": 10
+    },
+    {
+      "id": 102,
+      "name": "Z",
+      "type": "Prismatic",
+      "axis": {
+        "x": 0,
+        "y": 1,
+        "z": 0
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "limitMin": -0.5,
+      "limitMax": 0,
+      "initialAngle": 0,
+      "continuous": false,
+      "parentBodyId": 10,
+      "childBodyId": 12
+    }
+  ],
+  "motors": [
+    {
+      "id": 200,
+      "name": "X",
+      "jointId": 101,
+      "mode": "Position",
+      "velocity": 0.6,
+      "acceleration": 2,
+      "enabled": true,
+      "targetExpr": "",
+      "velocityExpr": "",
+      "activeExpr": ""
+    },
+    {
+      "id": 201,
+      "name": "Z",
+      "jointId": 102,
+      "mode": "Position",
+      "velocity": 0.5,
+      "acceleration": 2,
+      "enabled": true,
+      "targetExpr": "",
+      "velocityExpr": "",
+      "activeExpr": ""
+    }
+  ],
+  "rigidBodies": [
+    {
+      "objectId": 3,
+      "mass": 0.5,
+      "gravityEnabled": true,
+      "hasCollision": false
+    },
+    {
+      "objectId": 4,
+      "mass": 0.5,
+      "gravityEnabled": true,
+      "hasCollision": false
+    },
+    {
+      "objectId": 5,
+      "mass": 0.5,
+      "gravityEnabled": true,
+      "hasCollision": false
+    },
+    {
+      "objectId": 15,
+      "mass": 5,
+      "gravityEnabled": true,
+      "hasCollision": false
+    }
+  ],
+  "conveyorBelts": [
+    {
+      "objectId": 1,
+      "velocity": 0.4,
+      "direction": {
+        "x": 1,
+        "y": 0,
+        "z": 0
+      },
+      "enabled": true,
+      "speedExpr": "PartAtEnd ? 0 : 0.4"
+    }
+  ],
+  "meshes": [],
+  "signals": [
+    {
+      "id": 301,
+      "name": "PartAtEnd",
+      "type": "Bool",
+      "kind": "Sensor",
+      "initialValue": 0,
+      "expression": "",
+      "description": "beam across the end of the belt",
+      "sensor": {
+        "type": "Beam",
+        "objectId": 2,
+        "offset": {
+          "x": 0,
+          "y": -0.035,
+          "z": 0
+        },
+        "direction": {
+          "x": 0,
+          "y": 0,
+          "z": -1
+        },
+        "range": 0.65,
+        "size": {
+          "x": 0.1,
+          "y": 0.1,
+          "z": 0.1
+        },
+        "objectBounds": false,
+        "target": "RigidBodies",
+        "targetId": -1
+      }
+    },
+    {
+      "id": 302,
+      "name": "AtGripper",
+      "type": "Bool",
+      "kind": "Sensor",
+      "initialValue": 0,
+      "expression": "",
+      "description": "zone under the gripper pad",
+      "sensor": {
+        "type": "Zone",
+        "objectId": 14,
+        "offset": {
+          "x": 0,
+          "y": -0.05,
+          "z": 0
+        },
+        "direction": {
+          "x": 1,
+          "y": 0,
+          "z": 0
+        },
+        "range": 0.5,
+        "size": {
+          "x": 0.1,
+          "y": 0.08,
+          "z": 0.1
+        },
+        "objectBounds": false,
+        "target": "RigidBodies",
+        "targetId": -1
+      }
+    },
+    {
+      "id": 310,
+      "name": "Placed",
+      "type": "Int",
+      "kind": "Internal",
+      "initialValue": 0,
+      "expression": "",
+      "description": "parts dropped in the bin"
+    }
+  ],
+  "sequences": [
+    {
+      "id": 500,
+      "name": "Cell",
+      "enableCondition": "",
+      "startCondition": "",
+      "loop": true,
+      "operations": [
+        {
+          "id": 401,
+          "name": "Wait for part",
+          "type": "WaitFor",
+          "actuatorId": -1,
+          "poseId": -1,
+          "target": "",
+          "velocity": "",
+          "duration": "",
+          "condition": "PartAtEnd",
+          "startCondition": "",
+          "onStart": "",
+          "onFinish": "",
+          "predecessors": []
+        },
+        {
+          "id": 402,
+          "name": "Down",
+          "type": "Move",
+          "actuatorId": 201,
+          "poseId": -1,
+          "target": "-0.38",
+          "velocity": "",
+          "duration": "",
+          "condition": "",
+          "startCondition": "",
+          "onStart": "",
+          "onFinish": "",
+          "predecessors": [
+            401
+          ]
+        },
+        {
+          "id": 403,
+          "name": "Grip",
+          "type": "Grip",
+          "actuatorId": -1,
+          "poseId": -1,
+          "target": "",
+          "velocity": "",
+          "duration": "",
+          "condition": "",
+          "startCondition": "",
+          "onStart": "",
+          "onFinish": "",
+          "predecessors": [
+            402
+          ],
+          "gripperId": 14,
+          "sensorId": 302
+        },
+        {
+          "id": 404,
+          "name": "Up",
+          "type": "Move",
+          "actuatorId": 201,
+          "poseId": -1,
+          "target": "0",
+          "velocity": "",
+          "duration": "",
+          "condition": "",
+          "startCondition": "",
+          "onStart": "",
+          "onFinish": "",
+          "predecessors": [
+            403
+          ]
+        },
+        {
+          "id": 405,
+          "name": "To bin",
+          "type": "Move",
+          "actuatorId": 200,
+          "poseId": -1,
+          "target": "0.75 + 0.15 * (Placed % 3)",
+          "velocity": "",
+          "duration": "",
+          "condition": "",
+          "startCondition": "",
+          "onStart": "",
+          "onFinish": "",
+          "predecessors": [
+            404
+          ]
+        },
+        {
+          "id": 406,
+          "name": "Lower",
+          "type": "Move",
+          "actuatorId": 201,
+          "poseId": -1,
+          "target": "-0.3",
+          "velocity": "",
+          "duration": "",
+          "condition": "",
+          "startCondition": "",
+          "onStart": "",
+          "onFinish": "",
+          "predecessors": [
+            405
+          ]
+        },
+        {
+          "id": 407,
+          "name": "Release",
+          "type": "Release",
+          "actuatorId": -1,
+          "poseId": -1,
+          "target": "",
+          "velocity": "",
+          "duration": "",
+          "condition": "",
+          "startCondition": "",
+          "onStart": "",
+          "onFinish": "Placed = Placed + 1",
+          "predecessors": [
+            406
+          ],
+          "gripperId": 14
+        },
+        {
+          "id": 408,
+          "name": "Up again",
+          "type": "Move",
+          "actuatorId": 201,
+          "poseId": -1,
+          "target": "0",
+          "velocity": "",
+          "duration": "",
+          "condition": "",
+          "startCondition": "",
+          "onStart": "",
+          "onFinish": "",
+          "predecessors": [
+            407
+          ]
+        },
+        {
+          "id": 409,
+          "name": "Home",
+          "type": "Move",
+          "actuatorId": 200,
+          "poseId": -1,
+          "target": "0",
+          "velocity": "",
+          "duration": "",
+          "condition": "",
+          "startCondition": "",
+          "onStart": "",
+          "onFinish": "",
+          "predecessors": [
+            407
+          ]
+        }
+      ]
+    }
+  ],
+  "poses": []
+}

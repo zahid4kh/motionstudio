@@ -171,5 +171,6 @@ private:
     QDoubleSpinBox* m_cvVelocity      = nullptr;
     QComboBox*      m_cvDir           = nullptr;
     QCheckBox*      m_cvEnabled       = nullptr;
+    class ExpressionEdit* m_cvSpeedExpr = nullptr;
     QPushButton*    m_cvRemBtn        = nullptr;
 };

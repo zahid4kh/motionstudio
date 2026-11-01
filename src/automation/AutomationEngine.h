@@ -1,6 +1,7 @@
 #pragma once
 #include <QObject>
 #include <QHash>
+#include <QMatrix4x4>
 #include <QStringList>
 #include <deque>
 #include <map>
@@ -20,7 +21,8 @@ class SceneGraph;
 //   2. evaluate derived signals (dependency order)
 //   3. advance sequences (finish / start operations, issue actuator commands)
 //   4. evaluate actuator expression bindings
-//   5. integrate actuator motion profiles, write Joint::currentValue
+//   5. integrate actuator motion profiles, write Joint::currentValue, then
+//      move gripped parts with their grippers
 //
 // Joints without an actuator are never touched (in MuJoCo mode they stay
 // physics-driven). Definitions are compiled once by start(); editing them
@@ -97,6 +99,11 @@ public:
 
     // Object the sensor signal `signalId` detected at the start of this scan, or -1
     int sensorDetection(int signalId) const;
+    // Objects currently held by a gripper (Grip operations), moved with it
+    std::vector<int> heldObjects() const;
+    int    holderOf(int objectId) const;     // gripper holding `objectId`, or -1
+    // A conveyor belt's speed this scan: its speed binding, else `fallback`
+    double beltSpeed(int objectId, double fallback) const;
     // Motors whose actuator is moving this scan (for viewport highlighting)
     std::vector<int> movingMotors() const;
     // Velocity of an actuated joint this scan (deg/s or m/s)
@@ -158,6 +165,20 @@ private:
         int          detected = -1;
     };
 
+    // A part attached to a gripper: its pose relative to the gripper's
+    // (unscaled) frame is kept fixed until released
+    struct Hold {
+        int        gripperId = -1;
+        int        partId    = -1;
+        QMatrix4x4 relative;
+    };
+
+    struct BeltRt {
+        int              objectId = -1;
+        expr::Expression speed;
+        double           value = 0;
+    };
+
     struct DerivedRt {
         int slot = -1;
         SignalType type = SignalType::Real;
@@ -173,6 +194,8 @@ private:
     void finishOperation(OpRt& op);
     void applyBindings();
     void integrate(double dt);
+    void attach(int gripperId, int partId);
+    void applyHolds();
     double clampToLimits(const ActuatorRt& a, double v) const;
     bool inPosition(const ActuatorRt& a, double target) const;
 
@@ -188,6 +211,8 @@ private:
 
     std::vector<DerivedRt>  m_derived;
     std::vector<SensorRt>   m_sensors;
+    std::vector<Hold>       m_holds;
+    std::vector<BeltRt>     m_belts;
     std::vector<ActuatorRt> m_actuators;
     std::vector<SeqRt>      m_sequences;
     std::map<int, int>      m_actIndexByMotor;

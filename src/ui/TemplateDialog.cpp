@@ -15,6 +15,14 @@ const QList<TemplateDialog::TemplateInfo> TemplateDialog::s_templates = {
         "bot"
     },
     {
+        "Sensor & Gripper Cell",
+        "A belt carries parts until a beam sensor sees one (its speed binding stops it);\n"
+        "a gantry lowers, grips whatever its gripper zone detects, and drops it in a bin.\n"
+        "Needs MuJoCo for the parts to ride the belt and fall. Press Play.",
+        ":/templates/sensor_cell.mstudio",
+        "hand-grab"
+    },
+    {
         "Indexing Table",
         "A turntable indexes 90° (target = Table.target + 90), then a press stamps\n"
         "the part and retracts. A derived Safe signal interlocks the table; a counter\n"

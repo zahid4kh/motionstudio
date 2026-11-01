@@ -54,6 +54,7 @@ private:
     void    teardownMuJoCo();
     void    syncFromMuJoCo();
     void    prescribeActuatedJoints(double alpha);
+    void    prescribeHeldParts();
     QString buildMJCF() const;
     void    writeBodyXML(QString& xml, int objectId, int indent) const;
     void    writeGeomXML(QString& xml, const SceneObject* obj,

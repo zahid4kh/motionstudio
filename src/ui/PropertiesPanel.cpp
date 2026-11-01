@@ -6,6 +6,7 @@
 #include <QInputDialog>
 #include <cmath>
 #include "Theme.h"
+#include "automation/AutomationCommon.h"
 #include "PrimitiveIcons.h"
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -616,6 +617,19 @@ void PropertiesPanel::buildConveyorSection() {
     m_cvEnabled->setChecked(true);
     pvb->addWidget(m_cvEnabled);
 
+    m_cvSpeedExpr = autoui::makeExprEdit(m_scene, autoui::ExprKind::Value, "fixed velocity");
+    m_cvSpeedExpr->setHelpText("Optional: speed in m/s computed every scan while simulating, overriding "
+                               "Velocity. E.g. PartAtEnd ? 0 : 0.3 stops the belt while a sensor sees a part.");
+    labelRow(pvb, "Speed expr", m_cvSpeedExpr);
+    connect(m_cvSpeedExpr, &ExpressionEdit::committed, this, [this](const QString& text){
+        if (m_loading) return;
+        ConveyorBelt* belt = m_scene->getConveyorBelt(m_currentId);
+        if (!belt || belt->speedExpr == text) return;
+        belt->speedExpr = text;
+        emit m_scene->conveyorBeltChanged(m_currentId);
+        m_scene->notifyAutomationChanged();
+    });
+
     auto* btnRow = new QHBoxLayout;
     m_cvRemBtn = dangerButton("Remove Conveyor Belt");
     btnRow->addStretch(); btnRow->addWidget(m_cvRemBtn);
@@ -736,6 +750,7 @@ void PropertiesPanel::updateConveyorUI(int objectId) {
         else                     idx = 3;
         m_cvDir->setCurrentIndex(idx);
         m_cvEnabled->setChecked(belt->enabled);
+        m_cvSpeedExpr->setExpression(belt->speedExpr);
     }
 }
 

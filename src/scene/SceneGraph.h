@@ -127,6 +127,9 @@ public:
     // Transform helpers
     QMatrix4x4 worldTransform(int id) const;
     QMatrix4x4 localTransform(int id) const;
+    // Sets the object's local transform so that its world transform becomes
+    // `world` (position, rotation and scale; no shear)
+    void       setWorldTransform(int id, const QMatrix4x4& world);
     // The joint's current motion, applied in the parent's local frame between
     // the parent and the child's own local transform
     static QMatrix4x4 jointMotion(const Joint& joint);

@@ -48,7 +48,7 @@ A Speed-mode actuator runs on its own. Position-mode actuators stay still until 
 10. **`+ Operation ▾` › Move**: Actuator J1, Target `0`. Then set **After** to include #2.
 11. **`▶ Play`**, open **Automation › Runtime** and switch **Start** ON
 
-The templates (**File › Open Template…**) are complete working examples. *Robotic Arm — Pick & Place* and *Indexing Table* use most of the features.
+The templates (**File › Open Template…**) are complete working examples. *Robotic Arm — Pick & Place* and *Indexing Table* use most of the features. *Sensor & Gripper Cell* shows sensors, a belt that stops at a sensor, and Grip/Release.
 
 ---
 
@@ -101,6 +101,17 @@ While the simulation is active (from the first Play/Step until Reset), automatio
 | Position | The joint's current value. Jog it to pose the mechanism; Play starts from here |
 | Rotation Origin | Pivot of a revolute joint, in the parent's local frame |
 
+### Conveyor Belt
+
+**Add Conveyor Belt** makes the object's top surface push rigid bodies resting on it (MuJoCo only).
+
+| Field | Meaning |
+|-------|---------|
+| Velocity | Surface speed in m/s |
+| Direction | Push direction in the object's frame |
+| Belt enabled | Off: the surface doesn't push |
+| Speed expr | Optional expression evaluated every scan while simulating, overriding Velocity, e.g. `PartAtEnd ? 0 : 0.4` |
+
 ### Actuator (visible when the joint has an actuator)
 
 | Field | Meaning |
@@ -137,7 +148,7 @@ Types are **Bool**, **Int** or **Real**. Renaming a signal rewrites every expres
 | Offset / Direction / Range / Size | In metres, in the mount's frame (its scale is ignored) |
 | Detects | Anything, rigid bodies only (parts), or one specific object |
 
-The viewport draws beams and zones green while clear and orange while detecting. Example: give a conveyor's actuator the Active binding `!PartAtEnd`, so the belt stops when a part reaches the end.
+The viewport draws beams and zones green while clear and orange while detecting. Example: set a conveyor belt's *Speed expr* to `PartAtEnd ? 0 : 0.4`, so the belt stops when a part reaches the end.
 
 ### Actuators & Poses tab
 
@@ -158,6 +169,8 @@ A sequence is a set of **operations** with **predecessors**. An operation starts
 | **Set** | Only runs its *On start* actions | immediately |
 | **Wait** | Waits *Duration* seconds | time elapsed |
 | **WaitFor** | Waits until *Until* is true | condition true |
+| **Grip** | Attaches a part to a *Gripper* object so it moves with it. *Part* is a fixed object or **Detected by** a sensor (then it waits for a detection) | part held |
+| **Release** | The *Gripper* lets go of everything it holds; rigid bodies fall again | immediately |
 
 Every operation can also run **On start** and **On finish** actions: `Sig = expr; Other = expr`.
 

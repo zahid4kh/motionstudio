@@ -371,6 +371,7 @@ void SceneGraph::renameSymbolReferences(const QString& oldName, const QString& n
     auto fix = [&](QString& s) { s = expr::renameIdentifier(s, oldName, newName); };
     for (auto& [id, s] : m_signals) fix(s.expression);
     for (auto& [id, m] : m_motors) { fix(m.targetExpr); fix(m.velocityExpr); fix(m.activeExpr); }
+    for (auto& [id, b] : m_conveyorBelts) fix(b.speedExpr);
     for (auto& [id, q] : m_sequences) {
         fix(q.enableCondition);
         fix(q.startCondition);
@@ -427,6 +428,19 @@ QMatrix4x4 SceneGraph::worldTransform(int id) const {
     }
 
     return worldTransform(obj->parentId) * jointT * local;
+}
+
+void SceneGraph::setWorldTransform(int id, const QMatrix4x4& world) {
+    SceneObject* obj = getObject(id);
+    if (!obj) return;
+    QMatrix4x4 parentWorld;
+    if (obj->parentId != -1) {
+        parentWorld = worldTransform(obj->parentId);
+        for (auto& [jid, joint] : m_joints)
+            if (joint.childBodyId == id) { parentWorld = parentWorld * jointMotion(joint); break; }
+    }
+    decomposeMatrix(parentWorld.inverted() * world, obj->transform.position,
+                    obj->transform.rotation, obj->transform.scale);
 }
 
 QMatrix4x4 SceneGraph::jointMotion(const Joint& joint) {

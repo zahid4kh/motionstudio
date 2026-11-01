@@ -6,6 +6,7 @@
         <file>templates/spinning_top.mstudio</file>
         <file>templates/crank_arm.mstudio</file>
         <file>templates/indexing_table.mstudio</file>
+        <file>templates/sensor_cell.mstudio</file>
         <file alias="icon.png">icon-1024x1024.png</file>
         <file alias="fonts/PlusJakartaSans-Bold.ttf">resources/fonts/PlusJakartaSans-Bold.ttf</file>
         <file alias="fonts/PlusJakartaSans-Medium.ttf">resources/fonts/PlusJakartaSans-Medium.ttf</file>
@@ -32,6 +33,7 @@
         <file alias="icons/history.svg">resources/icons/history.svg</file>
         <file alias="icons/scan-line.svg">resources/icons/scan-line.svg</file>
         <file alias="icons/radio.svg">resources/icons/radio.svg</file>
+        <file alias="icons/hand-grab.svg">resources/icons/hand-grab.svg</file>
         <file alias="icons/crosshair.svg">resources/icons/crosshair.svg</file>
         <file alias="icons/cylinder.svg">resources/icons/cylinder.svg</file>
         <file alias="icons/disc-3.svg">resources/icons/disc-3.svg</file>

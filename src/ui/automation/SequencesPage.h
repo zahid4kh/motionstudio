@@ -74,6 +74,8 @@ private:
     QComboBox*      m_opType = nullptr;
     QComboBox*      m_opActuator = nullptr;
     QComboBox*      m_opPose = nullptr;
+    QComboBox*      m_opGripper = nullptr;
+    QComboBox*      m_opPart = nullptr;
     ExpressionEdit* m_opTarget = nullptr;
     ExpressionEdit* m_opVelocity = nullptr;
     ExpressionEdit* m_opDuration = nullptr;

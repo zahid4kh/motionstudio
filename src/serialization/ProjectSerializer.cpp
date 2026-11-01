@@ -266,6 +266,9 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene, MeshPool* pool) {
             oo["type"]           = operationTypeName(op.type);
             oo["actuatorId"]     = op.actuatorId;
             oo["poseId"]         = op.poseId;
+            if (op.gripperId != -1) oo["gripperId"] = op.gripperId;
+            if (op.partId != -1)    oo["partId"]    = op.partId;
+            if (op.sensorId != -1)  oo["sensorId"]  = op.sensorId;
             oo["target"]         = op.target;
             oo["velocity"]       = op.velocity;
             oo["duration"]       = op.duration;
@@ -320,6 +323,7 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene, MeshPool* pool) {
         o["velocity"]  = double(belt.velocity);
         o["direction"] = vec3ToJson(belt.direction);
         o["enabled"]   = belt.enabled;
+        if (!belt.speedExpr.isEmpty()) o["speedExpr"] = belt.speedExpr;
         conveyorBelts.append(o);
     }
 
@@ -496,6 +500,14 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root, con
             op.type           = operationTypeFromName(oo["type"].toString());
             op.actuatorId     = motorIdMap.value(oo["actuatorId"].toInt(-1), -1);
             op.poseId         = poseIdMap.value(oo["poseId"].toInt(-1), -1);
+            // References that don't resolve stay broken (-2) so validation reports them
+            auto ref = [](const QHash<int, int>& map, const QJsonValue& v) {
+                const int id = v.toInt(-1);
+                return id == -1 ? -1 : map.value(id, -2);
+            };
+            op.gripperId      = ref(idMap, oo["gripperId"]);
+            op.partId         = ref(idMap, oo["partId"]);
+            op.sensorId       = ref(signalIdMap, oo["sensorId"]);
             op.target         = oo["target"].toString();
             op.velocity       = oo["velocity"].toString();
             op.duration       = oo["duration"].toString();
@@ -546,6 +558,7 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root, con
             belt->velocity  = float(o["velocity"].toDouble(1.0));
             belt->direction = vec3FromJson(o["direction"].toObject());
             belt->enabled   = o["enabled"].toBool(true);
+            belt->speedExpr = o["speedExpr"].toString();
         }
     }
 

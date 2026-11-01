@@ -31,6 +31,10 @@ The sequence publishes `Cycle.running`, `Cycle.done` and `Cycle.cycles` for othe
 | **Set** | Only runs its *On start* actions | immediately |
 | **Wait** | Pauses for *Duration* seconds | the time has passed |
 | **WaitFor** | Waits for the *Until* condition | the condition is true |
+| **Grip** | Attaches a *Part* (fixed, or whatever a sensor detects) to a *Gripper*, so it moves with it | the part is held |
+| **Release** | The *Gripper* lets go of everything it holds | immediately |
+
+See [Sensors & Gripping](help:sensors) for a complete pick and place.
 
 Every operation also has:
 

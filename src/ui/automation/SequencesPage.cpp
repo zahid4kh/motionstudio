@@ -27,6 +27,7 @@ enum Col { C_Num, C_Name, C_Type, C_What, C_After, C_When, C_State, C_Count };
 const OperationType kTypes[] = {
     OperationType::Move, OperationType::MoveToPose, OperationType::Run, OperationType::Stop,
     OperationType::Set, OperationType::Wait, OperationType::WaitFor,
+    OperationType::Grip, OperationType::Release,
 };
 
 QString typeHelp(OperationType t) {
@@ -38,6 +39,10 @@ QString typeHelp(OperationType t) {
         case OperationType::Set:        return "Only run the 'On start' actions (set signals); finishes immediately";
         case OperationType::Wait:       return "Wait for a time; finishes after the duration";
         case OperationType::WaitFor:    return "Wait until a condition becomes true";
+        case OperationType::Grip:       return "Attach a part to a gripper so it moves with it: the part a sensor "
+                                               "detects, or a fixed object; finishes when the part is held";
+        case OperationType::Release:    return "Let go of everything the gripper holds (a rigid body then falls); "
+                                               "finishes immediately";
     }
     return {};
 }
@@ -51,6 +56,8 @@ QIcon typeIcon(OperationType t) {
         case OperationType::Set:        return Theme::icon("equal");
         case OperationType::Wait:       return Theme::icon("hourglass");
         case OperationType::WaitFor:    return Theme::icon("eye");
+        case OperationType::Grip:       return Theme::icon("hand-grab");
+        case OperationType::Release:    return Theme::icon("hand");
     }
     return {};
 }
@@ -196,6 +203,11 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     for (OperationType t : kTypes) m_opType->addItem(typeIcon(t), operationTypeName(t));
     m_opActuator = new QComboBox;
     m_opPose = new QComboBox;
+    m_opGripper = new QComboBox;
+    m_opGripper->setToolTip("The object that holds the part, e.g. the robot's tool flange or gripper body");
+    m_opPart = new QComboBox;
+    m_opPart->setToolTip("What to pick up: whatever a sensor detects at that moment (waits until it detects "
+                         "something), or always the same object");
     m_opTarget    = autoui::makeExprEdit(scene, autoui::ExprKind::Value, "e.g. 90  or  Pick ? -45 : 0");
     m_opVelocity  = autoui::makeExprEdit(scene, autoui::ExprKind::Value, "actuator default");
     m_opDuration  = autoui::makeExprEdit(scene, autoui::ExprKind::Value, "seconds, e.g. 0.5");
@@ -220,6 +232,8 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     m_opLayout->addRow("Type", m_opType);
     m_opLayout->addRow("Actuator", m_opActuator);
     m_opLayout->addRow("Pose", m_opPose);
+    m_opLayout->addRow("Gripper", m_opGripper);
+    m_opLayout->addRow("Part", m_opPart);
     m_opLayout->addRow("Target", m_opTarget);
     m_opLayout->addRow(m_opVelLabel, m_opVelocity);
     m_opLayout->addRow("Duration", m_opDuration);
@@ -277,6 +291,8 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     });
     connect(m_opActuator, &QComboBox::currentIndexChanged, this, &SequencesPage::commitOpForm);
     connect(m_opPose,     &QComboBox::currentIndexChanged, this, &SequencesPage::commitOpForm);
+    connect(m_opGripper,  &QComboBox::currentIndexChanged, this, &SequencesPage::commitOpForm);
+    connect(m_opPart,     &QComboBox::currentIndexChanged, this, &SequencesPage::commitOpForm);
     for (auto* e : {m_opTarget, m_opVelocity, m_opDuration, m_opCondition, m_opStartCond, m_opOnStart, m_opOnFinish})
         connect(e, &ExpressionEdit::committed, this, &SequencesPage::commitOpForm);
 
@@ -367,6 +383,21 @@ QString SequencesPage::describe(const Operation& op) const {
         case OperationType::Set:     return op.onStart.trimmed();
         case OperationType::Wait:    return op.duration.trimmed() + " s";
         case OperationType::WaitFor: return op.condition.trimmed();
+        case OperationType::Grip: {
+            const SceneObject* g = m_scene->getObject(op.gripperId);
+            QString what = "?";
+            if (op.sensorId != -1) {
+                const Signal* sg = m_scene->getSignal(op.sensorId);
+                what = "part at " + (sg ? sg->name : QString("?"));
+            } else if (const SceneObject* p = m_scene->getObject(op.partId)) {
+                what = p->name;
+            }
+            return QString("%1 grips %2").arg(g ? g->name : "?", what);
+        }
+        case OperationType::Release: {
+            const SceneObject* g = m_scene->getObject(op.gripperId);
+            return QString("%1 releases").arg(g ? g->name : "?");
+        }
     }
     return {};
 }
@@ -416,6 +447,8 @@ void SequencesPage::updateOpFormVisibility(OperationType t) {
     m_opLayout->setRowVisible(m_opVelocity, t == OperationType::Move || t == OperationType::Run || pose);
     m_opLayout->setRowVisible(m_opDuration, t == OperationType::Wait);
     m_opLayout->setRowVisible(m_opCondition, t == OperationType::WaitFor);
+    m_opLayout->setRowVisible(m_opGripper, t == OperationType::Grip || t == OperationType::Release);
+    m_opLayout->setRowVisible(m_opPart, t == OperationType::Grip);
     if (t == OperationType::Run) {
         m_opVelLabel->setText("Speed");
         m_opVelocity->setPlaceholderText("signed speed, e.g. 90 or -0.2");
@@ -486,6 +519,25 @@ void SequencesPage::loadOpForm() {
     m_opPose->clear();
     m_opPose->addItem("(choose)", -1);
     for (auto& [pid, p] : m_scene->allPoses()) m_opPose->addItem(p.name, pid);
+    autoui::fillObjectCombo(m_opGripper, *m_scene, op ? op->gripperId : -1, "(choose)");
+    // Part: sensors first ("s<id>"), then objects ("o<id>")
+    {
+        const QSignalBlocker block(m_opPart);
+        m_opPart->clear();
+        m_opPart->addItem("(choose)", QString());
+        for (auto& [sid, sg] : m_scene->allSignals())
+            if (sg.kind == SignalKind::Sensor)
+                m_opPart->addItem(Theme::icon("radio"), "Detected by " + sg.name, QString("s%1").arg(sid));
+        QComboBox objects;
+        autoui::fillObjectCombo(&objects, *m_scene, -1);
+        for (int i = 0; i < objects.count(); ++i)
+            m_opPart->addItem(objects.itemText(i), QString("o%1").arg(objects.itemData(i).toInt()));
+        QString cur = !op ? QString() : op->sensorId != -1 ? QString("s%1").arg(op->sensorId)
+                                      : op->partId != -1 ? QString("o%1").arg(op->partId) : QString();
+        int idx = m_opPart->findData(cur);
+        if (idx < 0 && !cur.isEmpty()) { m_opPart->addItem("(deleted)", cur); idx = m_opPart->count() - 1; }
+        m_opPart->setCurrentIndex(std::max(0, idx));
+    }
 
     if (!op) {
         m_opForm->setTitle("Operation");
@@ -675,6 +727,13 @@ void SequencesPage::addOperation(OperationType t) {
         case OperationType::Wait:    op.duration = "1"; break;
         case OperationType::WaitFor: op.condition = "true"; break;
         case OperationType::Set:     break;
+        case OperationType::Grip:
+        case OperationType::Release:
+            op.gripperId = m_scene->selectedObjectId();
+            if (t == OperationType::Grip)
+                for (auto& [sid, sg] : m_scene->allSignals())
+                    if (sg.kind == SignalKind::Sensor) { op.sensorId = sid; break; }
+            break;
     }
     int insertAt = after >= 0 ? after + 1 : int(s->operations.size());
     edit([&]{
@@ -756,6 +815,10 @@ void SequencesPage::commitOpForm() {
         op->type           = kTypes[std::max(0, m_opType->currentIndex())];
         op->actuatorId     = m_opActuator->currentData().toInt();
         op->poseId         = m_opPose->currentData().toInt();
+        op->gripperId      = m_opGripper->currentData().toInt();
+        const QString part = m_opPart->currentData().toString();
+        op->sensorId       = part.startsWith('s') ? part.mid(1).toInt() : -1;
+        op->partId         = part.startsWith('o') ? part.mid(1).toInt() : -1;
         op->target         = m_opTarget->text();
         op->velocity       = m_opVelocity->text();
         op->duration       = m_opDuration->text();

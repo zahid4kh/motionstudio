@@ -1,4 +1,4 @@
-# Sensors
+# Sensors & Gripping
 
 A **sensor** is a Bool signal that the scene sets for you: it is true while something is in its beam or zone. Use sensors so that your logic reacts to what is happening in the scene. For example, stop the conveyor when a part reaches the end, or start the pick when a part is present.
 
@@ -26,10 +26,10 @@ In the viewport, a beam is drawn green while it is clear and orange while someth
 
 A sensor is read at the start of every scan, before derived signals are evaluated. You can use it anywhere you would use a Bool signal:
 
-Stop the belt while a part is at the end (a binding on the conveyor's actuator, *Active*):
+Stop the belt while a part is at the end. Select the conveyor and, under **Conveyor Belt** in Properties, set *Speed expr* (m/s):
 
 ```
-!PartAtEnd
+PartAtEnd ? 0 : 0.4
 ```
 
 Wait for a part before picking (a *WaitFor* operation, *Until*):
@@ -51,6 +51,30 @@ rising(PartPresent)
 ```
 
 Sensors are read-only: actions can't assign to them.
+
+## Gripping
+
+Two operations pick parts up and put them down:
+
+| Operation | Settings | Does | Done when |
+|---|---|---|---|
+| **Grip** | *Gripper*: the object that holds; *Part*: **Detected by** a sensor, or a fixed object | Attaches the part to the gripper: from then on it moves and turns with it | the part is held. With a sensor, it waits until the sensor detects something |
+| **Release** | *Gripper* | Lets go of everything the gripper holds | immediately |
+
+A gripped rigid body ignores gravity and the conveyor. Once it is released it falls and is simulated again. Without MuJoCo, a released part stays where it was let go.
+
+The usual setup is a **Zone** sensor mounted on the gripper, just under its pad, that detects **Rigid bodies**. A pick then reads:
+
+| # | Operation | Settings |
+|---|---|---|
+| 1 | WaitFor | Until `PartAtEnd` |
+| 2 | Move | Lift down to the part |
+| 3 | Grip | Gripper `Gripper`, Part *Detected by AtGripper* |
+| 4 | Move | Lift up |
+| 5 | Move | Carriage to the drop point |
+| 6 | Release | Gripper `Gripper`, On finish `Placed = Placed + 1` |
+
+The template **Sensor & Gripper Cell** (File › Open Template…) is this cell, running in a loop. Its drop point is an expression (`0.75 + 0.15 * (Placed % 3)`), so each part lands in a different spot.
 
 ## Tips
 
