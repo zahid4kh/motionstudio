@@ -56,10 +56,16 @@ public:
     // kinematics instead of editing its transform. Off while simulating.
     void setIkAvailable(bool available);
 
+    // Measure mode: click two points on parts for their distance (and the
+    // angle between the surfaces); snaps to hole centres and corners
+    void setMeasureMode(bool on);
+    bool measureMode() const { return m_measureMode; }
+
 signals:
     void keyPointSelected(const QString& name, const QVector3D& worldPos);
     // Axis (and, when `setPivot`, rotation origin) in the parent's local frame
     void axisPicked(int objectId, const QVector3D& localAxis, const QVector3D& localPivot, bool setPivot);
+    void measureModeChanged(bool on);
 
 protected:
     void initializeGL()          override;
@@ -94,6 +100,7 @@ private:
     void drawSensorLabels(QPainter& p);
     void drawKeyPoints (QPainter& p);
     void drawAxisPickBanner(QPainter& p);
+    void drawMeasure(QPainter& p);
     // The selected object's joint axis and, in axis-pick mode, the hovered candidate
     void drawJointAxes(QPainter& p);
     void drawAxisArrow(QPainter& p, const QVector3D& origin, const QVector3D& axis, bool revolute,
@@ -182,7 +189,20 @@ private:
     };
     AxisCandidate m_axisCandidate;
     void updateAxisCandidate(int x, int y);
+    // Nearest triangle (of MeshFeatures) a world ray meets, its object and
+    // the ray parameter; -1 when it meets nothing
+    int  featureTriangleAt(const QVector3D& orig, const QVector3D& dir, int* objectId, float* worldT);
     void commitAxisCandidate();
+
+    struct MeasurePoint {
+        bool      valid = false;
+        QVector3D pos, normal;            // normal: unit, or null when the point has none
+        QString   what;                   // "centre of Ø 12.0 mm", "corner", …
+        std::vector<QVector3D> outline;   // the snapped feature, world segments
+    };
+    bool         m_measureMode = false;
+    MeasurePoint m_measureA, m_measureB, m_measureHover;
+    MeasurePoint measurePointAt(int x, int y);
 
     // Faces and edges recognised on each part's mesh, built on first use.
     // The weak pointer notices a freed geometry whose address was reused.

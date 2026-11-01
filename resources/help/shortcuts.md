@@ -14,6 +14,7 @@
 | Cancel axis picking | Esc |
 | Move a robot tool by its joints (inverse kinematics) | Turn **IK** on, then drag the tool's gizmo |
 | Look inside an assembly | **Section**, then *Cut the model* |
+| Measure a distance or angle | M, then click two points (snaps to hole centres, bore axes, corners); Esc ends |
 
 ## Application
 

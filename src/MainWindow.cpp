@@ -254,6 +254,14 @@ void MainWindow::buildViewMenu() {
 
 void MainWindow::buildToolsMenu() {
     auto* tools = m_menuBar->addMenu("&Tools");
+    QAction* measure = tools->addAction(Theme::icon("ruler"), "&Measure");
+    measure->setCheckable(true);
+    measure->setShortcut(Qt::Key_M);
+    measure->setToolTip("Click two points on parts for their distance and the angle between them (M; Esc ends)");
+    connect(measure, &QAction::toggled, m_viewport, &Viewport::setMeasureMode);
+    connect(m_viewport, &Viewport::measureModeChanged, measure, &QAction::setChecked);
+    addAction(measure);
+    tools->addSeparator();
     tools->addAction(Theme::icon("network"), "External &I/O (Modbus TCP)…", this, &MainWindow::openExternalIo);
 }
 

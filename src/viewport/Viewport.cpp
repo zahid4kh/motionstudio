@@ -547,6 +547,7 @@ void Viewport::paintGL() {
     drawSensorLabels(p);
     drawJointAxes(p);
     drawAxisPickBanner(p);
+    drawMeasure(p);
 }
 
 void Viewport::setIkAvailable(bool available) {
@@ -1475,6 +1476,16 @@ void Viewport::mousePressEvent(QMouseEvent* e){
         return;
     }
 
+    if(m_measureMode && e->button()==Qt::LeftButton && !(e->modifiers()&Qt::AltModifier)){
+        const MeasurePoint p = measurePointAt(e->pos().x(), e->pos().y());
+        if(p.valid){
+            if(!m_measureA.valid || m_measureB.valid){ m_measureA = p; m_measureB = MeasurePoint{}; }
+            else m_measureB = p;
+            update();
+        }
+        return;
+    }
+
     if(e->button()==Qt::LeftButton && !(e->modifiers()&Qt::AltModifier)){
         // Gizmo drag takes highest priority
         int axisHit = hitTestGizmoAxis(e->pos().x(), e->pos().y());
@@ -1555,6 +1566,12 @@ void Viewport::mouseMoveEvent(QMouseEvent* e){
         return;
     }
 
+    if(m_dragBtn==Qt::NoButton && m_measureMode){
+        m_measureHover = measurePointAt(pos.x(), pos.y());
+        setCursor(Qt::CrossCursor);
+        update();
+        return;
+    }
     if(m_dragBtn==Qt::NoButton){
         updateHover(pos.x(), pos.y());
         if(m_axisPickId != -1){
@@ -1609,6 +1626,7 @@ void Viewport::wheelEvent(QWheelEvent* e){
 void Viewport::keyPressEvent(QKeyEvent* e){
     if(e->key() == Qt::Key_Escape){
         if(m_axisPickId != -1){ cancelAxisPick(); return; }
+        if(m_measureMode){ setMeasureMode(false); return; }
     }
     if(e->key() == Qt::Key_F && e->modifiers() == Qt::NoModifier){ fitAll(); return; }
     QOpenGLWidget::keyPressEvent(e);
@@ -1666,18 +1684,11 @@ static float distanceToSegment(const QPointF& p, const QPointF& a, const QPointF
     return float(std::hypot(d.x(), d.y()));
 }
 
-void Viewport::updateAxisCandidate(int x, int y){
-    AxisCandidate found;
-    const bool overGizmo = m_scene->selectedObjectId() == m_axisPickId && hitTestGizmoAxis(x, y) != -1;
-    const float aspect = float(m_vpW) / float(std::max(m_vpH, 1));
-    QVector3D orig, dir;
-    m_camera.ray((2.0f * x) / m_vpW - 1.0f, 1.0f - (2.0f * y) / m_vpH, aspect, &orig, &dir);
-
-    // Nearest triangle under the cursor over every part
+int Viewport::featureTriangleAt(const QVector3D& orig, const QVector3D& dir, int* objectId, float* worldT){
     int hitTri = -1;
     float bestT = std::numeric_limits<float>::max();
+    *objectId = -1;
     for(auto& [id, obj] : m_scene->allObjects()){
-        if(overGizmo) break;
         const MeshFeatures* features = featuresFor(obj);
         if(!features) continue;
         const QMatrix4x4 wt = m_scene->worldTransform(id);
@@ -1689,9 +1700,180 @@ void Viewport::updateAxisCandidate(int x, int y){
         float t;
         const int tri = features->intersect(lo, ld, &t);
         if(tri == -1) continue;
-        const float worldT = QVector3D::dotProduct(wt.map(lo + ld * t) - orig, dir);
-        if(worldT < bestT){ bestT = worldT; hitTri = tri; found.objectId = id; }
+        const float wt2 = QVector3D::dotProduct(wt.map(lo + ld * t) - orig, dir);
+        if(wt2 < bestT){ bestT = wt2; hitTri = tri; *objectId = id; }
     }
+    if(worldT) *worldT = bestT;
+    return hitTri;
+}
+
+// ── Measure ──────────────────────────────────────────────────────────────────
+
+void Viewport::setMeasureMode(bool on){
+    if(on == m_measureMode) return;
+    if(on) cancelAxisPick();
+    m_measureMode = on;
+    m_measureA = m_measureB = m_measureHover = MeasurePoint{};
+    setCursor(on ? Qt::CrossCursor : Qt::ArrowCursor);
+    if(on) setFocus();
+    emit measureModeChanged(on);
+    update();
+}
+
+Viewport::MeasurePoint Viewport::measurePointAt(int x, int y){
+    MeasurePoint mp;
+    const float aspect = float(m_vpW) / float(std::max(m_vpH, 1));
+    QVector3D orig, dir;
+    m_camera.ray((2.0f * x) / m_vpW - 1.0f, 1.0f - (2.0f * y) / m_vpH, aspect, &orig, &dir);
+    int objectId = -1;
+    float t = 0;
+    const int tri = featureTriangleAt(orig, dir, &objectId, &t);
+    if(tri < 0) return mp;
+    const SceneObject* obj = m_scene->getObject(objectId);
+    const MeshFeatures* features = featuresFor(*obj);
+    const std::vector<float>* soup = surfaceOf(*obj);
+    const QMatrix4x4 wt = m_scene->worldTransform(objectId);
+    const QMatrix4x4 normalWt = wt.inverted().transposed();
+    mp.valid = true;
+    mp.pos = orig + dir * t;
+    if(soup && size_t(tri) * 18 + 18 <= soup->size()){
+        const float* f = &(*soup)[size_t(tri) * 18];
+        const QVector3D a(f[0], f[1], f[2]), b(f[6], f[7], f[8]), c(f[12], f[13], f[14]);
+        mp.normal = normalWt.mapVector(QVector3D::crossProduct(b - a, c - a)).normalized();
+    }
+    auto fmt = [](float m){ return m < 1.0f ? QString("%1 mm").arg(double(m) * 1000, 0, 'f', 1)
+                                            : QString("%1 m").arg(double(m), 0, 'f', 3); };
+    const float scale = wt.mapVector(QVector3D(1, 0, 0)).length();   // for radii (uniform scale assumed)
+
+    // Snap: a round edge (its centre) or an end of a straight edge near the cursor
+    float nearest = 10.0f;   // px
+    for(const AxisFeature* edge : features->edgesAround(tri)){
+        if(edge->kind == AxisFeature::Kind::CircularEdge){
+            for(size_t i = 0; i + 1 < edge->outline.size(); i += 2){
+                QPointF pa, pb;
+                if(!toScreen(wt.map(edge->outline[i]), &pa) || !toScreen(wt.map(edge->outline[i + 1]), &pb)) continue;
+                const float d = distanceToSegment(QPointF(x, y), pa, pb);
+                if(d >= nearest) continue;
+                nearest = d;
+                mp.pos = wt.map(edge->origin);
+                mp.normal = normalWt.mapVector(edge->axis).normalized();
+                mp.what = "centre of Ø " + fmt(2 * edge->radius * scale);
+                mp.outline.clear();
+                for(const QVector3D& q : edge->outline) mp.outline.push_back(wt.map(q));
+            }
+        } else if(edge->kind == AxisFeature::Kind::StraightEdge && edge->outline.size() >= 2){
+            // Its two ends: the extreme points along the edge direction
+            QVector3D lo = edge->outline.front(), hi = lo;
+            for(const QVector3D& q : edge->outline){
+                if(QVector3D::dotProduct(q - lo, edge->axis) < 0) lo = q;
+                if(QVector3D::dotProduct(q - hi, edge->axis) > 0) hi = q;
+            }
+            for(const QVector3D& end : {lo, hi}){
+                QPointF ps;
+                if(!toScreen(wt.map(end), &ps)) continue;
+                const float d = float(std::hypot(ps.x() - x, ps.y() - y));
+                if(d >= nearest) continue;
+                nearest = d;
+                mp.pos = wt.map(end);
+                mp.what = "corner";
+                mp.outline.clear();
+                for(const QVector3D& q : edge->outline) mp.outline.push_back(wt.map(q));
+            }
+        }
+    }
+    if(mp.what.isEmpty()){
+        const AxisFeature& face = features->faceFeature(tri);
+        if(face.kind == AxisFeature::Kind::CylindricalFace){
+            // On a bore or shaft: the point on its centre line
+            const QVector3D o = wt.map(face.origin), a = wt.mapVector(face.axis).normalized();
+            mp.pos = o + a * QVector3D::dotProduct(mp.pos - o, a);
+            mp.normal = QVector3D();
+            mp.what = "axis of Ø " + fmt(2 * face.radius * scale);
+            for(const QVector3D& q : face.outline) mp.outline.push_back(wt.map(q));
+        } else if(face.kind == AxisFeature::Kind::FlatFace){
+            mp.normal = normalWt.mapVector(face.axis).normalized();
+            mp.what = "on " + obj->name;
+        } else {
+            mp.what = "on " + obj->name;
+        }
+    }
+    return mp;
+}
+
+void Viewport::drawMeasure(QPainter& p){
+    if(!m_measureMode) return;
+    const Theme::Colors& c = Theme::colors();
+    p.setRenderHint(QPainter::Antialiasing);
+    QFont f = font(); f.setPointSize(9); f.setBold(true);
+    p.setFont(f);
+    QFontMetrics fm(f);
+    const QString banner = !m_measureA.valid || m_measureB.valid
+        ? "Measure: click a point on a part (snaps to hole centres, bore axes and corners)  ·  Esc to finish"
+        : "Measure: click the second point  ·  Esc to finish";
+    const double pillW = fm.horizontalAdvance(banner) + 18;
+    drawPill(p, QPointF(std::max(8.0, std::min((m_vpW - pillW) / 2.0, m_viewCube->x() - pillW - 8.0)), 46),
+             banner, c.info);
+
+    auto outline = [&](const MeasurePoint& mp, const QColor& col){
+        p.setPen(QPen(col, 2));
+        for(size_t i = 0; i + 1 < mp.outline.size(); i += 2){
+            QPointF a, b;
+            if(toScreen(mp.outline[i], &a) && toScreen(mp.outline[i + 1], &b)) p.drawLine(a, b);
+        }
+    };
+    auto dot = [&](const MeasurePoint& mp, const QColor& col, double r){
+        QPointF s;
+        if(!toScreen(mp.pos, &s)) return;
+        p.setPen(QPen(c.viewport, 1.5));
+        p.setBrush(col);
+        p.drawEllipse(s, r, r);
+    };
+    if(m_measureHover.valid){
+        outline(m_measureHover, c.info);
+        dot(m_measureHover, c.info, 4);
+        QPointF s;
+        if(toScreen(m_measureHover.pos, &s) && !m_measureHover.what.isEmpty()){
+            QFont small = font(); small.setPointSize(8);
+            p.setFont(small);
+            drawPill(p, s + QPointF(10, 8), m_measureHover.what);
+            p.setFont(f);
+        }
+    }
+    if(m_measureA.valid){ outline(m_measureA, c.warning); dot(m_measureA, c.warning, 5); }
+    if(m_measureB.valid){ outline(m_measureB, c.warning); dot(m_measureB, c.warning, 5); }
+    if(m_measureA.valid && m_measureB.valid){
+        QPointF a, b;
+        if(toScreen(m_measureA.pos, &a) && toScreen(m_measureB.pos, &b)){
+            p.setPen(QPen(c.warning, 2, Qt::DashLine));
+            p.drawLine(a, b);
+            const QVector3D d = m_measureB.pos - m_measureA.pos;
+            auto fmt = [](float m){ return std::abs(m) < 1.0f ? QString("%1 mm").arg(double(m) * 1000, 0, 'f', 2)
+                                                              : QString("%1 m").arg(double(m), 0, 'f', 4); };
+            QString text = fmt(d.length());
+            if(!m_measureA.normal.isNull() && !m_measureB.normal.isNull()){
+                const float cosA = std::clamp(QVector3D::dotProduct(m_measureA.normal, m_measureB.normal), -1.0f, 1.0f);
+                text += QString("   ∠ %1°").arg(qRadiansToDegrees(std::acos(cosA)), 0, 'f', 1);
+            }
+            const QPointF mid = (a + b) / 2;
+            drawPill(p, mid + QPointF(10, -26), text, c.warning);
+            QFont small = font(); small.setPointSize(8);
+            p.setFont(small);
+            drawPill(p, mid + QPointF(10, 2), QString("ΔX %1   ΔY %2   ΔZ %3").arg(fmt(d.x()), fmt(d.y()), fmt(d.z())));
+            p.setFont(f);
+        }
+    }
+}
+
+void Viewport::updateAxisCandidate(int x, int y){
+    AxisCandidate found;
+    const bool overGizmo = m_scene->selectedObjectId() == m_axisPickId && hitTestGizmoAxis(x, y) != -1;
+    const float aspect = float(m_vpW) / float(std::max(m_vpH, 1));
+    QVector3D orig, dir;
+    m_camera.ray((2.0f * x) / m_vpW - 1.0f, 1.0f - (2.0f * y) / m_vpH, aspect, &orig, &dir);
+
+    // Nearest triangle under the cursor over every part
+    float bestT = 0;
+    const int hitTri = overGizmo ? -1 : featureTriangleAt(orig, dir, &found.objectId, &bestT);
 
     if(found.objectId != -1){
         const SceneObject* obj = m_scene->getObject(found.objectId);

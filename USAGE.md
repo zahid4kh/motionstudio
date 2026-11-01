@@ -61,6 +61,10 @@ The templates (**File › Open Template…**) are complete working examples. *Ro
 | Zoom   | Scroll wheel |
 | Select | Left click on object |
 
+### Measure (Tools › Measure, M)
+
+Click two points on parts: the viewport shows their distance, ΔX/ΔY/ΔZ, and the angle between the two surfaces. Points snap to the **centre of a round edge** (holes, bosses), the **axis of a bore or shaft**, and the **ends of straight edges**; the hovered snap is outlined and labelled (e.g. *centre of Ø 12.0 mm*). A third click starts a new measurement; **Esc** ends measuring.
+
 ### Viewport buttons (top right)
 
 | Button | Does |
