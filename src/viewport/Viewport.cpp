@@ -5,6 +5,7 @@
 #include "scene/PrimitiveMesh.h"
 #include "scene/SceneQuery.h"
 #include "automation/Sensors.h"
+#include "automation/Kinematics.h"
 #include <QVariantAnimation>
 #include <QLabel>
 #include <QMouseEvent>
@@ -335,6 +336,20 @@ Viewport::Viewport(SceneGraph* scene, QWidget* parent)
         update();
     });
 
+    m_btnIk = new QPushButton(Theme::icon("move-diagonal-2"), "IK", this);
+    m_btnIk->setObjectName("viewButton");
+    m_btnIk->setToolTip("Inverse kinematics: drag the gizmo of a robot's tool (any part that actuated joints "
+                        "move) and the joints follow. With 6 or more joints its orientation is kept.");
+    m_btnIk->setFixedSize(58, 26);
+    m_btnIk->setCursor(Qt::PointingHandCursor);
+    m_btnIk->setCheckable(true);
+    m_btnIk->raise();
+    connect(m_btnIk, &QPushButton::toggled, this, [this](bool on){
+        m_btnIk->setProperty("active", on);
+        m_btnIk->setIcon(Theme::icon("move-diagonal-2", on ? Theme::Tint::OnAccent : Theme::Tint::Text));
+        Theme::repolish(m_btnIk);
+        update();
+    });
     m_btnLight = new QPushButton(Theme::icon("lightbulb"), "Lighting", this);
     m_btnLight->setObjectName("viewButton");
     m_btnLight->setToolTip("Adjust the viewport lighting for the current theme");
@@ -397,6 +412,7 @@ void Viewport::repositionOverlays() {
     }
     m_btnFloor->move(m_vpW - m_btnFloor->width() - mg, mg);
     m_btnLight->move(m_btnFloor->x() - m_btnLight->width() - gap, mg);
+    m_btnIk->move(m_btnLight->x() - m_btnIk->width() - gap, mg);
     m_viewCube->move(m_vpW - m_viewCube->width() - 2, m_btnFloor->y() + m_btnFloor->height() + gap);
 }
 
@@ -490,6 +506,17 @@ void Viewport::paintGL() {
     drawSensorLabels(p);
     drawJointAxes(p);
     drawAxisPickBanner(p);
+}
+
+void Viewport::setIkAvailable(bool available) {
+    m_ikAvailable = available;
+    m_btnIk->setEnabled(available);
+    m_btnIk->setToolTip(available ? m_btnIk->toolTip().section("\n(", 0, 0)
+                                  : m_btnIk->toolTip().section("\n(", 0, 0) + "\n(Reset the simulation to use IK)");
+}
+
+bool Viewport::ikDragActive() const {
+    return m_btnIk && m_btnIk->isChecked() && m_ikAvailable;
 }
 
 void Viewport::setSimulationOverlay(const QSet<int>& movingObjects, const QStringList& lines) {
@@ -1358,6 +1385,11 @@ void Viewport::mousePressEvent(QMouseEvent* e){
             int selId = m_scene->selectedObjectId();
             const SceneObject* obj = m_scene->getObject(selId);
             if (obj) {
+                m_ikDragChain.clear();
+                if (ikDragActive()) {
+                    m_ikDragChain = kin::chainTo(*m_scene, selId);
+                    m_ikDragStartFrame = kin::toolFrame(*m_scene, selId);
+                }
                 m_gizmoDragAxis       = axisHit;
                 m_gizmoDragStartPos   = obj->transform.position;
                 m_gizmoDragWorldCenter = m_scene->worldTransform(selId).map(QVector3D(0,0,0));
@@ -1403,6 +1435,16 @@ void Viewport::mouseMoveEvent(QMouseEvent* e){
             QVector3D ax(kAxData[m_gizmoDragAxis][0], kAxData[m_gizmoDragAxis][1], kAxData[m_gizmoDragAxis][2]);
             QVector3D worldDelta = ax * axisDelta;
 
+            if (!m_ikDragChain.empty()) {
+                // Joints follow the tool; the transform is not edited
+                kin::Target t = kin::targetFrom(m_ikDragStartFrame);
+                t.position += worldDelta;
+                t.useOrientation = kin::canOrient(m_ikDragChain);
+                kin::solve(*m_scene, selId, m_ikDragChain, t, 40);
+                m_scene->notifyJointsMoved();
+                update();
+                return;
+            }
             if (obj->parentId == -1) {
                 obj->transform.position = m_gizmoDragStartPos + worldDelta;
             } else {

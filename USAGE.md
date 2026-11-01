@@ -154,6 +154,7 @@ The viewport draws beams and zones green while clear and orange while detecting.
 
 - **Actuator table + form** — mode, speed and acceleration, plus optional **bindings**. A bound **Target**, **Velocity** or **Active** expression is re-evaluated every scan and overrides operations. Example: `Target = Gripper ? 0 : 0.04`.
 - **Jog joints** — sliders that pose the mechanism at edit time. **All to Init** and **Current → Init** move between the current pose and the saved initial values.
+- **Cartesian jog** — choose a **Tool** (a part the actuated joints move), then **X− … Z+** move it along the world axes by inverse kinematics; **Keep orientation** holds its angle (6+ joints). The **IK** button on the viewport does the same by dragging the tool's gizmo.
 - **Poses** — named joint snapshots (teach points). **Capture** saves the current pose, **Update** overwrites one, **Go to** jogs to one. Use poses with *MoveToPose* operations.
 
 ### Sequences tab
@@ -164,6 +165,7 @@ A sequence is a set of **operations** with **predecessors**. An operation starts
 |-----------|------|-----------|
 | **Move** | Actuator → Target (Position mode), optional max speed | actuator is at the target and stopped |
 | **MoveToPose** | All actuated joints of a pose, synchronized to arrive together; Speed % scales them | all have arrived |
+| **MoveL** | A *Tool* part moves in a straight line (eased, at *Speed* m/s) to where it is in a pose; the joints follow by inverse kinematics | tool arrived |
 | **Run** | Actuator → Speed mode at the given signed speed | immediately |
 | **Stop** | Actuator decelerates to rest | it has stopped |
 | **Set** | Only runs its *On start* actions | immediately |

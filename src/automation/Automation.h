@@ -63,6 +63,7 @@ enum class OperationType {
     WaitFor,     // done when `condition` is true
     Grip,        // gripper picks up a part (from a sensor or a fixed object); done when held
     Release,     // gripper lets go of everything it holds; done immediately
+    MoveL,       // tool moves in a straight line to where it is in a pose (inverse kinematics)
 };
 
 struct Operation {
@@ -75,6 +76,7 @@ struct Operation {
     int           gripperId  = -1;   // Grip / Release: object that holds parts
     int           partId     = -1;   // Grip: the object to pick up, or
     int           sensorId   = -1;   // Grip: a sensor signal: pick up what it detects
+    int           toolId     = -1;   // MoveL: object whose frame is the tool centre point
 
     // All numeric/boolean fields are expressions (a constant is a valid expression)
     QString       target;            // Move: position
@@ -140,6 +142,7 @@ inline QString operationTypeName(OperationType t) {
         case OperationType::WaitFor:    return "WaitFor";
         case OperationType::Grip:       return "Grip";
         case OperationType::Release:    return "Release";
+        case OperationType::MoveL:      return "MoveL";
     }
     return "Move";
 }
@@ -153,6 +156,7 @@ inline OperationType operationTypeFromName(const QString& s) {
     if (s == "WaitFor")    return OperationType::WaitFor;
     if (s == "Grip")       return OperationType::Grip;
     if (s == "Release")    return OperationType::Release;
+    if (s == "MoveL")      return OperationType::MoveL;
     return OperationType::Move;
 }
 

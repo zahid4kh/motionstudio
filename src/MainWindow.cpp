@@ -815,6 +815,7 @@ void MainWindow::onSimStateChanged(bool running) {
 }
 
 void MainWindow::onSimActiveChanged(bool active) {
+    m_viewport->setIkAvailable(!active);
     m_properties->setSimulationActive(active);
     updateUndoActions();
     if (!active) {

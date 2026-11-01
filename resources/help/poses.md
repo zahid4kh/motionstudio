@@ -4,7 +4,7 @@ A pose stores the value of **every joint** under a name. It is the robot-program
 
 ## Teaching a pose
 
-1. In **Jog joints**, drag the sliders (or type values) until the machine is where you want it.
+1. In **Jog joints**, drag the sliders (or type values) until the machine is where you want it. For a robot, **Cartesian jog** moves the tool along X, Y and Z instead (see [Robot Tools & IK](help:kinematics)).
 2. Press **Capture**. A new pose appears and its name is ready to edit.
 3. Give it a short name with no spaces, for example `Home` or `AbovePick`.
 

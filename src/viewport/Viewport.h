@@ -49,6 +49,11 @@ public:
     // the running automation operations in the top-left corner.
     void setSimulationOverlay(const QSet<int>& movingObjects, const QStringList& lines);
 
+    // IK drag: with the IK button on, dragging the gizmo of an object that
+    // actuated joints move (a robot's tool) moves the object by inverse
+    // kinematics instead of editing its transform. Off while simulating.
+    void setIkAvailable(bool available);
+
 signals:
     void keyPointSelected(const QString& name, const QVector3D& worldPos);
     // Axis (and, when `setPivot`, rotation origin) in the parent's local frame
@@ -149,6 +154,9 @@ private:
     QPushButton* m_btnSide   = nullptr;
     QPushButton* m_btnFloor  = nullptr;
     QPushButton* m_btnLight  = nullptr;
+    QPushButton* m_btnIk     = nullptr;
+    bool         m_ikAvailable = true;
+    bool ikDragActive() const;
 
     // Shading settings for the active theme, edited in m_lightPanel
     ViewportLighting m_light;
@@ -198,6 +206,8 @@ private:
     float     m_gizmoDragStartT   = 0.f;
     QVector3D m_gizmoDragStartPos;        // local position at drag start
     QVector3D m_gizmoDragWorldCenter;     // world center at drag start (fixed reference)
+    QMatrix4x4 m_ikDragStartFrame;        // IK drag: tool frame at drag start
+    std::vector<int> m_ikDragChain;
 
     void  drawTranslateGizmo();
     int   hitTestGizmoAxis(int mx, int my) const;

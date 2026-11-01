@@ -1,4 +1,7 @@
 #include "ActuatorsPage.h"
+#include "automation/Kinematics.h"
+#include <functional>
+#include <map>
 #include "automation/Expression.h"
 #include "physics/SimulationEngine.h"
 #include "ui/HelpDialog.h"
@@ -190,6 +193,52 @@ ActuatorsPage::ActuatorsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     jb->addWidget(m_toInitBtn);
     jb->addWidget(m_setInitBtn);
     jv->addLayout(jb);
+
+    // Cartesian jog: move a tool along world axes, joints by inverse kinematics
+    auto* cartTitle = new QLabel("CARTESIAN JOG");
+    cartTitle->setObjectName("subheading");
+    jv->addWidget(cartTitle);
+    auto* cr1 = new QHBoxLayout;
+    m_cartTool = new QComboBox;
+    m_cartTool->setToolTip("The tool centre point: an object that actuated joints move (e.g. the flange or "
+                           "gripper). Its joints follow by inverse kinematics.");
+    m_cartStep = new QComboBox;
+    for (double mm : {1.0, 5.0, 10.0, 50.0}) m_cartStep->addItem(QString("%1 mm").arg(mm), mm / 1000.0);
+    m_cartStep->setCurrentIndex(2);
+    m_cartStep->setToolTip("Distance per click; hold a button to keep moving");
+    cr1->addWidget(new QLabel("Tool"));
+    cr1->addWidget(m_cartTool, 1);
+    cr1->addWidget(m_cartStep);
+    jv->addLayout(cr1);
+    auto* cr2 = new QHBoxLayout;
+    cr2->setSpacing(3);
+    const struct { const char* label; QVector3D dir; } kDirs[] = {
+        {"X−", {-1, 0, 0}}, {"X+", {1, 0, 0}}, {"Y−", {0, -1, 0}}, {"Y+", {0, 1, 0}}, {"Z−", {0, 0, -1}}, {"Z+", {0, 0, 1}},
+    };
+    for (const auto& d : kDirs) {
+        auto* b = new QPushButton(d.label);
+        b->setAutoRepeat(true);
+        b->setAutoRepeatDelay(350);
+        b->setAutoRepeatInterval(60);
+        b->setFixedWidth(40);
+        b->setToolTip(QString("Move the tool along world %1").arg(d.label));
+        const QVector3D dir = d.dir;
+        connect(b, &QPushButton::clicked, this, [this, dir]{ cartesianJog(dir); });
+        cr2->addWidget(b);
+        m_cartButtons.push_back(b);
+    }
+    m_cartKeep = new QCheckBox("Keep orientation");
+    m_cartKeep->setChecked(true);
+    m_cartKeep->setToolTip("Keep the tool's orientation while it moves (needs 6 or more actuated joints)");
+    cr2->addSpacing(6);
+    cr2->addWidget(m_cartKeep);
+    cr2->addStretch();
+    jv->addLayout(cr2);
+    m_cartReadout = new QLabel;
+    m_cartReadout->setObjectName("hint");
+    m_cartReadout->setWordWrap(true);
+    jv->addWidget(m_cartReadout);
+    connect(m_cartTool, &QComboBox::currentIndexChanged, this, &ActuatorsPage::updateCartesianReadout);
     split->addWidget(jogBox);
 
     // ── Right: poses ────────────────────────────────────────────────────────
@@ -281,6 +330,7 @@ ActuatorsPage::ActuatorsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
 void ActuatorsPage::refresh() {
     rebuildTable();
     rebuildJog();
+    rebuildCartesian();
     rebuildPoses();
     loadForm();
 }
@@ -436,6 +486,70 @@ void ActuatorsPage::rebuildJog() {
     m_setInitBtn->setEnabled(!m_locked && !jids.empty());
 }
 
+void ActuatorsPage::rebuildCartesian() {
+    const int keep = m_cartTool->currentData().toInt();
+    const QSignalBlocker block(m_cartTool);
+    m_cartTool->clear();
+    // Objects some actuated joint moves, in hierarchy order; the deepest
+    // (most joints above it) is the likely tool
+    int deepest = -1;
+    size_t deepestLen = 0;
+    std::function<void(int, int)> add = [&](int id, int depth) {
+        const SceneObject* o = m_scene->getObject(id);
+        if (!o) return;
+        const size_t len = kin::chainTo(*m_scene, id).size();
+        if (len > 0) {
+            m_cartTool->addItem(QString(depth * 2, QChar(' ')) + o->name, id);
+            if (len >= deepestLen) { deepestLen = len; deepest = id; }
+        }
+        for (int c : o->childIds) add(c, depth + 1);
+    };
+    for (int r : m_scene->rootObjects()) add(r, 0);
+    int idx = m_cartTool->findData(keep);
+    if (idx < 0) idx = m_cartTool->findData(deepest);
+    m_cartTool->setCurrentIndex(std::max(0, idx));
+    const bool usable = m_cartTool->count() > 0 && !m_locked;
+    m_cartTool->setEnabled(usable);
+    for (auto* b : m_cartButtons) b->setEnabled(usable);
+    m_cartKeep->setEnabled(usable);
+    updateCartesianReadout();
+}
+
+void ActuatorsPage::updateCartesianReadout() {
+    const int tool = m_cartTool->currentData().toInt();
+    if (m_cartTool->count() == 0 || !m_scene->getObject(tool)) {
+        m_cartReadout->setText("Give a robot's joints actuators to jog its tool here.");
+        return;
+    }
+    const std::vector<int> chain = kin::chainTo(*m_scene, tool);
+    const QVector3D p = kin::toolFrame(*m_scene, tool).column(3).toVector3D();
+    m_cartReadout->setText(QString("Tool at X %1  Y %2  Z %3 m · %4 joint%5%6")
+        .arg(double(p.x()), 0, 'f', 4).arg(double(p.y()), 0, 'f', 4).arg(double(p.z()), 0, 'f', 4)
+        .arg(chain.size()).arg(chain.size() == 1 ? "" : "s")
+        .arg(kin::canOrient(chain) ? "" : " (position only)"));
+}
+
+void ActuatorsPage::cartesianJog(const QVector3D& direction) {
+    const int tool = m_cartTool->currentData().toInt();
+    if (m_locked || !m_scene->getObject(tool)) return;
+    const std::vector<int> chain = kin::chainTo(*m_scene, tool);
+    if (chain.empty()) return;
+    std::map<int, float> before;
+    for (int jid : chain) before[jid] = m_scene->getJoint(jid)->currentValue;
+    kin::Target t = kin::targetFrom(kin::toolFrame(*m_scene, tool));
+    t.position += direction * float(m_cartStep->currentData().toDouble());
+    t.useOrientation = m_cartKeep->isChecked() && kin::canOrient(chain);
+    const kin::Result r = kin::solve(*m_scene, tool, chain, t, 60);
+    if (!r.reached && r.positionError > 1e-4f) {
+        // Out of reach or at a limit: stay where it was
+        for (auto& [jid, v] : before) m_scene->getJoint(jid)->currentValue = v;
+        emit statusMessage(QString("Can't move further that way (%1 mm short): out of reach or at a joint limit")
+                               .arg(double(r.positionError) * 1000, 0, 'f', 1), false);
+    }
+    m_scene->notifyJointsMoved();
+    updateCartesianReadout();
+}
+
 void ActuatorsPage::rebuildPoses() {
     m_loading = true;
     int keep = currentPoseId();
@@ -516,15 +630,16 @@ void ActuatorsPage::refreshRuntime() {
         if (!j) continue;
         m_table->item(r, C_Pos)->setText(QString::number(j->currentValue, 'f', 2) + autoui::posUnit(j));
     }
-    if (m_locked) {
-        for (auto& row : m_jogRows) {
-            const Joint* j = m_scene->getJoint(row.jointId);
-            if (!j) continue;
-            QSignalBlocker b1(row.slider), b2(row.spin);
-            row.slider->setValue(int(std::lround(j->currentValue * row.scale)));
-            row.spin->setValue(j->currentValue);
-        }
+    // Follow joints moved elsewhere (simulation, IK jog, poses); a row being
+    // edited already shows its value
+    for (auto& row : m_jogRows) {
+        const Joint* j = m_scene->getJoint(row.jointId);
+        if (!j || std::fabs(row.spin->value() - j->currentValue) < 1e-6) continue;
+        QSignalBlocker b1(row.slider), b2(row.spin);
+        row.slider->setValue(int(std::lround(j->currentValue * row.scale)));
+        row.spin->setValue(j->currentValue);
     }
+    updateCartesianReadout();
 }
 
 void ActuatorsPage::setLocked(bool locked) {

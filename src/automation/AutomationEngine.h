@@ -131,6 +131,7 @@ private:
         bool   active = true;
         motion::State st;
         expr::Expression bindTarget, bindVelocity, bindActive;
+        bool   direct = false;   // position set this scan by a MoveL (no profile)
         int    slotBase = -1;   // pos, vel, target, inPosition, moving, atMin, atMax, active
     };
 
@@ -147,6 +148,12 @@ private:
         double moveFrom   = 0;
         std::vector<std::pair<int, double>> poseTargets;   // (actIdx, target)
         std::vector<double>                  poseFrom;
+        // MoveL: tool path from → to over `duration` seconds
+        std::vector<int> chain;
+        QMatrix4x4       pathFrom, pathTo;
+        bool             pathOrient = false;
+        double           pathDuration = 0;
+        bool             pathWarned = false;
     };
 
     struct SeqRt {
@@ -196,6 +203,7 @@ private:
     void applyBindings();
     void integrate(double dt);
     void attach(int gripperId, int partId);
+    bool stepLinearMove(OpRt& op);
     void applyHolds();
     double clampToLimits(const ActuatorRt& a, double v) const;
     bool inPosition(const ActuatorRt& a, double target) const;

@@ -27,6 +27,7 @@ const Topic kTopics[] = {
     {"start",       "Getting Started",        "book-open"},
     {"actuators",   "Joints & Actuators",     "cog"},
     {"poses",       "Poses",                  "camera"},
+    {"kinematics",  "Robot Tools & IK",       "move-diagonal-2"},
     {"sequences",   "Sequences & Operations", "list-ordered"},
     {"signals",     "Signals",                "toggle-right"},
     {"sensors",     "Sensors & Gripping",     "radio"},

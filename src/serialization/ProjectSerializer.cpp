@@ -269,6 +269,7 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene, MeshPool* pool) {
             if (op.gripperId != -1) oo["gripperId"] = op.gripperId;
             if (op.partId != -1)    oo["partId"]    = op.partId;
             if (op.sensorId != -1)  oo["sensorId"]  = op.sensorId;
+            if (op.toolId != -1)    oo["toolId"]    = op.toolId;
             oo["target"]         = op.target;
             oo["velocity"]       = op.velocity;
             oo["duration"]       = op.duration;
@@ -508,6 +509,7 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root, con
             op.gripperId      = ref(idMap, oo["gripperId"]);
             op.partId         = ref(idMap, oo["partId"]);
             op.sensorId       = ref(signalIdMap, oo["sensorId"]);
+            op.toolId         = ref(idMap, oo["toolId"]);
             op.target         = oo["target"].toString();
             op.velocity       = oo["velocity"].toString();
             op.duration       = oo["duration"].toString();

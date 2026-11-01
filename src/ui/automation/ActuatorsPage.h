@@ -36,6 +36,10 @@ private:
     void rebuildTable();
     void rebuildJog();
     void rebuildPoses();
+    // Cartesian jog: tools are objects that actuated joints move
+    void rebuildCartesian();
+    void cartesianJog(const QVector3D& direction);
+    void updateCartesianReadout();
     // The "Next:" line: the first thing the project still needs
     void updateGuidance();
     void loadForm();
@@ -78,6 +82,11 @@ private:
     QVBoxLayout*    m_jogLayout = nullptr;
     QPushButton*    m_toInitBtn = nullptr;
     QPushButton*    m_setInitBtn = nullptr;
+    QComboBox*      m_cartTool = nullptr;
+    QComboBox*      m_cartStep = nullptr;
+    QCheckBox*      m_cartKeep = nullptr;
+    QLabel*         m_cartReadout = nullptr;
+    std::vector<QPushButton*> m_cartButtons;
 
     // Poses
     QListWidget*    m_poses = nullptr;

@@ -35,6 +35,7 @@
         <file alias="icons/radio.svg">resources/icons/radio.svg</file>
         <file alias="icons/hand-grab.svg">resources/icons/hand-grab.svg</file>
         <file alias="icons/film.svg">resources/icons/film.svg</file>
+        <file alias="icons/move-diagonal-2.svg">resources/icons/move-diagonal-2.svg</file>
         <file alias="icons/crosshair.svg">resources/icons/crosshair.svg</file>
         <file alias="icons/cylinder.svg">resources/icons/cylinder.svg</file>
         <file alias="icons/disc-3.svg">resources/icons/disc-3.svg</file>
@@ -108,6 +109,8 @@
         <file alias="help/start.md">resources/help/start.md</file>
         <file alias="help/actuators.md">resources/help/actuators.md</file>
         <file alias="help/poses.md">resources/help/poses.md</file>
+
+        <file alias="help/kinematics.md">resources/help/kinematics.md</file>
         <file alias="help/sequences.md">resources/help/sequences.md</file>
         <file alias="help/signals.md">resources/help/signals.md</file>
 

@@ -25,7 +25,7 @@ namespace {
 enum Col { C_Num, C_Name, C_Type, C_What, C_After, C_When, C_State, C_Count };
 
 const OperationType kTypes[] = {
-    OperationType::Move, OperationType::MoveToPose, OperationType::Run, OperationType::Stop,
+    OperationType::Move, OperationType::MoveToPose, OperationType::MoveL, OperationType::Run, OperationType::Stop,
     OperationType::Set, OperationType::Wait, OperationType::WaitFor,
     OperationType::Grip, OperationType::Release,
 };
@@ -39,6 +39,8 @@ QString typeHelp(OperationType t) {
         case OperationType::Set:        return "Only run the 'On start' actions (set signals); finishes immediately";
         case OperationType::Wait:       return "Wait for a time; finishes after the duration";
         case OperationType::WaitFor:    return "Wait until a condition becomes true";
+        case OperationType::MoveL:      return "Move a tool in a straight line to where it is in a pose; the joints "
+                                               "follow by inverse kinematics. Finishes when it arrives";
         case OperationType::Grip:       return "Attach a part to a gripper so it moves with it: the part a sensor "
                                                "detects, or a fixed object; finishes when the part is held";
         case OperationType::Release:    return "Let go of everything the gripper holds (a rigid body then falls); "
@@ -57,6 +59,7 @@ QIcon typeIcon(OperationType t) {
         case OperationType::Wait:       return Theme::icon("hourglass");
         case OperationType::WaitFor:    return Theme::icon("eye");
         case OperationType::Grip:       return Theme::icon("hand-grab");
+        case OperationType::MoveL:      return Theme::icon("move-diagonal-2");
         case OperationType::Release:    return Theme::icon("hand");
     }
     return {};
@@ -398,6 +401,12 @@ QString SequencesPage::describe(const Operation& op) const {
             const SceneObject* g = m_scene->getObject(op.gripperId);
             return QString("%1 releases").arg(g ? g->name : "?");
         }
+        case OperationType::MoveL: {
+            const SceneObject* t = m_scene->getObject(op.toolId);
+            const Pose* p = m_scene->getPose(op.poseId);
+            return QString("%1 → %2 linear%3").arg(t ? t->name : "?", p ? p->name : "?",
+                       op.velocity.trimmed().isEmpty() ? QString() : QString(" @ %1 m/s").arg(op.velocity.trimmed()));
+        }
     }
     return {};
 }
@@ -440,18 +449,27 @@ void SequencesPage::rebuildOpTable() {
 
 void SequencesPage::updateOpFormVisibility(OperationType t) {
     bool act  = t == OperationType::Move || t == OperationType::Run || t == OperationType::Stop;
-    bool pose = t == OperationType::MoveToPose;
+    bool pose = t == OperationType::MoveToPose || t == OperationType::MoveL;
     m_opLayout->setRowVisible(m_opActuator, act);
     m_opLayout->setRowVisible(m_opPose, pose);
     m_opLayout->setRowVisible(m_opTarget, t == OperationType::Move);
     m_opLayout->setRowVisible(m_opVelocity, t == OperationType::Move || t == OperationType::Run || pose);
     m_opLayout->setRowVisible(m_opDuration, t == OperationType::Wait);
     m_opLayout->setRowVisible(m_opCondition, t == OperationType::WaitFor);
-    m_opLayout->setRowVisible(m_opGripper, t == OperationType::Grip || t == OperationType::Release);
+    m_opLayout->setRowVisible(m_opGripper, t == OperationType::Grip || t == OperationType::Release ||
+                                           t == OperationType::MoveL);
+    if (auto* l = qobject_cast<QLabel*>(m_opLayout->labelForField(m_opGripper)))
+        l->setText(t == OperationType::MoveL ? "Tool" : "Gripper");
+    m_opGripper->setToolTip(t == OperationType::MoveL
+        ? "The object whose frame is the tool centre point; the actuated joints above it move it"
+        : "The object that holds the part, e.g. the robot's tool flange or gripper body");
     m_opLayout->setRowVisible(m_opPart, t == OperationType::Grip);
     if (t == OperationType::Run) {
         m_opVelLabel->setText("Speed");
         m_opVelocity->setPlaceholderText("signed speed, e.g. 90 or -0.2");
+    } else if (t == OperationType::MoveL) {
+        m_opVelLabel->setText("Speed m/s");
+        m_opVelocity->setPlaceholderText("0.25");
     } else if (pose) {
         m_opVelLabel->setText("Speed %");
         m_opVelocity->setPlaceholderText("100");
@@ -519,7 +537,8 @@ void SequencesPage::loadOpForm() {
     m_opPose->clear();
     m_opPose->addItem("(choose)", -1);
     for (auto& [pid, p] : m_scene->allPoses()) m_opPose->addItem(p.name, pid);
-    autoui::fillObjectCombo(m_opGripper, *m_scene, op ? op->gripperId : -1, "(choose)");
+    autoui::fillObjectCombo(m_opGripper, *m_scene,
+                            !op ? -1 : op->type == OperationType::MoveL ? op->toolId : op->gripperId, "(choose)");
     // Part: sensors first ("s<id>"), then objects ("o<id>")
     {
         const QSignalBlocker block(m_opPart);
@@ -724,6 +743,10 @@ void SequencesPage::addOperation(OperationType t) {
         case OperationType::MoveToPose:
             if (!m_scene->allPoses().empty()) op.poseId = m_scene->allPoses().begin()->first;
             break;
+        case OperationType::MoveL:
+            if (!m_scene->allPoses().empty()) op.poseId = m_scene->allPoses().begin()->first;
+            op.toolId = m_scene->selectedObjectId();
+            break;
         case OperationType::Wait:    op.duration = "1"; break;
         case OperationType::WaitFor: op.condition = "true"; break;
         case OperationType::Set:     break;
@@ -815,7 +838,9 @@ void SequencesPage::commitOpForm() {
         op->type           = kTypes[std::max(0, m_opType->currentIndex())];
         op->actuatorId     = m_opActuator->currentData().toInt();
         op->poseId         = m_opPose->currentData().toInt();
-        op->gripperId      = m_opGripper->currentData().toInt();
+        const int object   = m_opGripper->currentData().toInt();
+        op->gripperId      = op->type == OperationType::MoveL ? -1 : object;
+        op->toolId         = op->type == OperationType::MoveL ? object : -1;
         const QString part = m_opPart->currentData().toString();
         op->sensorId       = part.startsWith('s') ? part.mid(1).toInt() : -1;
         op->partId         = part.startsWith('o') ? part.mid(1).toInt() : -1;

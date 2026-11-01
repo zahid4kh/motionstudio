@@ -1,6 +1,7 @@
 #include "AutomationEngine.h"
 #include "../scene/SceneGraph.h"
 #include "Sensors.h"
+#include "Kinematics.h"
 #include <QSet>
 #include <algorithm>
 #include <cmath>
@@ -208,6 +209,14 @@ QStringList AutomationEngine::validateAll(const SceneGraph& scene) {
                 case OperationType::Release:
                     if (!scene.getObject(op.gripperId))
                         errs << where + (op.gripperId == -1 ? ": no gripper selected" : ": the gripper no longer exists");
+                    break;
+                case OperationType::MoveL:
+                    if (!scene.getObject(op.toolId))
+                        errs << where + (op.toolId == -1 ? ": no tool selected" : ": the tool no longer exists");
+                    else if (kin::chainTo(scene, op.toolId).empty())
+                        errs << where + ": no actuated joint moves the tool";
+                    if (!scene.getPose(op.poseId)) errs << where + ": no pose selected";
+                    chk(where + " speed", op.velocity);
                     break;
             }
             chk(where + " start condition", op.startCondition);
@@ -676,6 +685,27 @@ void AutomationEngine::startOperation(SeqRt& seq, OpRt& op) {
         case OperationType::Grip:
             op.status.detail = "waiting for a part";
             break;
+        case OperationType::MoveL: {
+            const Pose* pose = m_scene->getPose(op.def.poseId);
+            op.chain = kin::chainTo(*m_scene, op.def.toolId);
+            if (!pose || op.chain.empty()) break;
+            op.pathFrom = kin::toolFrame(*m_scene, op.def.toolId);
+            std::map<int, float> values(pose->jointValues.begin(), pose->jointValues.end());
+            op.pathTo = kin::toolFrameAt(*m_scene, op.def.toolId, values);
+            op.pathOrient = kin::canOrient(op.chain);
+            const double speed = op.velocity.isEmpty() ? 0.25 : std::max(1e-4, std::fabs(op.velocity.eval(c)));
+            const double dist = (op.pathTo.column(3) - op.pathFrom.column(3)).toVector3D().length();
+            double angle = 0;
+            if (op.pathOrient) {
+                const QQuaternion a = kin::targetFrom(op.pathFrom).orientation, b = kin::targetFrom(op.pathTo).orientation;
+                angle = 2.0 * std::acos(std::min(1.0, std::fabs(double(QQuaternion::dotProduct(a, b)))));
+            }
+            // A radian of tool rotation takes as long as 0.3 m of travel
+            op.pathDuration = std::max(dist, 0.3 * angle) / speed;
+            op.pathWarned = false;
+            op.status.detail = QString("→ %1 (linear)").arg(pose->name);
+            break;
+        }
         case OperationType::Release:
             m_holds.erase(std::remove_if(m_holds.begin(), m_holds.end(),
                                          [&](const Hold& h) { return h.gripperId == op.def.gripperId; }),
@@ -741,7 +771,54 @@ bool AutomationEngine::operationFinished(OpRt& op) {
         }
         case OperationType::Release:
             return true;
+        case OperationType::MoveL:
+            return stepLinearMove(op);
     }
+    return true;
+}
+
+// One scan of a straight-line tool move: the next point on the path (eased
+// in and out), inverse kinematics from the current joint values, and the
+// chain's actuators set straight to the solution
+bool AutomationEngine::stepLinearMove(OpRt& op) {
+    if (op.chain.empty()) return true;
+    const double T = op.pathDuration;
+    const double s = T > 1e-9 ? std::clamp((m_time + m_dt - op.status.startTime) / T, 0.0, 1.0) : 1.0;
+    const double k = s * s * (3 - 2 * s);
+    op.status.progress = s;
+
+    kin::Target t;
+    const kin::Target a = kin::targetFrom(op.pathFrom), b = kin::targetFrom(op.pathTo);
+    t.position = a.position + (b.position - a.position) * float(k);
+    t.orientation = QQuaternion::slerp(a.orientation, b.orientation, float(k));
+    t.useOrientation = op.pathOrient;
+    const kin::Result r = kin::solve(*m_scene, op.def.toolId, op.chain, t, 30);
+    if (!r.reached && !op.pathWarned && r.positionError > 1e-3f) {
+        op.pathWarned = true;
+        m_warnings << QString("%1: tool path out of reach (%2 mm off)")
+                          .arg(op.def.name.isEmpty() ? QString("MoveL") : op.def.name)
+                          .arg(double(r.positionError) * 1000, 0, 'f', 1);
+    }
+    for (int jid : op.chain) {
+        const Motor* m = m_scene->motorForJoint(jid);
+        auto it = m ? m_actIndexByMotor.find(m->id) : m_actIndexByMotor.end();
+        const Joint* j = m_scene->getJoint(jid);
+        if (it == m_actIndexByMotor.end() || !j) continue;
+        ActuatorRt& ax = m_actuators[size_t(it->second)];
+        const double v = clampToLimits(ax, j->currentValue);
+        ax.st.vel  = m_dt > 0 ? (v - ax.st.pos) / m_dt : 0.0;
+        ax.st.pos  = v;
+        ax.target  = v;
+        ax.mode    = ActuatorMode::Position;
+        ax.active  = true;
+        ax.direct  = true;
+    }
+    if (s < 1.0) return false;
+    for (int jid : op.chain)
+        if (const Motor* m = m_scene->motorForJoint(jid)) {
+            auto it = m_actIndexByMotor.find(m->id);
+            if (it != m_actIndexByMotor.end()) m_actuators[size_t(it->second)].st.vel = 0;
+        }
     return true;
 }
 
@@ -792,6 +869,12 @@ void AutomationEngine::applyBindings() {
 
 void AutomationEngine::integrate(double dt) {
     for (auto& a : m_actuators) {
+        if (a.direct) {
+            // Placed by a MoveL this scan: no profile
+            a.direct = false;
+            if (Joint* j = m_scene->getJoint(a.jointId)) j->currentValue = float(a.st.pos);
+            continue;
+        }
         if (!a.active)
             motion::stepSpeed(a.st, 0.0, a.accel, dt);
         else if (a.mode == ActuatorMode::Position)

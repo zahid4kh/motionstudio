@@ -62,6 +62,7 @@ add_library(MotionStudioCore STATIC
     src/automation/Expression.cpp
     src/automation/AutomationEngine.cpp
     src/automation/Sensors.cpp
+    src/automation/Kinematics.cpp
     src/serialization/ProjectSerializer.cpp
     src/import/StepImporter.cpp
 )

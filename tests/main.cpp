@@ -11,6 +11,7 @@
 #include "scene/UndoManager.h"
 #include "automation/AutomationEngine.h"
 #include "automation/Sensors.h"
+#include "automation/Kinematics.h"
 #include "physics/SimulationEngine.h"
 #include "serialization/ProjectSerializer.h"
 
@@ -297,6 +298,147 @@ TEST(beltSpeedBinding) {
     g.getConveyorBelt(belt)->speedExpr = "Halt ? 0 : 0.5";
     g.renameSymbolReferences("Halt", "Stop");
     CHECK(g.getConveyorBelt(belt)->speedExpr == "Stop ? 0 : 0.5");
+}
+
+
+// ── Kinematics ──────────────────────────────────────────────────────────────
+
+// A 6-axis arm of unscaled frames: yaw, shoulder, elbow, forearm roll, wrist
+// pitch, flange roll; returns the tool frame's id and fills the joint ids
+int makeSixAxis(SceneGraph& g, std::vector<int>* joints) {
+    struct L { QVector3D pos; QVector3D axis; };
+    const L links[6] = {{{0, 0.3f, 0}, {0, 1, 0}}, {{0, 0.2f, 0}, {0, 0, 1}}, {{0.4f, 0, 0}, {0, 0, 1}},
+                        {{0.2f, 0, 0}, {1, 0, 0}}, {{0.2f, 0, 0}, {0, 0, 1}}, {{0.1f, 0, 0}, {1, 0, 0}}};
+    int parent = g.addObject("Base", PrimitiveType::ImportedMesh);
+    for (int i = 0; i < 6; ++i) {
+        int link = g.addObject(QString("L%1").arg(i + 1), PrimitiveType::ImportedMesh, parent);
+        g.getObject(link)->transform.position = links[i].pos;
+        Joint j;
+        j.axis = links[i].axis;
+        j.pivot = links[i].pos;
+        j.parentBodyId = parent;
+        j.childBodyId = link;
+        j.limitMin = -170;
+        j.limitMax = 170;
+        int jid = g.addJoint(j);
+        g.addActuatorForJoint(jid);
+        joints->push_back(jid);
+        parent = link;
+    }
+    int tool = g.addObject("Tool", PrimitiveType::ImportedMesh, parent);
+    g.getObject(tool)->transform.position = {0.05f, 0, 0};
+    return tool;
+}
+
+void setJoints(SceneGraph& g, const std::vector<int>& joints, std::vector<float> q) {
+    for (size_t i = 0; i < joints.size(); ++i) g.getJoint(joints[i])->currentValue = q[i];
+}
+
+TEST(ikReachesPoseWithOrientation) {
+    SceneGraph g;
+    std::vector<int> joints;
+    int tool = makeSixAxis(g, &joints);
+    CHECK(kin::chainTo(g, tool) == joints);
+    setJoints(g, joints, {30, -20, 40, 25, -35, 60});
+    const QMatrix4x4 goal = kin::toolFrame(g, tool);
+    setJoints(g, joints, {0, 10, 30, 0, 20, 0});
+    kin::Result r = kin::solve(g, tool, joints, kin::targetFrom(goal));
+    std::printf("  6-axis: %d iterations, %.2g m, %.2g deg\n", r.iterations, r.positionError, r.angleError);
+    CHECK(r.reached);
+    CHECK(r.positionError < 1e-4f);
+    CHECK(r.angleError < 0.05f);
+    // Unreachable: 3 m away; the joints stay at the closest solution found
+    kin::Target far = kin::targetFrom(goal);
+    far.position = {3, 0, 0};
+    r = kin::solve(g, tool, joints, far);
+    CHECK(!r.reached);
+    CHECK(r.positionError > 1.5f && r.positionError < 2.5f);
+    for (int jid : joints) CHECK(std::fabs(g.getJoint(jid)->currentValue) <= 170.001f);
+}
+
+TEST(ikJogKeepsOrientation) {
+    // Moving the tool while keeping its orientation exactly: the orientation
+    // error starts at identity (once produced NaN)
+    SceneGraph g;
+    std::vector<int> joints;
+    int tool = makeSixAxis(g, &joints);
+    setJoints(g, joints, {10, 30, 60, 0, 40, 0});
+    const std::vector<int> chain = kin::chainTo(g, tool);
+    for (int i = 0; i < 4; ++i) {
+        const kin::Target before = kin::targetFrom(kin::toolFrame(g, tool));
+        kin::Target t = before;
+        t.position += QVector3D(0, 0, 0.05f);
+        kin::Result r = kin::solve(g, tool, chain, t, 60);
+        CHECK(r.reached);
+        const kin::Target after = kin::targetFrom(kin::toolFrame(g, tool));
+        CHECK_NEAR((after.position - t.position).length(), 0, 1e-4);
+        CHECK(std::fabs(QQuaternion::dotProduct(after.orientation, before.orientation)) > 0.99999f);
+    }
+}
+
+TEST(ikPositionOnlyForShortChains) {
+    SceneGraph g;
+    Arm a = makeArm(g);                                      // one joint: a circle of radius 1
+    std::vector<int> chain = kin::chainTo(g, a.tool);
+    CHECK(chain.size() == 1);
+    CHECK(!kin::canOrient(chain));
+    kin::Target t;
+    t.position = {0, 0, -1};
+    t.useOrientation = false;
+    kin::Result r = kin::solve(g, a.tool, chain, t);
+    CHECK(r.reached);
+    CHECK_NEAR(g.getJoint(a.joint)->currentValue, 90, 1e-2);
+}
+
+TEST(moveLFollowsAStraightLine) {
+    SceneGraph g;
+    std::vector<int> joints;
+    int tool = makeSixAxis(g, &joints);
+    Pose a, b;
+    a.name = "A";
+    b.name = "B";
+    const std::vector<float> qa = {10, 30, 60, 0, 40, 0}, qb = {-35, 5, 70, 20, 30, -15};
+    for (size_t i = 0; i < 6; ++i) { a.jointValues[joints[i]] = qa[i]; b.jointValues[joints[i]] = qb[i]; }
+    int pa = g.addPose(a), pb = g.addPose(b);
+    setJoints(g, joints, qb);
+    const QMatrix4x4 frameB = kin::toolFrame(g, tool);
+    setJoints(g, joints, qa);
+    const QVector3D from = kin::toolFrame(g, tool).column(3).toVector3D();
+    const QVector3D to = frameB.column(3).toVector3D();
+
+    Sequence q;
+    q.name = "Line";
+    Operation op = makeOp(g, OperationType::MoveL);
+    op.toolId = tool;
+    op.poseId = pb;
+    op.velocity = "0.2";
+    q.operations = {op};
+    int sid = g.addSequence(q);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+    AutomationEngine e(&g);
+    CHECK(e.start(nullptr));
+    double worst = 0;
+    int scans = 0;
+    while (e.seqStatus(sid).state != AutomationEngine::SeqState::Finished && scans < 2000) {
+        e.scan(0.016);
+        ++scans;
+        const QVector3D p = kin::toolFrame(g, tool).column(3).toVector3D();
+        worst = std::max(worst, double(p.distanceToLine(from, (to - from).normalized())));
+    }
+    const double expected = (to - from).length() / 0.2;
+    std::printf("  MoveL: %.3f m in %.2f s (expected %.2f s), max %.3f mm off the line\n",
+                (to - from).length(), scans * 0.016, expected, worst * 1000);
+    CHECK(worst < 1e-3);
+    CHECK_NEAR(scans * 0.016, expected, 0.05);
+    CHECK_NEAR((kin::toolFrame(g, tool).column(3).toVector3D() - to).length(), 0, 1e-4);
+    kin::Target end = kin::targetFrom(frameB);
+    // The orientation at the end matches pose B's
+    const QQuaternion got = kin::targetFrom(kin::toolFrame(g, tool)).orientation;
+    CHECK(std::fabs(QQuaternion::dotProduct(got, end.orientation)) > 0.99999f);
+    // Validation: a tool that no actuated joint moves
+    g.getSequence(sid)->operations[0].toolId = g.rootObjects().front();
+    CHECK(!AutomationEngine::validateAll(g).isEmpty());
+    (void)pa;   // pose A documents the start; the joints are set to it directly
 }
 
 // ── Recording ───────────────────────────────────────────────────────────────
