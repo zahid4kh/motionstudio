@@ -7,6 +7,13 @@
         <file>templates/crank_arm.mstudio</file>
         <file>templates/indexing_table.mstudio</file>
         <file>templates/sensor_cell.mstudio</file>
+        <file>library/bin.mstudio</file>
+        <file>library/conveyor_end_sensor.mstudio</file>
+        <file>library/gantry.mstudio</file>
+        <file>library/light_barrier.mstudio</file>
+        <file>library/parallel_gripper.mstudio</file>
+        <file>library/part_box.mstudio</file>
+        <file>library/turntable.mstudio</file>
         <file alias="icon.png">icon-1024x1024.png</file>
         <file alias="fonts/PlusJakartaSans-Bold.ttf">resources/fonts/PlusJakartaSans-Bold.ttf</file>
         <file alias="fonts/PlusJakartaSans-Medium.ttf">resources/fonts/PlusJakartaSans-Medium.ttf</file>
@@ -38,6 +45,7 @@
         <file alias="icons/network.svg">resources/icons/network.svg</file>
         <file alias="icons/scissors.svg">resources/icons/scissors.svg</file>
         <file alias="icons/ruler.svg">resources/icons/ruler.svg</file>
+        <file alias="icons/package.svg">resources/icons/package.svg</file>
         <file alias="icons/move-diagonal-2.svg">resources/icons/move-diagonal-2.svg</file>
         <file alias="icons/crosshair.svg">resources/icons/crosshair.svg</file>
         <file alias="icons/cylinder.svg">resources/icons/cylinder.svg</file>

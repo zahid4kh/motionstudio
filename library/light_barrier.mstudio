@@ -1,0 +1,117 @@
+{
+ "version": 3,
+ "objects": [
+  {
+   "id": 1,
+   "name": "Light Barrier",
+   "type": "ImportedMesh",
+   "parentId": -1,
+   "transform": {
+    "position": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 1,
+     "y": 1,
+     "z": 1
+    }
+   }
+  },
+  {
+   "id": 2,
+   "name": "Emitter",
+   "type": "Cube",
+   "parentId": 1,
+   "transform": {
+    "position": {
+     "x": 0,
+     "y": 0.2,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 0.04,
+     "y": 0.4,
+     "z": 0.04
+    }
+   },
+   "color": "#f2c230"
+  },
+  {
+   "id": 3,
+   "name": "Reflector",
+   "type": "Cube",
+   "parentId": 1,
+   "transform": {
+    "position": {
+     "x": 0,
+     "y": 0.2,
+     "z": 0.6
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 0.04,
+     "y": 0.4,
+     "z": 0.04
+    }
+   },
+   "color": "#f2c230"
+  }
+ ],
+ "joints": [],
+ "motors": [],
+ "rigidBodies": [],
+ "conveyorBelts": [],
+ "meshes": [],
+ "signals": [
+  {
+   "id": 4,
+   "name": "Beam",
+   "type": "Bool",
+   "kind": "Sensor",
+   "initialValue": 0,
+   "expression": "",
+   "description": "something is between the posts",
+   "sensor": {
+    "type": "Beam",
+    "objectId": 2,
+    "offset": {
+     "x": 0,
+     "y": 0.05,
+     "z": 0.025
+    },
+    "direction": {
+     "x": 0,
+     "y": 0,
+     "z": 1
+    },
+    "range": 0.55,
+    "size": {
+     "x": 0.1,
+     "y": 0.1,
+     "z": 0.1
+    },
+    "objectBounds": false,
+    "target": "RigidBodies",
+    "targetId": -1
+   }
+  }
+ ],
+ "sequences": [],
+ "poses": []
+}

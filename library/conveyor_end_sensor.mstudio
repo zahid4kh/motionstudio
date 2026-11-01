@@ -1,0 +1,129 @@
+{
+ "version": 3,
+ "objects": [
+  {
+   "id": 1,
+   "name": "Conveyor Unit",
+   "type": "ImportedMesh",
+   "parentId": -1,
+   "transform": {
+    "position": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 1,
+     "y": 1,
+     "z": 1
+    }
+   }
+  },
+  {
+   "id": 2,
+   "name": "Belt",
+   "type": "Cube",
+   "parentId": 1,
+   "transform": {
+    "position": {
+     "x": 0,
+     "y": 0.1,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 2,
+     "y": 0.2,
+     "z": 0.5
+    }
+   },
+   "color": "#5a6371"
+  },
+  {
+   "id": 3,
+   "name": "Sensor Post",
+   "type": "Cube",
+   "parentId": 1,
+   "transform": {
+    "position": {
+     "x": 0.95,
+     "y": 0.3,
+     "z": 0.32
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 0.04,
+     "y": 0.2,
+     "z": 0.04
+    }
+   },
+   "color": "#f2c230"
+  }
+ ],
+ "joints": [],
+ "motors": [],
+ "rigidBodies": [],
+ "conveyorBelts": [
+  {
+   "objectId": 2,
+   "velocity": 0.3,
+   "direction": {
+    "x": 1,
+    "y": 0,
+    "z": 0
+   },
+   "enabled": true,
+   "speedExpr": "PartAtEnd ? 0 : 0.3"
+  }
+ ],
+ "meshes": [],
+ "signals": [
+  {
+   "id": 4,
+   "name": "PartAtEnd",
+   "type": "Bool",
+   "kind": "Sensor",
+   "initialValue": 0,
+   "expression": "",
+   "description": "a part has reached the end of the belt",
+   "sensor": {
+    "type": "Beam",
+    "objectId": 3,
+    "offset": {
+     "x": 0,
+     "y": -0.035,
+     "z": 0
+    },
+    "direction": {
+     "x": 0,
+     "y": 0,
+     "z": -1
+    },
+    "range": 0.65,
+    "size": {
+     "x": 0.1,
+     "y": 0.1,
+     "z": 0.1
+    },
+    "objectBounds": false,
+    "target": "RigidBodies",
+    "targetId": -1
+   }
+  }
+ ],
+ "sequences": [],
+ "poses": []
+}

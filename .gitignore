@@ -5,6 +5,7 @@ packaging/staging_motionstd/
 packaging/*.deb
 *.mstudio
 !templates/*.mstudio
+!library/*.mstudio
 CLAUDE.md
 packaging
 AUTOMATION_PLAN.md

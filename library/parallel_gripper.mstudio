@@ -1,0 +1,246 @@
+{
+ "version": 3,
+ "objects": [
+  {
+   "id": 1,
+   "name": "Parallel Gripper",
+   "type": "ImportedMesh",
+   "parentId": -1,
+   "transform": {
+    "position": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 1,
+     "y": 1,
+     "z": 1
+    }
+   }
+  },
+  {
+   "id": 2,
+   "name": "Gripper Body",
+   "type": "Cube",
+   "parentId": 1,
+   "transform": {
+    "position": {
+     "x": 0,
+     "y": 0.04,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 0.16,
+     "y": 0.06,
+     "z": 0.08
+    }
+   },
+   "color": "#3a3f47"
+  },
+  {
+   "id": 3,
+   "name": "Finger L Slide",
+   "type": "ImportedMesh",
+   "parentId": 1,
+   "transform": {
+    "position": {
+     "x": -0.05,
+     "y": 0,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 1,
+     "y": 1,
+     "z": 1
+    }
+   }
+  },
+  {
+   "id": 4,
+   "name": "Finger L",
+   "type": "Cube",
+   "parentId": 3,
+   "transform": {
+    "position": {
+     "x": 0,
+     "y": -0.04,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 0.015,
+     "y": 0.08,
+     "z": 0.05
+    }
+   },
+   "color": "#9ea8b8"
+  },
+  {
+   "id": 5,
+   "name": "Finger R Slide",
+   "type": "ImportedMesh",
+   "parentId": 1,
+   "transform": {
+    "position": {
+     "x": 0.05,
+     "y": 0,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 1,
+     "y": 1,
+     "z": 1
+    }
+   }
+  },
+  {
+   "id": 6,
+   "name": "Finger R",
+   "type": "Cube",
+   "parentId": 5,
+   "transform": {
+    "position": {
+     "x": 0,
+     "y": -0.04,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 0.015,
+     "y": 0.08,
+     "z": 0.05
+    }
+   },
+   "color": "#9ea8b8"
+  }
+ ],
+ "joints": [
+  {
+   "id": 7,
+   "name": "Finger L",
+   "type": "Prismatic",
+   "axis": {
+    "x": 1,
+    "y": 0,
+    "z": 0
+   },
+   "pivot": {
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "limitMin": 0,
+   "limitMax": 0.035,
+   "initialAngle": 0,
+   "continuous": false,
+   "parentBodyId": 1,
+   "childBodyId": 3
+  },
+  {
+   "id": 8,
+   "name": "Finger R",
+   "type": "Prismatic",
+   "axis": {
+    "x": 1,
+    "y": 0,
+    "z": 0
+   },
+   "pivot": {
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "limitMin": -0.035,
+   "limitMax": 0,
+   "initialAngle": 0,
+   "continuous": false,
+   "parentBodyId": 1,
+   "childBodyId": 5,
+   "coupledTo": 7,
+   "ratio": -1,
+   "offset": 0
+  }
+ ],
+ "motors": [
+  {
+   "id": 9,
+   "name": "Fingers",
+   "jointId": 7,
+   "mode": "Position",
+   "velocity": 0.05,
+   "acceleration": 0,
+   "enabled": true,
+   "targetExpr": "",
+   "velocityExpr": "",
+   "activeExpr": ""
+  }
+ ],
+ "rigidBodies": [],
+ "conveyorBelts": [],
+ "meshes": [],
+ "signals": [
+  {
+   "id": 10,
+   "name": "InGripper",
+   "type": "Bool",
+   "kind": "Sensor",
+   "initialValue": 0,
+   "expression": "",
+   "description": "part between the fingers",
+   "sensor": {
+    "type": "Zone",
+    "objectId": 1,
+    "offset": {
+     "x": 0,
+     "y": -0.05,
+     "z": 0
+    },
+    "direction": {
+     "x": 1,
+     "y": 0,
+     "z": 0
+    },
+    "range": 0.5,
+    "size": {
+     "x": 0.07,
+     "y": 0.06,
+     "z": 0.04
+    },
+    "objectBounds": false,
+    "target": "RigidBodies",
+    "targetId": -1
+   }
+  }
+ ],
+ "sequences": [],
+ "poses": []
+}

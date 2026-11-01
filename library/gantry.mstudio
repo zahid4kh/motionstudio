@@ -1,0 +1,327 @@
+{
+ "version": 3,
+ "objects": [
+  {
+   "id": 1,
+   "name": "Gantry",
+   "type": "ImportedMesh",
+   "parentId": -1,
+   "transform": {
+    "position": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 1,
+     "y": 1,
+     "z": 1
+    }
+   }
+  },
+  {
+   "id": 2,
+   "name": "Beam",
+   "type": "Cube",
+   "parentId": 1,
+   "transform": {
+    "position": {
+     "x": 0.7,
+     "y": 1.25,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 1.5,
+     "y": 0.08,
+     "z": 0.12
+    }
+   },
+   "color": "#9ea8b8"
+  },
+  {
+   "id": 3,
+   "name": "Leg A",
+   "type": "Cube",
+   "parentId": 1,
+   "transform": {
+    "position": {
+     "x": -0.05,
+     "y": 0.62,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 0.08,
+     "y": 1.25,
+     "z": 0.08
+    }
+   },
+   "color": "#9ea8b8"
+  },
+  {
+   "id": 4,
+   "name": "Leg B",
+   "type": "Cube",
+   "parentId": 1,
+   "transform": {
+    "position": {
+     "x": 1.45,
+     "y": 0.62,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 0.08,
+     "y": 1.25,
+     "z": 0.08
+    }
+   },
+   "color": "#9ea8b8"
+  },
+  {
+   "id": 5,
+   "name": "Carriage",
+   "type": "ImportedMesh",
+   "parentId": 1,
+   "transform": {
+    "position": {
+     "x": 0.25,
+     "y": 1.25,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 1,
+     "y": 1,
+     "z": 1
+    }
+   }
+  },
+  {
+   "id": 6,
+   "name": "Carriage Block",
+   "type": "Cube",
+   "parentId": 5,
+   "transform": {
+    "position": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 0.16,
+     "y": 0.12,
+     "z": 0.2
+    }
+   },
+   "color": "#3a3f47"
+  },
+  {
+   "id": 7,
+   "name": "Lift",
+   "type": "ImportedMesh",
+   "parentId": 5,
+   "transform": {
+    "position": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 1,
+     "y": 1,
+     "z": 1
+    }
+   }
+  },
+  {
+   "id": 8,
+   "name": "Rod",
+   "type": "Cylinder",
+   "parentId": 7,
+   "transform": {
+    "position": {
+     "x": 0,
+     "y": -0.25,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 0.04,
+     "y": 0.5,
+     "z": 0.04
+    }
+   },
+   "color": "#9ea8b8"
+  },
+  {
+   "id": 9,
+   "name": "Gripper",
+   "type": "Cube",
+   "parentId": 7,
+   "transform": {
+    "position": {
+     "x": 0,
+     "y": -0.52,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 0.14,
+     "y": 0.04,
+     "z": 0.14
+    }
+   },
+   "color": "#3a3f47"
+  }
+ ],
+ "joints": [
+  {
+   "id": 10,
+   "name": "X",
+   "type": "Prismatic",
+   "axis": {
+    "x": 1,
+    "y": 0,
+    "z": 0
+   },
+   "pivot": {
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "limitMin": 0,
+   "limitMax": 1.1,
+   "initialAngle": 0,
+   "continuous": false,
+   "parentBodyId": 1,
+   "childBodyId": 5
+  },
+  {
+   "id": 11,
+   "name": "Z",
+   "type": "Prismatic",
+   "axis": {
+    "x": 0,
+    "y": 1,
+    "z": 0
+   },
+   "pivot": {
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "limitMin": -0.5,
+   "limitMax": 0,
+   "initialAngle": 0,
+   "continuous": false,
+   "parentBodyId": 5,
+   "childBodyId": 7
+  }
+ ],
+ "motors": [
+  {
+   "id": 12,
+   "name": "X",
+   "jointId": 10,
+   "mode": "Position",
+   "velocity": 0.6,
+   "acceleration": 2,
+   "enabled": true,
+   "targetExpr": "",
+   "velocityExpr": "",
+   "activeExpr": ""
+  },
+  {
+   "id": 13,
+   "name": "Z",
+   "jointId": 11,
+   "mode": "Position",
+   "velocity": 0.5,
+   "acceleration": 2,
+   "enabled": true,
+   "targetExpr": "",
+   "velocityExpr": "",
+   "activeExpr": ""
+  }
+ ],
+ "rigidBodies": [],
+ "conveyorBelts": [],
+ "meshes": [],
+ "signals": [
+  {
+   "id": 14,
+   "name": "AtGripper",
+   "type": "Bool",
+   "kind": "Sensor",
+   "initialValue": 0,
+   "expression": "",
+   "description": "a part under the gripper pad",
+   "sensor": {
+    "type": "Zone",
+    "objectId": 9,
+    "offset": {
+     "x": 0,
+     "y": -0.05,
+     "z": 0
+    },
+    "direction": {
+     "x": 1,
+     "y": 0,
+     "z": 0
+    },
+    "range": 0.5,
+    "size": {
+     "x": 0.1,
+     "y": 0.08,
+     "z": 0.1
+    },
+    "objectBounds": false,
+    "target": "RigidBodies",
+    "targetId": -1
+   }
+  }
+ ],
+ "sequences": [],
+ "poses": []
+}

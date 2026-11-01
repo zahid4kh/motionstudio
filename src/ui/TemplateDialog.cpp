@@ -59,18 +59,75 @@ const QList<TemplateDialog::TemplateInfo> TemplateDialog::s_templates = {
     },
 };
 
-TemplateDialog::TemplateDialog(QWidget* parent) : QDialog(parent) {
-    setWindowTitle("Open Template");
+const QList<TemplateDialog::TemplateInfo> TemplateDialog::s_components = {
+    {
+        "Parallel Gripper",
+        "Two fingers closed by one actuator (Fingers, 0 to 0.035 m); the right finger\n"
+        "follows the left through a coupling. A zone sensor InGripper sees a part between\n"
+        "them. Parent it under a robot's flange, then Grip with Part \"Detected by InGripper\".",
+        ":/library/parallel_gripper.mstudio",
+        "hand-grab"
+    },
+    {
+        "Conveyor with End Sensor",
+        "A 2 m belt at 0.3 m/s with a beam sensor PartAtEnd at its end; its speed\n"
+        "expression stops the belt while a part is there.",
+        ":/library/conveyor_end_sensor.mstudio",
+        "chevrons-right"
+    },
+    {
+        "Gantry (X/Z)",
+        "A two-axis gantry: actuators X (0 to 1.1 m) and Z (lift, −0.5 to 0 m), a\n"
+        "gripper pad and a zone sensor AtGripper under it.",
+        ":/library/gantry.mstudio",
+        "move-diagonal-2"
+    },
+    {
+        "Turntable",
+        "An indexing plate on a continuous revolute joint with actuator Table\n"
+        "(90 °/s, ramped). Move it with Table.target + 90.",
+        ":/library/turntable.mstudio",
+        "disc-3"
+    },
+    {
+        "Light Barrier",
+        "Emitter and reflector posts 0.6 m apart with a beam sensor Beam between them\n"
+        "that sees rigid bodies (parts).",
+        ":/library/light_barrier.mstudio",
+        "scan-line"
+    },
+    {
+        "Part (box)",
+        "A 0.12 m box with a rigid body (0.5 kg): it falls, rides conveyors and can be gripped.",
+        ":/library/part_box.mstudio",
+        "box"
+    },
+    {
+        "Bin",
+        "An open bin with a rigid body (5 kg) to drop parts into.",
+        ":/library/bin.mstudio",
+        "shopping-basket"
+    },
+};
+
+TemplateDialog::TemplateDialog(QWidget* parent, Kind kind) : QDialog(parent) {
+    const bool components = kind == Kind::Components;
+    m_items = components ? &s_components : &s_templates;
+    setWindowTitle(components ? "Insert Component" : "Open Template");
     setMinimumSize(540, 420);
 
     auto* vb = new QVBoxLayout(this);
     vb->setSpacing(10);
     vb->setContentsMargins(18, 16, 18, 16);
 
-    auto* header = new QLabel("Choose a template to explore");
+    auto* header = new QLabel(components ? "Insert a component into the scene" : "Choose a template to explore");
     header->setObjectName("dialogTitle");
     vb->addWidget(header);
-    auto* sub = new QLabel("Each one is a working automation example — load it, then press Play.");
+    auto* sub = new QLabel(components
+        ? "It is added at the centre of the view with its actuators and sensors. Names that are already "
+          "used get a suffix (J1 → J1_2), and its expressions follow."
+        : "Each one is a working automation example — load it, then press Play.");
+    sub->setWordWrap(true);
     sub->setObjectName("hint");
     vb->addWidget(sub);
 
@@ -88,8 +145,8 @@ TemplateDialog::TemplateDialog(QWidget* parent) : QDialog(parent) {
     vb->addWidget(m_desc);
 
     auto* btns = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-    btns->button(QDialogButtonBox::Ok)->setText("Load Template");
-    btns->button(QDialogButtonBox::Ok)->setIcon(Theme::icon("layout-template", Theme::Tint::OnAccent));
+    btns->button(QDialogButtonBox::Ok)->setText(components ? "Insert" : "Load Template");
+    btns->button(QDialogButtonBox::Ok)->setIcon(Theme::icon(components ? "package" : "layout-template", Theme::Tint::OnAccent));
     btns->button(QDialogButtonBox::Ok)->setDefault(true);
     btns->button(QDialogButtonBox::Ok)->setEnabled(false);
     vb->addWidget(btns);
@@ -107,8 +164,8 @@ TemplateDialog::TemplateDialog(QWidget* parent) : QDialog(parent) {
 }
 
 void TemplateDialog::populate() {
-    for(int i = 0; i < s_templates.size(); ++i){
-        auto* item = new QListWidgetItem(Theme::icon(s_templates[i].icon), s_templates[i].name, m_list);
+    for(int i = 0; i < m_items->size(); ++i){
+        auto* item = new QListWidgetItem(Theme::icon(m_items->at(i).icon), m_items->at(i).name, m_list);
         item->setData(Qt::UserRole, i);
     }
 }
@@ -116,14 +173,19 @@ void TemplateDialog::populate() {
 void TemplateDialog::onItemChanged(QListWidgetItem* item) {
     if(!item){ m_desc->setText("Select a template above to see its description."); return; }
     int idx = item->data(Qt::UserRole).toInt();
-    if(idx < 0 || idx >= s_templates.size()) return;
-    m_desc->setText(s_templates[idx].description);
+    if(idx < 0 || idx >= m_items->size()) return;
+    m_desc->setText(m_items->at(idx).description);
 }
 
 QString TemplateDialog::selectedPath() const {
     auto* item = m_list->currentItem();
     if(!item) return {};
     int idx = item->data(Qt::UserRole).toInt();
-    if(idx < 0 || idx >= s_templates.size()) return {};
-    return s_templates[idx].path;
+    if(idx < 0 || idx >= m_items->size()) return {};
+    return m_items->at(idx).path;
+}
+
+QString TemplateDialog::selectedName() const {
+    auto* item = m_list->currentItem();
+    return item ? item->text() : QString();
 }

@@ -1,0 +1,119 @@
+{
+ "version": 3,
+ "objects": [
+  {
+   "id": 1,
+   "name": "Turntable",
+   "type": "ImportedMesh",
+   "parentId": -1,
+   "transform": {
+    "position": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 1,
+     "y": 1,
+     "z": 1
+    }
+   }
+  },
+  {
+   "id": 2,
+   "name": "Base",
+   "type": "Cylinder",
+   "parentId": 1,
+   "transform": {
+    "position": {
+     "x": 0,
+     "y": 0.05,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 0.6,
+     "y": 0.1,
+     "z": 0.6
+    }
+   },
+   "color": "#3a3f47"
+  },
+  {
+   "id": 3,
+   "name": "Plate",
+   "type": "Cylinder",
+   "parentId": 1,
+   "transform": {
+    "position": {
+     "x": 0,
+     "y": 0.125,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 0.8,
+     "y": 0.05,
+     "z": 0.8
+    }
+   },
+   "color": "#9ea8b8"
+  }
+ ],
+ "joints": [
+  {
+   "id": 4,
+   "name": "Table",
+   "type": "Revolute",
+   "axis": {
+    "x": 0,
+    "y": 1,
+    "z": 0
+   },
+   "pivot": {
+    "x": 0,
+    "y": 0.125,
+    "z": 0
+   },
+   "limitMin": -180,
+   "limitMax": 180,
+   "initialAngle": 0,
+   "continuous": true,
+   "parentBodyId": 1,
+   "childBodyId": 3
+  }
+ ],
+ "motors": [
+  {
+   "id": 5,
+   "name": "Table",
+   "jointId": 4,
+   "mode": "Position",
+   "velocity": 90,
+   "acceleration": 180,
+   "enabled": true,
+   "targetExpr": "",
+   "velocityExpr": "",
+   "activeExpr": ""
+  }
+ ],
+ "rigidBodies": [],
+ "conveyorBelts": [],
+ "meshes": [],
+ "signals": [],
+ "sequences": [],
+ "poses": []
+}

@@ -40,6 +40,7 @@ private slots:
     void newProject();
     void openProject();
     void openTemplate();
+    void insertComponent();
     void saveProject();
     void saveProjectAs();
     void importStep();

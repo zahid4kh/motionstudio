@@ -16,6 +16,8 @@
 #include "serialization/ProjectSerializer.h"
 #include "scene/Interference.h"
 #include "io/ModbusServer.h"
+#include "scene/SceneMerge.h"
+#include <QDir>
 #include <QElapsedTimer>
 #include <QTcpSocket>
 #include <cstring>
@@ -557,6 +559,67 @@ TEST(couplingFollowsMasterEverywhere) {
     // Removing the master releases the follower
     g.removeJoint(a.joint);
     CHECK(g.getJoint(gj)->coupledTo == -1);
+}
+
+// ── Component library ───────────────────────────────────────────────────────
+
+TEST(libraryComponentsLoadAndValidate) {
+    const QStringList files = QDir(MS_SOURCE_DIR "/library").entryList({"*.mstudio"});
+    CHECK(files.size() >= 7);
+    for (const QString& f : files) {
+        SceneGraph g;
+        CHECK(ProjectSerializer::load(g, MS_SOURCE_DIR "/library/" + f));
+        const QStringList errs = AutomationEngine::validateAll(g);
+        if (!errs.isEmpty()) std::printf("  %s: %s\n", qPrintable(f), qPrintable(errs.join("; ")));
+        CHECK(errs.isEmpty());
+        CHECK(g.rootObjects().size() == 1);                     // one root to move it by
+    }
+}
+
+TEST(mergeRenamesClashesAndRemapsReferences) {
+    SceneGraph cell;
+    CHECK(ProjectSerializer::load(cell, MS_SOURCE_DIR "/templates/sensor_cell.mstudio"));
+    const size_t objectsBefore = cell.allObjects().size();
+    SceneGraph gantry;
+    CHECK(ProjectSerializer::load(gantry, MS_SOURCE_DIR "/library/gantry.mstudio"));
+    const size_t gantryObjects = gantry.allObjects().size();
+    const std::vector<int> roots = mergeScene(cell, gantry);
+    CHECK(roots.size() == 1);
+    CHECK(cell.allObjects().size() == objectsBefore + gantryObjects);
+    // The cell already had X, Z and AtGripper: the copies are renamed
+    QStringList motors;
+    for (int id : cell.motorIdsSorted()) motors << cell.getMotor(id)->name;
+    CHECK(motors.contains("X") && motors.contains("X_2") && motors.contains("Z_2"));
+    const Signal* s2 = cell.findSignal("AtGripper_2");
+    CHECK(s2 && s2->kind == SignalKind::Sensor);
+    // The copy's sensor is mounted on the copy's gripper pad, not the cell's
+    CHECK(s2 && scenequery::inSubtree(cell, s2->sensor.objectId, roots.front()));
+    // The cell's own logic still uses its own names and objects
+    CHECK(AutomationEngine::validateAll(cell).isEmpty());
+    const Sequence& seq = cell.allSequences().begin()->second;
+    for (const Operation& op : seq.operations)
+        if (op.type == OperationType::Grip) {
+            const Signal* used = cell.getSignal(op.sensorId);
+            CHECK(used && used->name == "AtGripper");
+        }
+
+    // A gripper twice: the second copy's right finger follows its own left finger
+    SceneGraph g;
+    for (int k = 0; k < 2; ++k) {
+        SceneGraph gripper;
+        CHECK(ProjectSerializer::load(gripper, MS_SOURCE_DIR "/library/parallel_gripper.mstudio"));
+        mergeScene(g, gripper);
+    }
+    CHECK(g.findSignal("InGripper") && g.findSignal("InGripper_2"));
+    int coupled = 0;
+    for (auto& [id, j] : g.allJoints()) {
+        if (j.coupledTo == -1) continue;
+        ++coupled;
+        const Joint* master = g.getJoint(j.coupledTo);
+        CHECK(master && g.getObject(master->parentBodyId) == g.getObject(j.parentBodyId));
+    }
+    CHECK(coupled == 2);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
 }
 
 // ── Cycle time ──────────────────────────────────────────────────────────────

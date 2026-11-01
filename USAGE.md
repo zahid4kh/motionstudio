@@ -264,6 +264,22 @@ A real PLC (or CODESYS, OpenPLC…) can drive the model over Modbus TCP. Give si
 - **Ctrl+N** — new project
 - Format: `.mstudio` (JSON)
 
+## Component library (File › Insert Component…, Ctrl+Shift+I)
+
+Adds a ready-made piece to the **current** scene, at the centre of the view and selected so you can drag it into place:
+
+| Component | Contains |
+|-----------|----------|
+| Parallel Gripper | Two fingers on one actuator `Fingers` (the second finger is coupled), zone sensor `InGripper` |
+| Conveyor with End Sensor | 2 m belt with beam sensor `PartAtEnd`; the belt stops while a part is at the end |
+| Gantry (X/Z) | Actuators `X` and `Z`, a gripper pad and zone sensor `AtGripper` |
+| Turntable | Indexing plate on a continuous joint, actuator `Table` |
+| Light Barrier | Emitter and reflector posts with beam sensor `Beam` |
+| Part (box) | A 0.12 m box with a rigid body |
+| Bin | An open bin with a rigid body |
+
+Names already used in the scene get a suffix (`X` → `X_2`) and the component's expressions are updated to match. Each component has a single root part, so moving the root moves all of it.
+
 ---
 
 ## Joint axis cheat sheet

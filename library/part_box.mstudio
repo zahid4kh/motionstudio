@@ -1,0 +1,44 @@
+{
+ "version": 3,
+ "objects": [
+  {
+   "id": 1,
+   "name": "Part",
+   "type": "Cube",
+   "parentId": -1,
+   "transform": {
+    "position": {
+     "x": 0,
+     "y": 0.06,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 0.12,
+     "y": 0.12,
+     "z": 0.12
+    }
+   },
+   "color": "#ff7a1a"
+  }
+ ],
+ "joints": [],
+ "motors": [],
+ "rigidBodies": [
+  {
+   "objectId": 1,
+   "mass": 0.5,
+   "gravityEnabled": true,
+   "hasCollision": false
+  }
+ ],
+ "conveyorBelts": [],
+ "meshes": [],
+ "signals": [],
+ "sequences": [],
+ "poses": []
+}

@@ -1,0 +1,44 @@
+{
+ "version": 3,
+ "objects": [
+  {
+   "id": 1,
+   "name": "Bin",
+   "type": "Basket",
+   "parentId": -1,
+   "transform": {
+    "position": {
+     "x": 0,
+     "y": 0.15,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": {
+     "x": 0.5,
+     "y": 0.3,
+     "z": 0.4
+    }
+   },
+   "color": "#2f6fd6"
+  }
+ ],
+ "joints": [],
+ "motors": [],
+ "rigidBodies": [
+  {
+   "objectId": 1,
+   "mass": 5,
+   "gravityEnabled": true,
+   "hasCollision": false
+  }
+ ],
+ "conveyorBelts": [],
+ "meshes": [],
+ "signals": [],
+ "sequences": [],
+ "poses": []
+}

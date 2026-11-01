@@ -2,6 +2,7 @@
 #include "ui/TimelineBar.h"
 #include "ui/ModbusDialog.h"
 #include "io/ModbusServer.h"
+#include "scene/SceneMerge.h"
 #include "serialization/ProjectSerializer.h"
 #include "import/StepImporter.h"
 #include "ui/TemplateDialog.h"
@@ -138,6 +139,11 @@ void MainWindow::buildMenu() {
         connect(recent, &QMenu::aboutToShow, this, [this, recent]{ fillRecentMenu(recent); });
     }
     mkA(file, "layout-template", "Open &Template…",&MainWindow::openTemplate);
+    {
+        QAction* a = mkA(file, "package", "Insert &Component…", &MainWindow::insertComponent);
+        a->setShortcut(QKeySequence("Ctrl+Shift+I"));
+        a->setToolTip("Add a gripper, conveyor, gantry, sensor, part… from the library to this scene");
+    }
     file->addSeparator();
     mkA(file, "file-input",      "&Import STEP…",  &MainWindow::importStep);
     file->addSeparator();
@@ -606,6 +612,27 @@ void MainWindow::openTemplate() {
     } else {
         showStatus("Failed to load template", false);
     }
+}
+
+void MainWindow::insertComponent() {
+    if(m_sim->isActive()){ showStatus("Reset the simulation to insert a component", false); return; }
+    TemplateDialog dlg(this, TemplateDialog::Kind::Components);
+    if(dlg.exec() != QDialog::Accepted || dlg.selectedPath().isEmpty()) return;
+    SceneGraph component;
+    if(!ProjectSerializer::load(component, dlg.selectedPath())){
+        showStatus("Could not load the component", false);
+        return;
+    }
+    const std::vector<int> roots = mergeScene(*m_scene, component);
+    // Drop it on the floor under the centre of the view
+    const QVector3D at = m_viewport->camera().target();
+    for(int r : roots)
+        if(SceneObject* o = m_scene->getObject(r)){
+            o->transform.position += QVector3D(at.x(), 0, at.z());
+            emit m_scene->objectChanged(r);
+        }
+    if(!roots.empty()) m_scene->selectObject(roots.front());
+    showStatus(QString("Inserted %1 — drag the gizmo to place it").arg(dlg.selectedName()));
 }
 
 void MainWindow::saveProject() {
