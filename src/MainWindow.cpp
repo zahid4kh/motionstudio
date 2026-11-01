@@ -1,5 +1,7 @@
 #include "MainWindow.h"
 #include "ui/TimelineBar.h"
+#include "ui/ModbusDialog.h"
+#include "io/ModbusServer.h"
 #include "serialization/ProjectSerializer.h"
 #include "import/StepImporter.h"
 #include "ui/TemplateDialog.h"
@@ -64,6 +66,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     buildToolbar();
     buildDocks();
     buildViewMenu();
+    buildToolsMenu();
     buildHelpMenu();
     buildStatusBar();
 
@@ -249,6 +252,24 @@ void MainWindow::buildViewMenu() {
     addAction(m_automationDock->toggleViewAction());   // so Ctrl+J also works from floating panels
 }
 
+void MainWindow::buildToolsMenu() {
+    auto* tools = m_menuBar->addMenu("&Tools");
+    tools->addAction(Theme::icon("network"), "External &I/O (Modbus TCP)…", this, &MainWindow::openExternalIo);
+}
+
+void MainWindow::openExternalIo() {
+    ModbusDialog dlg(m_scene, m_modbus, this);
+    dlg.exec();
+    updateModbusLabel();
+}
+
+void MainWindow::updateModbusLabel() {
+    if (!m_modbus->isListening()) { m_modbusLabel->hide(); return; }
+    m_modbusLabel->setText(QString("Modbus :%1 · %2 client%3").arg(m_modbus->port())
+                               .arg(m_modbus->clientCount()).arg(m_modbus->clientCount() == 1 ? "" : "s"));
+    m_modbusLabel->show();
+}
+
 void MainWindow::buildHelpMenu() {
     auto* help = m_menuBar->addMenu("&Help");
     const struct { const char* icon; const char* text; const char* topic; } topics[] = {
@@ -257,7 +278,10 @@ void MainWindow::buildHelpMenu() {
         {"list-ordered", "&Sequences && Operations",   "sequences"},
         {"code-xml",     "&Expression Reference",      "expressions"},
         {"copy",         "&Recipes (copy && paste)",   "recipes"},
+        {"radio",        "Sensors && &Gripping",       "sensors"},
+        {"move-diagonal-2", "Robot &Tools && IK",      "kinematics"},
         {"activity",     "Running && &Debugging",      "runtime"},
+        {"network",      "External &I/O (Modbus)",     "io"},
         {"keyboard",     "&Keyboard && Mouse",         "shortcuts"},
     };
     for (const auto& t : topics) {
@@ -462,6 +486,7 @@ void MainWindow::buildDocks() {
         QTimer::singleShot(0, this, [this]{ resizeDocks({m_automationDock}, {320}, Qt::Vertical); });
     });
     connect(m_automation, &AutomationPanel::statusMessage, this, &MainWindow::showStatus);
+    connect(m_automation, &AutomationPanel::externalIoRequested, this, &MainWindow::openExternalIo);
     connect(m_hierarchy, &HierarchyPanel::addSensorRequested, this, [this](int objectId){
         if (m_sim->isActive()) { showStatus("Reset the simulation to add a sensor", false); return; }
         m_automationDock->show();
@@ -495,6 +520,14 @@ void MainWindow::buildDocks() {
 
 void MainWindow::buildStatusBar() {
     statusBar()->setSizeGripEnabled(false);
+    m_modbusLabel = new QLabel;
+    m_modbusLabel->setToolTip("The Modbus TCP server is running (Tools › External I/O)");
+    m_modbusLabel->hide();
+    statusBar()->addPermanentWidget(m_modbusLabel);
+    m_modbus = new ModbusServer(m_scene, m_sim, this);
+    connect(m_modbus, &ModbusServer::clientsChanged, this, &MainWindow::updateModbusLabel);
+    ModbusDialog::restore(m_modbus);
+    updateModbusLabel();
     statusBar()->showMessage("Ready — open a project or add objects to get started");
 }
 

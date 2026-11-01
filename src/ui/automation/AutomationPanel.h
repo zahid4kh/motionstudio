@@ -27,6 +27,7 @@ public:
 
 signals:
     void statusMessage(const QString& msg, bool ok);
+    void externalIoRequested();
 
 private:
     void setLocked(bool locked);

@@ -51,6 +51,7 @@ struct Signal {
     QString    expression;          // Derived only
     QString    description;
     SensorConfig sensor;            // Sensor only (type is always Bool)
+    int        ioAddress    = -1;   // Modbus TCP address (see io/ModbusServer.h); -1 = not exposed
 };
 
 enum class OperationType {

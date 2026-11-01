@@ -2,6 +2,7 @@
 #include "../scene/SceneGraph.h"
 #include "Sensors.h"
 #include "Kinematics.h"
+#include "../io/ModbusServer.h"
 #include <QSet>
 #include <algorithm>
 #include <cmath>
@@ -226,6 +227,8 @@ QStringList AutomationEngine::validateAll(const SceneGraph& scene) {
                 if (!opIds.contains(p)) errs << where + ": predecessor no longer exists";
         }
     }
+
+    errs << ModbusServer::validate(scene);
 
     for (auto& [oid, belt] : scene.allConveyorBelts()) {
         const SceneObject* o = scene.getObject(oid);

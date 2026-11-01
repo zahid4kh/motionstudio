@@ -64,6 +64,9 @@ private:
     void buildDocks();
     void buildViewMenu();
     void buildHelpMenu();
+    void buildToolsMenu();
+    void openExternalIo();
+    void updateModbusLabel();
     void buildStatusBar();
     QDockWidget* makeDock(const QString& title, const QString& icon, QWidget* content,
                           Qt::DockWidgetArea area, QWidget* headerTools = nullptr);
@@ -87,6 +90,8 @@ private:
     PropertiesPanel*  m_properties = nullptr;
     AutomationPanel*  m_automation = nullptr;
     class TimelineBar* m_timeline  = nullptr;
+    class ModbusServer* m_modbus   = nullptr;
+    QLabel*  m_modbusLabel = nullptr;   // status bar: server state
     QDockWidget*      m_hierarchyDock  = nullptr;
     QDockWidget*      m_propertiesDock = nullptr;
     QDockWidget*      m_automationDock = nullptr;

@@ -234,6 +234,7 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene, MeshPool* pool) {
         o["initialValue"] = sg.initialValue;
         o["expression"]   = sg.expression;
         o["description"]  = sg.description;
+        if (sg.ioAddress >= 0) o["ioAddress"] = sg.ioAddress;
         if (sg.kind == SignalKind::Sensor) {
             const SensorConfig& c = sg.sensor;
             QJsonObject so;
@@ -443,6 +444,7 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root, con
         sg.initialValue = o["initialValue"].toDouble();
         sg.expression   = o["expression"].toString();
         sg.description  = o["description"].toString();
+        sg.ioAddress    = o["ioAddress"].toInt(-1);
         if (sg.kind == SignalKind::Sensor) {
             const QJsonObject so = o["sensor"].toObject();
             SensorConfig& c = sg.sensor;

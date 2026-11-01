@@ -227,6 +227,10 @@ Because of step 1, signals written by actions are visible from the next scan, as
 
 With MuJoCo installed, scenes that contain rigid bodies also simulate physics. Actuated joints are still driven kinematically, exactly along their profiles. Free rigid bodies and joints without an actuator are handled by MuJoCo.
 
+### External I/O (Tools › External I/O, Modbus TCP)
+
+A real PLC (or CODESYS, OpenPLC…) can drive the model over Modbus TCP. Give signals an address (the Signals tab's *Modbus* column, or **Assign Free Addresses** in the dialog) and tick **Run the server** (default port 5020; *All network interfaces* for a PLC on another machine). The PLC writes **Input** signals (Bool → coils, Int/Real → holding registers) and reads every other addressed signal, sensors included (discrete inputs, input registers). Int is one 16-bit register; Real is float32 in two registers, high word first. Values are live while simulating. The status bar shows the server and its clients.
+
 ---
 
 ## Hierarchy panel

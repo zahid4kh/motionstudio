@@ -1,6 +1,7 @@
 #include "SignalsPage.h"
 #include "SensorDialog.h"
 #include "automation/Sensors.h"
+#include "io/ModbusServer.h"
 #include "automation/Expression.h"
 #include "physics/SimulationEngine.h"
 #include "ui/Theme.h"
@@ -13,7 +14,7 @@
 #include <QVBoxLayout>
 
 namespace {
-enum Col { C_Name, C_Kind, C_Type, C_Initial, C_Expr, C_Desc, C_Value, C_Count };
+enum Col { C_Name, C_Kind, C_Type, C_Initial, C_Expr, C_Desc, C_Io, C_Value, C_Count };
 
 bool parseValue(const QString& text, double& out) {
     QString t = text.trimmed().toLower();
@@ -49,11 +50,15 @@ SignalsPage::SignalsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* pare
     auto* hint = new QLabel("Double-click a cell to edit. Names are used in expressions.");
     hint->setObjectName("hint");
     bar->addWidget(hint);
+    m_externalIo = new QPushButton(Theme::icon("network"), "External I/O…");
+    m_externalIo->setToolTip("Connect a real PLC over Modbus TCP: run the server and set each signal's address");
+    connect(m_externalIo, &QPushButton::clicked, this, &SignalsPage::externalIoRequested);
+    bar->addWidget(m_externalIo);
     bar->addWidget(m_delete);
     vb->addLayout(bar);
 
     m_table = new QTableWidget(0, C_Count);
-    m_table->setHorizontalHeaderLabels({"Name", "Kind", "Type", "Initial", "Expression / Sensor", "Description", "Value"});
+    m_table->setHorizontalHeaderLabels({"Name", "Kind", "Type", "Initial", "Expression / Sensor", "Description", "Modbus", "Value"});
     m_table->verticalHeader()->hide();
     m_table->setAlternatingRowColors(true);
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -69,6 +74,7 @@ SignalsPage::SignalsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* pare
     m_table->setColumnWidth(C_Initial, 70);
     m_table->setColumnWidth(C_Expr, 300);
     m_table->setColumnWidth(C_Desc, 180);
+    m_table->setColumnWidth(C_Io, 70);
     m_table->setColumnWidth(C_Value, 80);
     hh->setSectionResizeMode(C_Expr, QHeaderView::Stretch);
     m_table->verticalHeader()->setDefaultSectionSize(28);
@@ -177,13 +183,21 @@ void SignalsPage::refresh() {
 
         m_table->setItem(row, C_Desc, new QTableWidgetItem(sg.description));
 
+        const ModbusServer::Table table = ModbusServer::tableFor(sg);
+        auto* io = new QTableWidgetItem(sg.ioAddress >= 0 ? QString::number(sg.ioAddress) : QString());
+        io->setToolTip(QString("Modbus %1 address (%2). Empty: not on the bus. See External I/O…")
+                           .arg(ModbusServer::tableName(table).toLower(),
+                                table == ModbusServer::Table::Coil || table == ModbusServer::Table::HoldingRegister
+                                    ? "the PLC writes it" : "the PLC reads it"));
+        m_table->setItem(row, C_Io, io);
+
         auto* val = new QTableWidgetItem("—");
         val->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
         val->setFont(QFont("monospace"));
         m_table->setItem(row, C_Value, val);
 
         if (m_locked)
-            for (int c : {C_Name, C_Initial, C_Desc})
+            for (int c : {C_Name, C_Initial, C_Desc, C_Io})
                 if (auto* it = m_table->item(row, c)) it->setFlags(it->flags() & ~Qt::ItemIsEditable);
         ++row;
     }
@@ -299,6 +313,15 @@ void SignalsPage::onItemChanged(int row, int col) {
         }
         edit([&]{ s->initialValue = coerceSignal(s->type, v); m_scene->notifyAutomationChanged(); });
         scheduleRefresh();
+    } else if (col == C_Io) {
+        bool ok = false;
+        const int v = text.toInt(&ok);
+        if (!text.isEmpty() && (!ok || v < 0 || v > 65535)) {
+            emit statusMessage("A Modbus address is a number from 0 to 65535, or empty", false);
+            scheduleRefresh();
+            return;
+        }
+        edit([&]{ s->ioAddress = text.isEmpty() ? -1 : v; m_scene->notifyAutomationChanged(); });
     } else if (col == C_Desc) {
         edit([&]{ s->description = item->text(); m_scene->notifyAutomationChanged(); });
     }

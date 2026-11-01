@@ -34,6 +34,7 @@ const Topic kTopics[] = {
     {"expressions", "Expression Reference",   "code-xml"},
     {"recipes",     "Recipes",                "copy"},
     {"runtime",     "Running & Debugging",    "activity"},
+    {"io",          "External I/O (Modbus)",  "network"},
     {"shortcuts",   "Keyboard & Mouse",       "keyboard"},
 };
 

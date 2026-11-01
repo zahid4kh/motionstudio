@@ -17,6 +17,9 @@ public:
     // Adds a sensor mounted on `objectId` (-1: the world) and opens its settings
     void addSensorOn(int objectId);
 
+signals:
+    void externalIoRequested();
+
 private:
     void addSignal(SignalKind kind);
     void configureSensor(int signalId);
@@ -25,6 +28,6 @@ private:
     int  signalIdAt(int row) const;
 
     QTableWidget* m_table = nullptr;
-    QPushButton*  m_addInput = nullptr, *m_addInternal = nullptr, *m_addDerived = nullptr, *m_addSensor = nullptr, *m_delete = nullptr;
+    QPushButton*  m_addInput = nullptr, *m_addInternal = nullptr, *m_addDerived = nullptr, *m_addSensor = nullptr, *m_externalIo = nullptr, *m_delete = nullptr;
     bool          m_building = false;
 };

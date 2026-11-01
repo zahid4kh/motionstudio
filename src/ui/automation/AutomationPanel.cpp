@@ -94,6 +94,7 @@ AutomationPanel::AutomationPanel(SceneGraph* scene, SimulationEngine* sim, QWidg
         if (auto* p = qobject_cast<autoui::Page*>(m_tabs->currentWidget())) p->refreshRuntime();
     });
     connect(scene, &SceneGraph::jointsMoved, m_actuators, &ActuatorsPage::refreshRuntime);
+    connect(m_signals, &SignalsPage::externalIoRequested, this, &AutomationPanel::externalIoRequested);
     connect(m_actuators, &ActuatorsPage::sequenceCreated, this, [this](int id){
         m_sequences->selectSequence(id);
         m_tabs->setCurrentWidget(m_sequences);

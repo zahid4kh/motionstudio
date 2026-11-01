@@ -15,6 +15,10 @@
 #include "physics/SimulationEngine.h"
 #include "serialization/ProjectSerializer.h"
 #include "scene/Interference.h"
+#include "io/ModbusServer.h"
+#include <QElapsedTimer>
+#include <QTcpSocket>
+#include <cstring>
 
 namespace {
 
@@ -524,6 +528,125 @@ TEST(interferenceFoundDuringRun) {
     for (const auto& e : ev) CHECK(!(std::set<int>{e.a, e.b} == std::set<int>{a.base, a.arm}));
     sim.reset();
     CHECK(sim.interference().events().empty());
+}
+
+// ── Modbus TCP ──────────────────────────────────────────────────────────────
+
+// Sends one request PDU and returns the response PDU (empty on timeout)
+QByteArray modbus(QTcpSocket& sock, const QByteArray& pdu) {
+    static quint16 tid = 0;
+    QByteArray frame;
+    ++tid;
+    frame.append(char(tid >> 8)); frame.append(char(tid & 0xff));
+    frame.append('\0'); frame.append('\0');
+    frame.append(char((pdu.size() + 1) >> 8)); frame.append(char((pdu.size() + 1) & 0xff));
+    frame.append(char(1));
+    frame.append(pdu);
+    sock.write(frame);
+    QByteArray in;
+    QElapsedTimer t;
+    t.start();
+    while (t.elapsed() < 2000) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+        in.append(sock.readAll());
+        if (in.size() >= 7 && in.size() >= 6 + ((quint8(in[4]) << 8) | quint8(in[5]))) break;
+    }
+    if (in.size() < 8 || ((quint8(in[0]) << 8) | quint8(in[1])) != tid) return {};
+    return in.mid(7);
+}
+QByteArray pdu(std::initializer_list<int> bytes) {
+    QByteArray b;
+    for (int v : bytes) b.append(char(v));
+    return b;
+}
+float wordsToFloat(const QByteArray& r, int at) {
+    const quint32 bits = (quint32(quint8(r[at])) << 24) | (quint32(quint8(r[at + 1])) << 16) |
+                         (quint32(quint8(r[at + 2])) << 8) | quint8(r[at + 3]);
+    float f;
+    std::memcpy(&f, &bits, 4);
+    return f;
+}
+
+TEST(modbusServerReadsAndWritesSignals) {
+    SceneGraph g;
+    auto sig = [&](const char* name, SignalKind k, SignalType t, int addr, const char* expr = "", double init = 0) {
+        Signal s;
+        s.name = name; s.kind = k; s.type = t; s.ioAddress = addr; s.expression = expr; s.initialValue = init;
+        return g.addSignal(s);
+    };
+    sig("Start", SignalKind::Input, SignalType::Bool, 0);
+    sig("Speed", SignalKind::Input, SignalType::Real, 10, "", 1.5);
+    sig("Running", SignalKind::Derived, SignalType::Bool, 0, "Start");
+    sig("Temperature", SignalKind::Derived, SignalType::Real, 4, "Speed * 2");
+    sig("Count", SignalKind::Internal, SignalType::Int, 0, "", -7);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+
+    SimulationEngine sim(&g);
+    ModbusServer server(&g, &sim);
+    CHECK(server.start(0));                                    // any free port
+    QTcpSocket sock;
+    sock.connectToHost(QHostAddress::LocalHost, server.port());
+    QElapsedTimer t;
+    t.start();
+    while (sock.state() != QAbstractSocket::ConnectedState && t.elapsed() < 2000)
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+    CHECK(sock.state() == QAbstractSocket::ConnectedState);
+
+    // Stopped: initial values
+    QByteArray r = modbus(sock, pdu({3, 0, 10, 0, 2}));        // holding 10..11 = Speed
+    CHECK(r.size() == 6 && r[0] == 3 && r[1] == 4);
+    if (r.size() == 6) CHECK_NEAR(wordsToFloat(r, 2), 1.5, 1e-6);
+    r = modbus(sock, pdu({4, 0, 0, 0, 1}));                    // input register 0 = Count
+    CHECK(r.size() == 4 && qint16((quint8(r[2]) << 8) | quint8(r[3])) == -7);
+
+    sim.step();                                                // simulation active
+    r = modbus(sock, pdu({5, 0, 0, 0xFF, 0x00}));              // coil 0 (Start) ON
+    CHECK(r == pdu({5, 0, 0, 0xFF, 0x00}));
+    sim.step();
+    CHECK(sim.automation()->value("Start") == 1.0);
+    r = modbus(sock, pdu({2, 0, 0, 0, 8}));                    // discrete inputs 0..7
+    CHECK(r == pdu({2, 1, 0x01}));                             // Running
+
+    // Speed = 2.5 in one request (float32 high word first), then Temperature = 5
+    float f = 2.5f;
+    quint32 bits;
+    std::memcpy(&bits, &f, 4);
+    r = modbus(sock, pdu({16, 0, 10, 0, 2, 4, int(bits >> 24), int((bits >> 16) & 0xff), int((bits >> 8) & 0xff), int(bits & 0xff)}));
+    CHECK(r == pdu({16, 0, 10, 0, 2}));
+    sim.step();
+    r = modbus(sock, pdu({4, 0, 4, 0, 2}));
+    CHECK(r.size() == 6);
+    if (r.size() == 6) CHECK_NEAR(wordsToFloat(r, 2), 5.0, 1e-6);
+
+    // The halves of a Real in two single-register writes: 0.75
+    f = 0.75f;
+    std::memcpy(&bits, &f, 4);
+    modbus(sock, pdu({6, 0, 10, int(bits >> 24), int((bits >> 16) & 0xff)}));
+    modbus(sock, pdu({6, 0, 11, int((bits >> 8) & 0xff), int(bits & 0xff)}));
+    sim.step();
+    sim.step();
+    CHECK_NEAR(sim.automation()->value("Speed"), 0.75, 1e-6);
+
+    // Errors: unmapped coil, unknown function, bad coil value
+    CHECK(modbus(sock, pdu({5, 0, 99, 0xFF, 0})) == pdu({0x85, 2}));
+    CHECK(modbus(sock, pdu({43, 14, 1, 0})) == pdu({43 | 0x80, 1}));
+    CHECK(modbus(sock, pdu({5, 0, 0, 0x12, 0x34})) == pdu({0x85, 3}));
+    CHECK(server.requestCount() >= 10);
+    server.stop();
+    sim.reset();
+
+    // Overlapping addresses: Speed takes holding 10 and 11
+    sig("Limit", SignalKind::Input, SignalType::Int, 11);
+    CHECK(!AutomationEngine::validateAll(g).isEmpty());
+    g.findSignal("Limit")->ioAddress = -1;
+    sig("Extra", SignalKind::Input, SignalType::Real, -1);
+    CHECK(ModbusServer::assignAddresses(g) == 2);
+    CHECK(g.findSignal("Limit")->ioAddress == 12);
+    CHECK(g.findSignal("Extra")->ioAddress == 13);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+    SceneGraph h;
+    roundTrip(g, h);
+    CHECK(h.findSignal("Extra")->ioAddress == 13);
 }
 
 // ── Recording ───────────────────────────────────────────────────────────────
