@@ -481,6 +481,12 @@ void SceneGraph::applyCouplings() {
     }
 }
 
+Transform SceneGraph::toTransform(const QMatrix4x4& m) {
+    Transform t;
+    decomposeMatrix(m, t.position, t.rotation, t.scale);
+    return t;
+}
+
 QMatrix4x4 SceneGraph::jointMotion(const Joint& joint) {
     QMatrix4x4 m;
     if (joint.type == JointType::Revolute) {

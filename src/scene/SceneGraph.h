@@ -140,6 +140,9 @@ public:
     // The joint's current motion, applied in the parent's local frame between
     // the parent and the child's own local transform
     static QMatrix4x4 jointMotion(const Joint& joint);
+    // Position, Euler XYZ (degrees) and scale of an affine matrix built like
+    // localTransform() (no shear)
+    static Transform toTransform(const QMatrix4x4& m);
 
     void clear();
 

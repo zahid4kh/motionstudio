@@ -44,6 +44,8 @@ private slots:
     void saveProject();
     void saveProjectAs();
     void importStep();
+    void importRobot();
+    void exportRobot(bool mjcf);
 
     void addObject(PrimitiveType type);
     void addJointToSelected();

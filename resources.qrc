@@ -46,6 +46,7 @@
         <file alias="icons/scissors.svg">resources/icons/scissors.svg</file>
         <file alias="icons/ruler.svg">resources/icons/ruler.svg</file>
         <file alias="icons/package.svg">resources/icons/package.svg</file>
+        <file alias="icons/download.svg">resources/icons/download.svg</file>
         <file alias="icons/move-diagonal-2.svg">resources/icons/move-diagonal-2.svg</file>
         <file alias="icons/crosshair.svg">resources/icons/crosshair.svg</file>
         <file alias="icons/cylinder.svg">resources/icons/cylinder.svg</file>
@@ -131,6 +132,9 @@
         <file alias="help/runtime.md">resources/help/runtime.md</file>
 
         <file alias="help/io.md">resources/help/io.md</file>
+
+
+        <file alias="help/exchange.md">resources/help/exchange.md</file>
         <file alias="help/shortcuts.md">resources/help/shortcuts.md</file>
         <file alias="icons/book-open.svg">resources/icons/book-open.svg</file>
         <file alias="icons/circle-help.svg">resources/icons/circle-help.svg</file>

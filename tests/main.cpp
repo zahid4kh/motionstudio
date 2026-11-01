@@ -8,6 +8,7 @@
 #include <functional>
 #include <vector>
 #include "scene/SceneGraph.h"
+#include "scene/PrimitiveMesh.h"
 #include "scene/UndoManager.h"
 #include "automation/AutomationEngine.h"
 #include "automation/Sensors.h"
@@ -17,6 +18,11 @@
 #include "scene/Interference.h"
 #include "io/ModbusServer.h"
 #include "scene/SceneMerge.h"
+#include "io/RobotFormats.h"
+#include <QTemporaryDir>
+#ifdef MUJOCO_ENABLED
+#include <mujoco/mujoco.h>
+#endif
 #include <QDir>
 #include <QElapsedTimer>
 #include <QTcpSocket>
@@ -620,6 +626,135 @@ TEST(mergeRenamesClashesAndRemapsReferences) {
     }
     CHECK(coupled == 2);
     CHECK(AutomationEngine::validateAll(g).isEmpty());
+}
+
+// ── URDF / MJCF ─────────────────────────────────────────────────────────────
+
+// The 6-axis arm with a coloured box on each link, a cylinder, a mesh part
+// and a coupled finger, so every kind of geometry and joint is exported
+int makeDressedArm(SceneGraph& g, std::vector<int>* joints) {
+    const int tool = makeSixAxis(g, joints);
+    const int links[6] = {g.getJoint((*joints)[0])->childBodyId, g.getJoint((*joints)[1])->childBodyId,
+                          g.getJoint((*joints)[2])->childBodyId, g.getJoint((*joints)[3])->childBodyId,
+                          g.getJoint((*joints)[4])->childBodyId, g.getJoint((*joints)[5])->childBodyId};
+    for (int i = 0; i < 6; ++i) {
+        int box = addBox(g, QString("Box %1").arg(i + 1), {0.05f * float(i), 0.02f, 0.01f}, {0.08f, 0.05f + 0.01f * float(i), 0.06f}, links[i]);
+        g.getObject(box)->transform.rotation = {10.0f * float(i), 5, -7};
+        g.getObject(box)->color = QColor::fromHsv(i * 50, 200, 220);
+    }
+    int cyl = g.addObject("Shaft", PrimitiveType::Cylinder, links[2]);
+    g.getObject(cyl)->transform.position = {0.2f, 0, 0.05f};
+    g.getObject(cyl)->transform.scale = {0.04f, 0.3f, 0.04f};
+    g.getObject(cyl)->transform.rotation = {0, 0, 90};
+    int part = g.addObject("Housing", PrimitiveType::ImportedMesh, links[1]);
+    auto mesh = std::make_shared<MeshGeometry>();
+    mesh->interleaved = primitiveSoup(PrimitiveType::Sphere);
+    mesh->aabbMin = {-0.5f, -0.5f, -0.5f};
+    mesh->aabbMax = {0.5f, 0.5f, 0.5f};
+    g.getObject(part)->mesh = mesh;
+    g.getObject(part)->transform.scale = {0.1f, 0.1f, 0.1f};
+    // A finger on the flange that follows J6 at half the angle
+    int finger = addBox(g, "Finger", {0.02f, 0, 0}, {0.02f, 0.02f, 0.06f}, links[5]);
+    Joint fj;
+    fj.axis = {0, 0, 1};
+    fj.pivot = {0.02f, 0, 0};
+    fj.parentBodyId = links[5];
+    fj.childBodyId = finger;
+    fj.coupledTo = (*joints)[5];
+    fj.ratio = 0.5f;
+    fj.offset = 5;
+    g.addJoint(fj);
+    return tool;
+}
+
+// Sets joints by actuator name in both scenes and compares every part's
+// world position (the imported scene names parts "<link> visual")
+void compareScenes(SceneGraph& a, SceneGraph& b, const std::vector<std::vector<float>>& configs, const char* what) {
+    double worst = 0;
+    int compared = 0;
+    for (const auto& q : configs) {
+        for (SceneGraph* g : {&a, &b})
+            for (int mid : g->motorIdsSorted()) {
+                const QString n = g->getMotor(mid)->name;
+                if (n.size() == 2 && n[0] == 'J') g->getJoint(g->getMotor(mid)->jointId)->currentValue = q[size_t(n[1].digitValue() - 1)];
+            }
+        a.applyCouplings();
+        b.applyCouplings();
+        for (auto& [id, o] : a.allObjects()) {
+            if (!surfaceOf(o) && o.name != "Tool") continue;
+            const QString name = o.name == "Tool" ? QString("Tool") : QString(o.name).replace(' ', '_') + " visual";
+            int other = -1;
+            for (auto& [bid, bo] : b.allObjects()) if (bo.name == name) other = bid;
+            CHECK(other != -1);
+            if (other == -1) continue;
+            const QVector3D pa = surfaceOf(o) ? scenequery::worldBox(a, id).center : worldPos(a, id);
+            const QVector3D pb = surfaceOf(*b.getObject(other)) ? scenequery::worldBox(b, other).center : worldPos(b, other);
+            worst = std::max(worst, double((pa - pb).length()));
+            ++compared;
+        }
+    }
+    std::printf("  %s: %d part positions compared, worst %.2g m\n", what, compared, worst);
+    CHECK(worst < 1e-4);
+}
+
+TEST(urdfAndMjcfRoundTrip) {
+    SceneGraph g;
+    std::vector<int> joints;
+    makeDressedArm(g, &joints);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+    QTemporaryDir dir;
+    const std::vector<std::vector<float>> configs = {{0, 0, 0, 0, 0, 0}, {30, -20, 40, 25, -35, 60}, {-90, 45, -30, 120, 15, -170}};
+    for (bool mjcf : {false, true}) {
+        const QString file = dir.filePath(mjcf ? "arm.xml" : "arm.urdf");
+        const robotio::Result ex = mjcf ? robotio::exportMjcf(g, file) : robotio::exportUrdf(g, file);
+        CHECK(ex.ok);
+        CHECK(ex.files == 3);                                   // cube, cylinder, the mesh (sphere soup)
+        SceneGraph h;
+        const robotio::Result im = mjcf ? robotio::importMjcf(h, file) : robotio::importUrdf(h, file);
+        if (!im.ok) std::printf("  import failed: %s\n", qPrintable(im.error));
+        CHECK(im.ok);
+        CHECK(h.allMotors().size() == 6);
+        int couplings = 0;
+        for (auto& [id, j] : h.allJoints()) if (j.coupledTo != -1) { ++couplings; CHECK_NEAR(j.ratio, 0.5, 1e-6); CHECK_NEAR(j.offset, 5, 1e-4); }
+        CHECK(couplings == 1);
+        CHECK(AutomationEngine::validateAll(h).isEmpty());
+        compareScenes(g, h, configs, mjcf ? "MJCF" : "URDF");
+        // Colours survive
+        int coloured = 0;
+        for (auto& [id, o] : h.allObjects()) if (o.color.isValid()) ++coloured;
+        CHECK(coloured == 6);
+    }
+#ifdef MUJOCO_ENABLED
+    // MuJoCo itself accepts the exported model: 6 actuated joints + the finger
+    char err[1000] = {};
+    mjModel* m = mj_loadXML(qPrintable(dir.filePath("arm.xml")), nullptr, err, sizeof err);
+    if (!m) std::printf("  MuJoCo: %s\n", err);
+    CHECK(m != nullptr);
+    if (m) {
+        CHECK(m->njnt == 7);
+        CHECK(m->nu == 6);
+        CHECK(m->neq == 1);
+        mj_deleteModel(m);
+    }
+#endif
+}
+
+TEST(stlWriteAndRead) {
+    QTemporaryDir dir;
+    const std::vector<float>& soup = primitiveSoup(PrimitiveType::Cylinder);
+    CHECK(robotio::writeStl(soup, dir.filePath("c.stl")));
+    auto back = robotio::loadMesh(dir.filePath("c.stl"));
+    CHECK(back && back->interleaved.size() == soup.size());
+    if (back) {
+        CHECK_NEAR(back->aabbMax.y(), 0.5, 1e-6);
+        CHECK_NEAR(back->aabbMin.x(), -0.5, 1e-3);
+    }
+    QFile obj(dir.filePath("q.obj"));
+    CHECK(obj.open(QIODevice::WriteOnly));
+    obj.write("v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nf 1 2 3 4\n");
+    obj.close();
+    auto quad = robotio::loadMesh(dir.filePath("q.obj"));
+    CHECK(quad && quad->interleaved.size() == 2 * 18);
 }
 
 // ── Cycle time ──────────────────────────────────────────────────────────────

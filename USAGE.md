@@ -264,6 +264,12 @@ A real PLC (or CODESYS, OpenPLC…) can drive the model over Modbus TCP. Give si
 - **Ctrl+N** — new project
 - Format: `.mstudio` (JSON)
 
+## Import and export
+
+- **File › Import STEP…** — CAD assemblies (part tree, colours)
+- **File › Import URDF / MJCF…** — robots from ROS (`.urdf`) or MuJoCo (`.xml`): links/bodies, visuals (boxes, cylinders, spheres, STL/OBJ meshes), revolute/continuous/prismatic (hinge/slide) joints with limits, mimic joints and joint equalities as couplings, colours, MJCF default classes. Movable joints get actuators. Z-up models are stood upright.
+- **File › Export › URDF / MJCF** — the mechanism at joint value 0, every part's geometry as STL in `meshes/`, limits, couplings, colours; MJCF adds actuators, free joints for rigid bodies and a floor, and loads straight into MuJoCo.
+
 ## Component library (File › Insert Component…, Ctrl+Shift+I)
 
 Adds a ready-made piece to the **current** scene, at the centre of the view and selected so you can drag it into place:

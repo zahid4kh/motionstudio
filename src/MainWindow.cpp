@@ -3,6 +3,7 @@
 #include "ui/ModbusDialog.h"
 #include "io/ModbusServer.h"
 #include "scene/SceneMerge.h"
+#include "io/RobotFormats.h"
 #include "serialization/ProjectSerializer.h"
 #include "import/StepImporter.h"
 #include "ui/TemplateDialog.h"
@@ -146,6 +147,12 @@ void MainWindow::buildMenu() {
     }
     file->addSeparator();
     mkA(file, "file-input",      "&Import STEP…",  &MainWindow::importStep);
+    mkA(file, "bot",             "Import &URDF / MJCF…", &MainWindow::importRobot);
+    {
+        auto* exp = file->addMenu(Theme::icon("download"), "E&xport");
+        exp->addAction("&URDF (ROS)…", this, [this]{ exportRobot(false); });
+        exp->addAction("&MJCF (MuJoCo)…", this, [this]{ exportRobot(true); });
+    }
     file->addSeparator();
     mkA(file, "save",            "&Save",          &MainWindow::saveProject,  QKeySequence::Save);
     mkA(file, "save-all",        "Save &As…",      &MainWindow::saveProjectAs);
@@ -296,6 +303,7 @@ void MainWindow::buildHelpMenu() {
         {"move-diagonal-2", "Robot &Tools && IK",      "kinematics"},
         {"activity",     "Running && &Debugging",      "runtime"},
         {"network",      "External &I/O (Modbus)",     "io"},
+        {"download",     "&Import && Export",          "exchange"},
         {"keyboard",     "&Keyboard && Mouse",         "shortcuts"},
     };
     for (const auto& t : topics) {
@@ -612,6 +620,42 @@ void MainWindow::openTemplate() {
     } else {
         showStatus("Failed to load template", false);
     }
+}
+
+void MainWindow::importRobot() {
+    if(m_sim->isActive()){ showStatus("Reset the simulation to import", false); return; }
+    const QString path = QFileDialog::getOpenFileName(this, "Import URDF or MJCF", {},
+        "Robot descriptions (*.urdf *.xml *.mjcf);;URDF (*.urdf);;MJCF (*.xml *.mjcf);;All files (*)");
+    if(path.isEmpty()) return;
+    // URDF has <robot>, MJCF <mujoco>
+    bool mjcf = false;
+    {
+        QFile f(path);
+        if(f.open(QIODevice::ReadOnly)) mjcf = f.read(4096).contains("<mujoco");
+    }
+    const robotio::Result r = mjcf ? robotio::importMjcf(*m_scene, path) : robotio::importUrdf(*m_scene, path);
+    if(!r.ok){
+        QMessageBox::warning(this, "Import", QString("Could not import %1:\n\n%2").arg(QFileInfo(path).fileName(), r.error));
+        return;
+    }
+    if(r.rootId != -1) m_scene->selectObject(r.rootId);
+    m_viewport->fitAll();
+    if(!r.warnings.isEmpty())
+        QMessageBox::information(this, "Import", QString("Imported %1, with notes:\n\n• %2")
+                                     .arg(QFileInfo(path).fileName(), r.warnings.mid(0, 12).join("\n• ")));
+    showStatus(QString("Imported %1 — its joints have actuators; jog them in Actuators & Poses").arg(QFileInfo(path).fileName()));
+}
+
+void MainWindow::exportRobot(bool mjcf) {
+    const QString suggested = (m_currentFile.isEmpty() ? QString("model") : QFileInfo(m_currentFile).completeBaseName())
+                              + (mjcf ? ".xml" : ".urdf");
+    const QString path = QFileDialog::getSaveFileName(this, mjcf ? "Export MJCF" : "Export URDF",
+        QDir(QFileInfo(m_currentFile).absolutePath()).filePath(suggested), mjcf ? "MJCF (*.xml)" : "URDF (*.urdf)");
+    if(path.isEmpty()) return;
+    const robotio::Result r = mjcf ? robotio::exportMjcf(*m_scene, path) : robotio::exportUrdf(*m_scene, path);
+    if(!r.ok){ QMessageBox::warning(this, "Export", "Export failed:\n\n" + r.error); return; }
+    showStatus(QString("Exported %1 with %2 mesh file%3 in meshes/%4").arg(QFileInfo(path).fileName()).arg(r.files)
+                   .arg(r.files == 1 ? "" : "s").arg(r.warnings.isEmpty() ? QString() : " — " + r.warnings.join("; ")));
 }
 
 void MainWindow::insertComponent() {

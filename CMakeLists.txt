@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets Concurrent Network)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets Concurrent Network Xml)
 
 # nlohmann/json via FetchContent
 include(FetchContent)
@@ -68,9 +68,10 @@ add_library(MotionStudioCore STATIC
     src/serialization/ProjectSerializer.cpp
     src/import/StepImporter.cpp
     src/io/ModbusServer.cpp
+    src/io/RobotFormats.cpp
 )
 target_include_directories(MotionStudioCore PUBLIC src)
-target_link_libraries(MotionStudioCore PUBLIC Qt6::Core Qt6::Gui Qt6::Network)
+target_link_libraries(MotionStudioCore PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::Xml)
 
 if(MUJOCO_FOUND)
     target_link_libraries(MotionStudioCore PUBLIC mujoco)
