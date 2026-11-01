@@ -4,6 +4,10 @@
 #include <QFormLayout>
 #include <QScrollArea>
 #include <QInputDialog>
+#include <QColorDialog>
+#include <QPainter>
+#include <QToolButton>
+#include <functional>
 #include <cmath>
 #include "Theme.h"
 #include "automation/AutomationCommon.h"
@@ -269,11 +273,97 @@ void PropertiesPanel::buildTransformSection() {
     m_snapToFloorBtn->setToolTip("Move Y so the object's bottom face rests at Y = 0");
     vb->addWidget(m_snapToFloorBtn);
 
+    // Colour: own, or inherited from the nearest coloured parent; presets
+    // are common machine colours
+    {
+        auto* row = new QHBoxLayout;
+        row->setSpacing(3);
+        auto* l = new QLabel("Colour");
+        l->setObjectName("fieldLabel");
+        l->setFixedWidth(70);
+        row->addWidget(l);
+        m_colorBtn = new QToolButton;
+        m_colorBtn->setIconSize(QSize(34, 16));
+        m_colorBtn->setToolTip("Choose a colour. Parts without their own colour use their parent's, "
+                               "so colouring an assembly colours its parts.");
+        row->addWidget(m_colorBtn);
+        m_colorHint = new QLabel;
+        m_colorHint->setObjectName("hint");
+        row->addWidget(m_colorHint, 1);
+        m_colorReset = new QToolButton;
+        m_colorReset->setIcon(Theme::icon("x", Theme::Tint::Muted));
+        m_colorReset->setAutoRaise(true);
+        m_colorReset->setToolTip("Remove this part's own colour (use its parent's, or the default)");
+        row->addWidget(m_colorReset);
+        vb->addLayout(row);
+
+        auto* presets = new QHBoxLayout;
+        presets->setSpacing(1);
+        presets->addSpacing(70 + presets->spacing());
+        static const struct { const char* hex; const char* name; } kPresets[] = {
+            {"#9ea8b8", "Steel"}, {"#d0d4da", "Aluminium"}, {"#3a3f47", "Anthracite"}, {"#ff7a1a", "Safety orange"},
+            {"#f2c230", "Signal yellow"}, {"#2f6fd6", "Blue"}, {"#2da55a", "Green"}, {"#d63a3a", "Red"},
+        };
+        for (const auto& p : kPresets) {
+            auto* b = new QToolButton;
+            QPixmap px(12, 12);
+            px.fill(QColor(p.hex));
+            b->setIcon(QIcon(px));
+            b->setIconSize(QSize(12, 12));
+            b->setAutoRaise(true);
+            b->setToolTip(p.name);
+            const QColor c(p.hex);
+            connect(b, &QToolButton::clicked, this, [this, c]{ setObjectColor(c); });
+            presets->addWidget(b);
+        }
+        presets->addStretch();
+        vb->addLayout(presets);
+        connect(m_colorBtn, &QToolButton::clicked, this, [this]{
+            const QColor start = m_scene->colorOf(m_currentId);
+            const QColor c = QColorDialog::getColor(start.isValid() ? start : QColor("#9ea8b8"), this, "Part Colour");
+            if (c.isValid()) setObjectColor(c);
+        });
+        connect(m_colorReset, &QToolButton::clicked, this, [this]{ setObjectColor(QColor()); });
+    }
+
     auto wire = [this](QDoubleSpinBox* s){
         connect(s, &QDoubleSpinBox::valueChanged, this, &PropertiesPanel::onTransformEdited);
     };
     for (auto* s : {m_px, m_py, m_pz, m_rx, m_ry, m_rz, m_sx, m_sy, m_sz}) wire(s);
     connect(m_snapToFloorBtn, &QPushButton::clicked, this, &PropertiesPanel::snapToFloor);
+}
+
+void PropertiesPanel::setObjectColor(const QColor& c) {
+    SceneObject* obj = m_scene->getObject(m_currentId);
+    if (!obj || m_loading) return;
+    obj->color = c;
+    emit m_scene->objectChanged(m_currentId);
+    // Children inherit: repaint and reload them too
+    std::function<void(int)> touch = [&](int id) {
+        if (const SceneObject* o = m_scene->getObject(id))
+            for (int child : o->childIds) { emit m_scene->objectChanged(child); touch(child); }
+    };
+    touch(m_currentId);
+    updateColorRow(m_currentId);
+}
+
+void PropertiesPanel::updateColorRow(int id) {
+    const SceneObject* obj = m_scene->getObject(id);
+    if (!obj) return;
+    const QColor c = m_scene->colorOf(id);
+    QPixmap px(34, 16);
+    px.fill(c.isValid() ? c : QColor(0, 0, 0, 0));
+    if (!c.isValid()) {
+        QPainter p(&px);
+        p.setPen(QPen(Theme::colors().muted, 1, Qt::DashLine));
+        p.drawRect(px.rect().adjusted(0, 0, -1, -1));
+    }
+    m_colorBtn->setIcon(QIcon(px));
+    m_colorReset->setEnabled(obj->color.isValid());
+    const int source = m_scene->colorSource(id);
+    if (obj->color.isValid()) m_colorHint->setText(obj->color.name().toUpper());
+    else if (source != -1) m_colorHint->setText("Inherited from " + m_scene->getObject(source)->name);
+    else m_colorHint->setText("Default colour");
 }
 
 void PropertiesPanel::buildConnectionsSection() {
@@ -798,6 +888,7 @@ void PropertiesPanel::loadObject(int id) {
     m_sx->setValue(obj->transform.scale.x() * lf);
     m_sy->setValue(obj->transform.scale.y() * lf);
     m_sz->setValue(obj->transform.scale.z() * lf);
+    updateColorRow(id);
 
     // Joint / Motor
     Joint* joint = m_scene->jointForChild(id);

@@ -1,4 +1,5 @@
 #pragma once
+#include <QToolButton>
 #include <QWidget>
 #include <QGroupBox>
 #include <QDoubleSpinBox>
@@ -109,6 +110,11 @@ private:
     QDoubleSpinBox* m_rx = nullptr, *m_ry = nullptr, *m_rz = nullptr;
     QDoubleSpinBox* m_sx = nullptr, *m_sy = nullptr, *m_sz = nullptr;
     QPushButton*    m_snapToFloorBtn  = nullptr;
+    QToolButton*    m_colorBtn       = nullptr;   // own / inherited colour; click to choose
+    QToolButton*    m_colorReset     = nullptr;
+    QLabel*         m_colorHint      = nullptr;
+    void setObjectColor(const QColor& c);
+    void updateColorRow(int id);
 
     // Connections
     QGroupBox*      m_connectionsGroup = nullptr;

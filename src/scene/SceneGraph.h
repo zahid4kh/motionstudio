@@ -124,6 +124,11 @@ public:
     void deselectAll();
     int  selectedObjectId() const { return m_selectedId; }
 
+    // The colour an object is drawn in: its own, else the nearest ancestor's;
+    // invalid when none has one (the viewport then uses the type's default)
+    QColor colorOf(int id) const;
+    int    colorSource(int id) const;   // object whose colour colorOf() returns, or -1
+
     // Transform helpers
     QMatrix4x4 worldTransform(int id) const;
     QMatrix4x4 localTransform(int id) const;

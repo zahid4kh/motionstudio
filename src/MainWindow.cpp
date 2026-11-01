@@ -681,6 +681,7 @@ int MainWindow::addImportedPart(const StepImporter::Part& part, int parentId) {
         obj->transform.rotation = part.rotationDeg;
         obj->transform.scale    = {1, 1, 1};
         obj->mesh               = part.mesh;
+        obj->color              = part.color;
     }
     for(const auto& child : part.children)
         addImportedPart(child, id);

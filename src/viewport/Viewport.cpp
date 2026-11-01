@@ -794,7 +794,9 @@ void Viewport::drawScene(){
         QMatrix4x4 model=m_scene->worldTransform(id);
         m_objShader->setUniformValue("model",      model);
         m_objShader->setUniformValue("normMat",    model.normalMatrix());
-        m_objShader->setUniformValue("objColor",   primitiveColor(obj.type));
+        const QColor own = m_scene->colorOf(id);
+        m_objShader->setUniformValue("objColor",   own.isValid() ? QVector3D(own.redF(), own.greenF(), own.blueF())
+                                                                 : primitiveColor(obj.type));
         m_objShader->setUniformValue("isSelected", obj.selected);
         m_objShader->setUniformValue("isHovered",  id == m_hoveredId && !obj.selected);
         m_objShader->setUniformValue("isActive",   m_movingObjects.contains(id));

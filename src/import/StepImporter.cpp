@@ -7,6 +7,8 @@
 #include <XCAFApp_Application.hxx>
 #include <XCAFDoc_DocumentTool.hxx>
 #include <XCAFDoc_ShapeTool.hxx>
+#include <XCAFDoc_ColorTool.hxx>
+#include <Quantity_Color.hxx>
 #include <TDocStd_Document.hxx>
 #include <TDataStd_Name.hxx>
 #include <TDF_LabelSequence.hxx>
@@ -118,6 +120,30 @@ std::shared_ptr<MeshGeometry> triangulateShape(const TopoDS_Shape& shape) {
 // instances of the same part in an assembly share one MeshGeometry.
 using MeshCache = std::map<QString, std::shared_ptr<MeshGeometry>>;
 
+QColor toQColor(const Quantity_Color& c) {
+    double r, g, b;
+    c.Values(r, g, b, Quantity_TOC_sRGB);
+    return QColor::fromRgbF(float(r), float(g), float(b));
+}
+
+// A label's colour: surface or generic colour of the label (or of its
+// shape), else the colour of its first coloured face
+QColor labelColor(const TDF_Label& label, const Handle(XCAFDoc_ShapeTool)& shapeTool,
+                  const Handle(XCAFDoc_ColorTool)& colorTool, bool searchFaces) {
+    if (colorTool.IsNull()) return {};
+    Quantity_Color c;
+    for (XCAFDoc_ColorType t : {XCAFDoc_ColorSurf, XCAFDoc_ColorGen})
+        if (colorTool->GetColor(label, t, c)) return toQColor(c);
+    const TopoDS_Shape shape = shapeTool->GetShape(label);
+    if (shape.IsNull()) return {};
+    for (XCAFDoc_ColorType t : {XCAFDoc_ColorSurf, XCAFDoc_ColorGen})
+        if (colorTool->GetColor(shape, t, c)) return toQColor(c);
+    if (!searchFaces) return {};
+    for (TopExp_Explorer ex(shape, TopAbs_FACE); ex.More(); ex.Next())
+        if (colorTool->GetColor(ex.Current(), XCAFDoc_ColorSurf, c)) return toQColor(c);
+    return {};
+}
+
 QString labelEntry(const TDF_Label& label) {
     TCollection_AsciiString entry;
     TDF_Tool::Entry(label, entry);
@@ -128,10 +154,12 @@ QString labelEntry(const TDF_Label& label) {
 // The instance transform lives on the *component* label and is applied by the caller.
 StepImporter::Part processLabel(const TDF_Label& label,
                                 const Handle(XCAFDoc_ShapeTool)& shapeTool,
+                                const Handle(XCAFDoc_ColorTool)& colorTool,
                                 MeshCache& cache,
                                 int depth) {
     StepImporter::Part part;
     part.name = labelName(label);
+    part.color = labelColor(label, shapeTool, colorTool, !shapeTool->IsAssembly(label));
 
     if (depth > 64) return part;   // guard against cyclic references
 
@@ -143,7 +171,10 @@ StepImporter::Part processLabel(const TDF_Label& label,
             TDF_Label ref;
             if (!shapeTool->GetReferredShape(comp, ref)) continue;
 
-            StepImporter::Part child = processLabel(ref, shapeTool, cache, depth + 1);
+            StepImporter::Part child = processLabel(ref, shapeTool, colorTool, cache, depth + 1);
+            // A colour on the instance overrides the part's own
+            const QColor instance = labelColor(comp, shapeTool, colorTool, false);
+            if (instance.isValid()) child.color = instance;
             // Component label usually carries the instance name; fall back to prototype
             QString compName = labelName(comp);
             if (!compName.isEmpty()) child.name = compName;
@@ -175,6 +206,7 @@ bool importFile(const QString& path, Part& rootOut, QString& errorOut) {
     // Translate geometry into metres (STEP files are typically authored in mm)
     STEPCAFControl_Reader reader;
     reader.SetNameMode(Standard_True);
+    reader.SetColorMode(Standard_True);
 
     // Must be set after the reader is constructed (that's what registers the
     // "xstep.cascade.unit" static parameter) and before ReadFile/Transfer.
@@ -195,6 +227,7 @@ bool importFile(const QString& path, Part& rootOut, QString& errorOut) {
     }
 
     Handle(XCAFDoc_ShapeTool) shapeTool = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
+    Handle(XCAFDoc_ColorTool) colorTool = XCAFDoc_DocumentTool::ColorTool(doc->Main());
     TDF_LabelSequence freeShapes;
     shapeTool->GetFreeShapes(freeShapes);
     if (freeShapes.Length() == 0) {
@@ -206,7 +239,7 @@ bool importFile(const QString& path, Part& rootOut, QString& errorOut) {
     const QString baseName = QFileInfo(path).completeBaseName();
 
     if (freeShapes.Length() == 1) {
-        rootOut = processLabel(freeShapes.Value(1), shapeTool, cache, 0);
+        rootOut = processLabel(freeShapes.Value(1), shapeTool, colorTool, cache, 0);
         decomposeLocation(shapeTool->GetLocation(freeShapes.Value(1)),
                           rootOut.position, rootOut.rotationDeg);
         if (rootOut.name.isEmpty()) rootOut.name = baseName;
@@ -215,7 +248,7 @@ bool importFile(const QString& path, Part& rootOut, QString& errorOut) {
         rootOut = Part{};
         rootOut.name = baseName;
         for (int i = 1; i <= freeShapes.Length(); i++) {
-            Part child = processLabel(freeShapes.Value(i), shapeTool, cache, 0);
+            Part child = processLabel(freeShapes.Value(i), shapeTool, colorTool, cache, 0);
             decomposeLocation(shapeTool->GetLocation(freeShapes.Value(i)),
                               child.position, child.rotationDeg);
             if (child.name.isEmpty()) child.name = QString("%1_%2").arg(baseName).arg(i);

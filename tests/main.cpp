@@ -95,6 +95,33 @@ void runFor(AutomationEngine& e, double seconds) {
     for (int i = 0; i < int(seconds / 0.016); ++i) e.scan(0.016);
 }
 
+// ── Appearance ──────────────────────────────────────────────────────────────
+
+TEST(colorsInheritDuplicateAndSave) {
+    SceneGraph g;
+    int group = g.addObject("Assembly", PrimitiveType::ImportedMesh);
+    int a = addBox(g, "A", {0, 0, 0}, {1, 1, 1}, group);
+    int b = addBox(g, "B", {1, 0, 0}, {1, 1, 1}, group);
+    CHECK(!g.colorOf(a).isValid());
+    g.getObject(group)->color = QColor("#ff7a1a");
+    CHECK(g.colorOf(a) == QColor("#ff7a1a"));
+    CHECK(g.colorSource(a) == group);
+    g.getObject(b)->color = QColor("#2f6fd6");
+    CHECK(g.colorOf(b) == QColor("#2f6fd6"));
+    int copy = g.duplicateObject(group);
+    const SceneObject* c = g.getObject(copy);
+    CHECK(c && c->color == QColor("#ff7a1a"));
+    CHECK(c && g.colorOf(c->childIds[1]) == QColor("#2f6fd6"));
+    SceneGraph h;
+    roundTrip(g, h);
+    int n = 0;
+    for (auto& [id, o] : h.allObjects()) {
+        if (o.name == "B") { CHECK(o.color == QColor("#2f6fd6")); ++n; }
+        if (o.name == "A") { CHECK(!o.color.isValid() && h.colorOf(id) == QColor("#ff7a1a")); ++n; }
+    }
+    CHECK(n == 4);
+}
+
 // ── Sensors ─────────────────────────────────────────────────────────────────
 
 TEST(sensorBeamDetectsAndMeasures) {

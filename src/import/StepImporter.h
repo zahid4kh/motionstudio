@@ -15,6 +15,7 @@ struct Part {
     QVector3D position;                    // local, metres
     QVector3D rotationDeg;                 // local Euler XYZ, degrees
     std::shared_ptr<MeshGeometry> mesh;    // null for pure assembly nodes
+    QColor    color;                       // from the file's colours; invalid = none
     std::vector<Part> children;
 };
 

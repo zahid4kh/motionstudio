@@ -70,6 +70,7 @@ int SceneGraph::duplicateObject(int id) {
         SceneObject& copy = m_objects.at(copyId);
         copy.transform = original.transform;
         copy.mesh      = original.mesh;
+        copy.color     = original.color;
         copyOf[originalId] = copyId;
         emit objectChanged(copyId);
         for (int childId : original.childIds) self(self, childId, copyId);
@@ -428,6 +429,17 @@ QMatrix4x4 SceneGraph::worldTransform(int id) const {
     }
 
     return worldTransform(obj->parentId) * jointT * local;
+}
+
+int SceneGraph::colorSource(int id) const {
+    for (const SceneObject* o = getObject(id); o; o = getObject(o->parentId))
+        if (o->color.isValid()) return o->id;
+    return -1;
+}
+
+QColor SceneGraph::colorOf(int id) const {
+    const SceneObject* o = getObject(colorSource(id));
+    return o ? o->color : QColor();
 }
 
 void SceneGraph::setWorldTransform(int id, const QMatrix4x4& world) {

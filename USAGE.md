@@ -88,6 +88,7 @@ While the simulation is active (from the first Play/Step until Reset), automatio
 - **Position** — local position relative to parent
 - **Rotation** — Euler angles in degrees (XYZ order)
 - **Scale** — local scale
+- **Colour** — click the swatch for any colour, or pick a preset (steel, aluminium, anthracite, safety orange, signal yellow, blue, green, red); **×** removes it. A part without its own colour uses its parent's, so colouring an assembly colours all its parts. STEP imports keep the colours stored in the file.
 
 ### Joint (visible when object has a joint)
 

@@ -175,6 +175,7 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene, MeshPool* pool) {
         o["type"]      = primitiveToStr(obj.type);
         o["parentId"]  = obj.parentId;
         o["transform"] = transformToJson(obj.transform);
+        if (obj.color.isValid()) o["color"] = obj.color.name(QColor::HexRgb);
 
         if (obj.mesh) {
             auto it = meshIndex.find(obj.mesh.get());
@@ -365,6 +366,7 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root, con
     struct ObjData {
         int id; QString name; PrimitiveType type; int parentId; Transform transform;
         int meshId = -1;
+        QColor color;
     };
     QList<ObjData> objList;
     for (auto v : root["objects"].toArray()) {
@@ -376,6 +378,7 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root, con
         d.parentId  = o["parentId"].toInt(-1);
         d.transform = transformFromJson(o["transform"].toObject());
         d.meshId    = o.contains("meshId") ? o["meshId"].toInt(-1) : -1;
+        if (o.contains("color")) d.color = QColor(o["color"].toString());
         objList.append(d);
     }
 
@@ -391,6 +394,7 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root, con
         idMap[d.id] = newId;
         if (SceneObject* obj = scene.getObject(newId)) {
             obj->transform = d.transform;
+            obj->color     = d.color;
             if (d.meshId >= 0 && d.meshId < int(meshList.size()) && meshList[size_t(d.meshId)])
                 obj->mesh = meshList[size_t(d.meshId)];
         }

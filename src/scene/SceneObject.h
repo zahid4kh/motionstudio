@@ -1,4 +1,5 @@
 #pragma once
+#include <QColor>
 #include <QString>
 #include <QVector3D>
 #include <memory>
@@ -30,6 +31,9 @@ struct SceneObject {
     int         parentId = -1;
     std::vector<int> childIds;
     bool        selected = false;
+
+    // Own colour; invalid = inherit the parent's (see SceneGraph::colorOf)
+    QColor      color;
 
     // Only set for ImportedMesh; null for assembly group nodes (tree-only, no geometry)
     std::shared_ptr<MeshGeometry> mesh;
