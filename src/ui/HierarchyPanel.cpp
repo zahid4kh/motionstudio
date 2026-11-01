@@ -177,6 +177,9 @@ void HierarchyPanel::showContextMenu(const QPoint& pos) {
         menu.addAction(Theme::icon("pencil"), "Rename", [this, only](){
             onItemDoubleClicked(only, 0);
         });
+        menu.addAction(Theme::icon("copy"), "Duplicate\tCtrl+D", [this, only](){
+            emit duplicateRequested(only->data(0, Qt::UserRole).toInt());
+        });
         menu.addSeparator();
         menu.addAction(Theme::icon("trash-2", Theme::Tint::Danger), "Delete", [this, selected](){
             deleteSelectedItems(selected);

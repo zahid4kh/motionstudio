@@ -29,6 +29,7 @@
         <file alias="icons/cog.svg">resources/icons/cog.svg</file>
         <file alias="icons/component.svg">resources/icons/component.svg</file>
         <file alias="icons/copy.svg">resources/icons/copy.svg</file>
+        <file alias="icons/history.svg">resources/icons/history.svg</file>
         <file alias="icons/crosshair.svg">resources/icons/crosshair.svg</file>
         <file alias="icons/cylinder.svg">resources/icons/cylinder.svg</file>
         <file alias="icons/disc-3.svg">resources/icons/disc-3.svg</file>

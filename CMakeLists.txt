@@ -59,6 +59,7 @@ set(SOURCES
     src/viewport/MeshFeatures.cpp
     src/scene/SceneGraph.cpp
     src/scene/UndoManager.cpp
+    src/scene/MeshWeld.cpp
     src/physics/SimulationEngine.cpp
     src/automation/Expression.cpp
     src/automation/AutomationEngine.cpp

@@ -24,4 +24,5 @@
 | Play / Pause | Space |
 | Step one scan | F10 |
 | Delete the selected part | Delete |
+| Duplicate the selected part, with its children, joints and actuators | Ctrl+D |
 | Rename in the hierarchy | F2, or double-click |

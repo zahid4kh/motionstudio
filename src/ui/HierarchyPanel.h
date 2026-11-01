@@ -12,6 +12,7 @@ public:
 
 signals:
     void objectSelected(int id);
+    void duplicateRequested(int id);
 
 private slots:
     void onObjectAdded(int id);

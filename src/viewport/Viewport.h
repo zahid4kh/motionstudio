@@ -18,6 +18,7 @@
 struct MeshData {
     GLuint vao = 0;
     GLuint vbo = 0;
+    GLuint ebo = 0;     // set for indexed meshes: count is then the index count
     int    count = 0;
 };
 
@@ -106,6 +107,7 @@ private:
     void animateTo(const QQuaternion& rotation, bool fit);
 
     void tryPickObject(int x, int y);
+    std::pair<int,float> pickNearest(const QVector3D& orig, const QVector3D& dir) const;
     void updateHover  (int x, int y);
     bool rayAABB(const QVector3D& orig, const QVector3D& dir,
                  const QVector3D& mn,  const QVector3D& mx,  float& t);
@@ -122,11 +124,23 @@ private:
     MeshData m_cube, m_cylinder, m_sphere, m_capsule, m_basket;
 
     // GPU meshes for ImportedMesh objects, keyed by MeshGeometry pointer so
-    // assembly instances sharing one geometry also share one VBO.
-    // Uploaded lazily in drawScene (GL context current), freed on scene clear.
-    std::unordered_map<const MeshGeometry*, MeshData> m_importedMeshes;
+    // assembly instances sharing one geometry also share one VBO. Uploaded
+    // lazily (welded and indexed) in drawScene with the GL context current.
+    // Buffers live as long as their geometry does, so undo/redo, which swaps
+    // the scene but keeps the same geometry, uploads nothing; the weak
+    // pointer notices a freed geometry (and an address that was reused).
+    struct ImportedMesh {
+        std::weak_ptr<MeshGeometry> geometry;
+        MeshData                    gpu;
+    };
+    std::unordered_map<const MeshGeometry*, ImportedMesh> m_importedMeshes;
+    bool m_sweepMeshes = false;   // geometry may have been freed: sweep on next paint
     const MeshData* meshFor(const SceneObject& obj);
-    void releaseImportedMeshes();
+    void uploadIndexedMesh(MeshData& m, const std::vector<float>& soup);
+    void deleteMesh(MeshData& m);
+    // Frees GPU buffers and feature caches of geometry no longer alive
+    // (GL context must be current)
+    void sweepFreedMeshes();
     GLuint   m_gridVao = 0, m_gridVbo = 0;
     GLuint   m_axisVao = 0, m_axisVbo = 0;
     GLuint   m_wireVao = 0, m_wireVbo = 0;

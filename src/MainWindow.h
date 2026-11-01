@@ -48,6 +48,7 @@ private slots:
     void addJointToSelected();
     void addMotorToSelected();
     void deleteSelected();
+    void duplicateObject(int id);
 
     void onSimStateChanged(bool running);
     void onSimActiveChanged(bool active);
@@ -68,6 +69,9 @@ private:
                           Qt::DockWidgetArea area, QWidget* headerTools = nullptr);
     void updateTitle();
     void updateUndoActions();
+    // File › Open Recent, most recent first (QSettings "file/recent")
+    void rememberRecentFile(const QString& path);
+    void fillRecentMenu(QMenu* menu);
 
     void importStepFile(const QString& path);
     int  addImportedPart(const StepImporter::Part& part, int parentId);

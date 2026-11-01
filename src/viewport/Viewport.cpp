@@ -1,6 +1,7 @@
 #include "Viewport.h"
 #include "ui/Theme.h"
 #include "ViewCube.h"
+#include "scene/MeshWeld.h"
 #include <QVariantAnimation>
 #include <QLabel>
 #include <QMouseEvent>
@@ -231,7 +232,7 @@ Viewport::Viewport(SceneGraph* scene, QWidget* parent)
     setMouseTracking(true);
 
     connect(scene, &SceneGraph::objectAdded,      this, [this](int){ update(); });
-    connect(scene, &SceneGraph::objectRemoved,    this, [this](int){ m_hoveredId = -1; update(); });
+    connect(scene, &SceneGraph::objectRemoved,    this, [this](int){ m_hoveredId = -1; m_sweepMeshes = true; update(); });
     connect(scene, &SceneGraph::objectChanged,    this, [this](int){ update(); });
     connect(scene, &SceneGraph::selectionChanged, this, [this](int){
         m_gizmoHoveredAxis = -1;
@@ -240,7 +241,7 @@ Viewport::Viewport(SceneGraph* scene, QWidget* parent)
     });
     connect(scene, &SceneGraph::sceneCleared,     this, [this]{
         m_hoveredId = -1;
-        releaseImportedMeshes();
+        m_sweepMeshes = true;
         update();
     });
     connect(scene, &SceneGraph::rigidBodyAdded,      this, [this](int){ update(); });
@@ -355,15 +356,8 @@ Viewport::Viewport(SceneGraph* scene, QWidget* parent)
 
 Viewport::~Viewport() {
     makeCurrent();
-    auto del = [&](MeshData& m){
-        if(m.vao) glDeleteVertexArrays(1, &m.vao);
-        if(m.vbo) glDeleteBuffers(1, &m.vbo);
-    };
-    del(m_cube); del(m_cylinder); del(m_sphere); del(m_capsule); del(m_basket);
-    for (auto& [geo, m] : m_importedMeshes) {
-        if (m.vao) glDeleteVertexArrays(1, &m.vao);
-        if (m.vbo) glDeleteBuffers(1, &m.vbo);
-    }
+    for (MeshData* m : {&m_cube, &m_cylinder, &m_sphere, &m_capsule, &m_basket}) deleteMesh(*m);
+    for (auto& [geo, m] : m_importedMeshes) deleteMesh(m.gpu);
     m_importedMeshes.clear();
     if(m_gridVao)  glDeleteVertexArrays(1, &m_gridVao);
     if(m_gridVbo)  glDeleteBuffers(1, &m_gridVbo);
@@ -467,6 +461,7 @@ void Viewport::paintGL() {
     p.setRenderHint(QPainter::TextAntialiasing);
 
     p.beginNativePainting();
+    if (m_sweepMeshes) sweepFreedMeshes();
 
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
@@ -585,26 +580,48 @@ void Viewport::buildMeshes() {
     m_basket   = makeBasket();
 }
 
+// Imported CAD meshes are triangle soup; welded, they need a third to a fifth
+// of the memory (each vertex is shared by several triangles).
+void Viewport::uploadIndexedMesh(MeshData& m, const std::vector<float>& soup) {
+    const WeldedMesh w = weldMesh(soup);
+    uploadMesh(m, w.vertices);
+    glBindVertexArray(m.vao);
+    glGenBuffers(1, &m.ebo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m.ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, GLsizeiptr(w.indices.size() * sizeof(uint32_t)),
+                 w.indices.data(), GL_STATIC_DRAW);
+    glBindVertexArray(0);
+    m.count = int(w.indices.size());
+}
+
+void Viewport::deleteMesh(MeshData& m) {
+    if (m.vao) glDeleteVertexArrays(1, &m.vao);
+    if (m.vbo) glDeleteBuffers(1, &m.vbo);
+    if (m.ebo) glDeleteBuffers(1, &m.ebo);
+    m = MeshData{};
+}
+
 // Lazy GPU upload for imported CAD meshes. Must be called with the GL
 // context current (drawScene). Group nodes (null mesh) return nullptr.
 const MeshData* Viewport::meshFor(const SceneObject& obj) {
     if (!obj.mesh || obj.mesh->interleaved.empty()) return nullptr;
-    auto it = m_importedMeshes.find(obj.mesh.get());
-    if (it != m_importedMeshes.end()) return &it->second;
-    MeshData m;
-    uploadMesh(m, obj.mesh->interleaved);
-    return &(m_importedMeshes[obj.mesh.get()] = m);
+    ImportedMesh& entry = m_importedMeshes[obj.mesh.get()];
+    if (entry.gpu.vao && entry.geometry.lock() == obj.mesh) return &entry.gpu;
+    deleteMesh(entry.gpu);   // a freed geometry's address, reused
+    entry.geometry = obj.mesh;
+    uploadIndexedMesh(entry.gpu, obj.mesh->interleaved);
+    return &entry.gpu;
 }
 
-void Viewport::releaseImportedMeshes() {
-    if (m_importedMeshes.empty()) return;
-    makeCurrent();
-    for (auto& [geo, m] : m_importedMeshes) {
-        if (m.vao) glDeleteVertexArrays(1, &m.vao);
-        if (m.vbo) glDeleteBuffers(1, &m.vbo);
+void Viewport::sweepFreedMeshes() {
+    m_sweepMeshes = false;
+    for (auto it = m_importedMeshes.begin(); it != m_importedMeshes.end();) {
+        if (!it->second.geometry.expired()) { ++it; continue; }
+        deleteMesh(it->second.gpu);
+        it = m_importedMeshes.erase(it);
     }
-    m_importedMeshes.clear();
-    doneCurrent();
+    for (auto it = m_meshFeatures.begin(); it != m_meshFeatures.end();)
+        it = it->second.geometry.expired() ? m_meshFeatures.erase(it) : std::next(it);
 }
 
 void Viewport::buildAxisGizmo() {
@@ -811,7 +828,8 @@ std::vector<Viewport::KeyPoint> Viewport::keyPointsFor(const SceneObject& obj) {
 
 void Viewport::drawMesh(const MeshData& m){
     glBindVertexArray(m.vao);
-    glDrawArrays(GL_TRIANGLES,0,m.count);
+    if(m.ebo) glDrawElements(GL_TRIANGLES, m.count, GL_UNSIGNED_INT, nullptr);
+    else      glDrawArrays(GL_TRIANGLES, 0, m.count);
     glBindVertexArray(0);
 }
 
@@ -1347,27 +1365,81 @@ bool Viewport::rayAABB(const QVector3D& orig,const QVector3D& dir,
     t=tMin; return tMin>=0;
 }
 
-static std::pair<int,float> pickNearest(SceneGraph* scene, const QVector3D& orig, const QVector3D& dir){
-    int bestId=-1; float bestT=std::numeric_limits<float>::max();
-    for(auto& [id,obj] : scene->allObjects()){
+// Whether a ray from `o` along `d` meets the box (an origin inside counts);
+// `tEnter` gets the ray parameter where it enters (0 when inside)
+static bool rayMeetsBox(const QVector3D& o, const QVector3D& d, const QVector3D& mn, const QVector3D& mx,
+                        float* tEnter = nullptr){
+    float tMin = 0.0f, tMax = std::numeric_limits<float>::max();
+    for(int i = 0; i < 3; ++i){
+        if(std::abs(d[i]) < 1e-12f){ if(o[i] < mn[i] || o[i] > mx[i]) return false; continue; }
+        float t1 = (mn[i] - o[i]) / d[i], t2 = (mx[i] - o[i]) / d[i];
+        if(t1 > t2) std::swap(t1, t2);
+        tMin = std::max(tMin, t1);
+        tMax = std::min(tMax, t2);
+        if(tMin > tMax) return false;
+    }
+    if(tEnter) *tEnter = tMin;
+    return true;
+}
+
+// Nearest hit (t > 0, either side) of a ray on a pos+normal triangle soup
+// closer than `maxT`; Möller–Trumbore
+static bool rayHitsSoup(const std::vector<float>& v, const QVector3D& o, const QVector3D& d,
+                        float maxT, float* tOut){
+    bool hit = false;
+    const size_t triCount = v.size() / 18;
+    for(size_t i = 0; i < triCount; ++i){
+        const float* f = &v[i * 18];
+        const QVector3D a(f[0], f[1], f[2]);
+        const QVector3D e1 = QVector3D(f[6], f[7], f[8]) - a, e2 = QVector3D(f[12], f[13], f[14]) - a;
+        const QVector3D p = QVector3D::crossProduct(d, e2);
+        const float det = QVector3D::dotProduct(e1, p);
+        if(std::abs(det) < 1e-20f) continue;
+        const float inv = 1.0f / det;
+        const QVector3D s = o - a;
+        const float u = QVector3D::dotProduct(s, p) * inv;
+        if(u < 0.0f || u > 1.0f) continue;
+        const QVector3D q = QVector3D::crossProduct(s, e1);
+        const float w = QVector3D::dotProduct(d, q) * inv;
+        if(w < 0.0f || u + w > 1.0f) continue;
+        const float t = QVector3D::dotProduct(e2, q) * inv;
+        if(t > 0.0f && t < maxT){ maxT = t; hit = true; }
+    }
+    if(hit) *tOut = maxT;
+    return hit;
+}
+
+// The object whose drawn surface the ray meets first. Bounding boxes only
+// prefilter: overlapping boxes (links, cables, housings of an imported
+// assembly) would otherwise pick whatever box starts nearest, not what
+// is visible under the cursor. Box entry and triangle hits share the ray
+// parameter (the local ray is the world ray mapped affinely), so a box
+// entered beyond the best hit so far is skipped without testing triangles.
+std::pair<int,float> Viewport::pickNearest(const QVector3D& orig, const QVector3D& dir) const {
+    struct Candidate { int id; float tBox; QVector3D lo, ld; const std::vector<float>* soup; };
+    std::vector<Candidate> candidates;
+    for(auto& [id,obj] : m_scene->allObjects()){
         // Assembly group nodes have no geometry — selectable via hierarchy only
-        if(obj.type==PrimitiveType::ImportedMesh && !obj.mesh) continue;
-        QMatrix4x4 inv=scene->worldTransform(id).inverted();
-        QVector3D lo=inv.map(orig), ld(inv*QVector4D(dir,0.0f));
-        float t; QVector3D bmn=obj.aabbMin(), bmx=obj.aabbMax();
-        if(true){
-            float tMn=-1e9f,tMx=1e9f;
-            for(int i=0;i<3;i++){
-                float d=(i==0)?ld.x():(i==1)?ld.y():ld.z();
-                float o2=(i==0)?lo.x():(i==1)?lo.y():lo.z();
-                float mn2=(i==0)?bmn.x():(i==1)?bmn.y():bmn.z();
-                float mx2=(i==0)?bmx.x():(i==1)?bmx.y():bmx.z();
-                if(std::abs(d)<1e-8f){ if(o2<mn2||o2>mx2){ tMn=1e9f; break; } }
-                else { float t1=(mn2-o2)/d,t2=(mx2-o2)/d; if(t1>t2) std::swap(t1,t2); tMn=std::max(tMn,t1); tMx=std::min(tMx,t2); if(tMn>tMx){ tMn=1e9f; break; } }
-            }
-            t=tMn;
-        }
-        if(t<bestT&&t>=0){ bestT=t; bestId=id; }
+        const std::vector<float>* soup = obj.type == PrimitiveType::ImportedMesh
+                                             ? (obj.mesh ? &obj.mesh->interleaved : nullptr)
+                                             : &m_primitiveVertices[int(obj.type)];
+        if(!soup || soup->empty()) continue;
+        bool invertible = false;
+        const QMatrix4x4 inv = m_scene->worldTransform(id).inverted(&invertible);
+        if(!invertible) continue;
+        const QVector3D lo = inv.map(orig), ld = inv.mapVector(dir);
+        float tBox;
+        if(rayMeetsBox(lo, ld, obj.aabbMin(), obj.aabbMax(), &tBox))
+            candidates.push_back({id, tBox, lo, ld, soup});
+    }
+    std::sort(candidates.begin(), candidates.end(),
+              [](const Candidate& a, const Candidate& b){ return a.tBox < b.tBox; });
+
+    int bestId=-1; float bestT=std::numeric_limits<float>::max();
+    for(const Candidate& c : candidates){
+        if(c.tBox >= bestT) break;
+        float t;
+        if(rayHitsSoup(*c.soup, c.lo, c.ld, bestT, &t)){ bestT = t; bestId = c.id; }
     }
     return {bestId,bestT};
 }
@@ -1377,7 +1449,7 @@ void Viewport::tryPickObject(int x, int y){
     float ndcX=(2.0f*x)/m_vpW-1.0f, ndcY=1.0f-(2.0f*y)/m_vpH;
     QVector3D orig, dir;
     m_camera.ray(ndcX, ndcY, aspect, &orig, &dir);
-    auto [id,t]=pickNearest(m_scene, orig, dir);
+    auto [id,t]=pickNearest(orig, dir);
     m_scene->selectObject(id);
 }
 
@@ -1386,7 +1458,7 @@ void Viewport::updateHover(int x, int y){
     float ndcX=(2.0f*x)/m_vpW-1.0f, ndcY=1.0f-(2.0f*y)/m_vpH;
     QVector3D orig, dir;
     m_camera.ray(ndcX, ndcY, aspect, &orig, &dir);
-    auto [id,t]=pickNearest(m_scene, orig, dir);
+    auto [id,t]=pickNearest(orig, dir);
     if(id!=m_hoveredId){
         m_hoveredId=id;
         setCursor(id!=-1 ? Qt::PointingHandCursor : Qt::ArrowCursor);
@@ -1593,19 +1665,6 @@ bool Viewport::toScreen(const QVector3D& world, QPointF* out) const {
     return true;
 }
 
-// Whether a ray from `o` along `d` meets the box (an origin inside counts)
-static bool rayMeetsBox(const QVector3D& o, const QVector3D& d, const QVector3D& mn, const QVector3D& mx){
-    float tMin = 0.0f, tMax = std::numeric_limits<float>::max();
-    for(int i = 0; i < 3; ++i){
-        if(std::abs(d[i]) < 1e-12f){ if(o[i] < mn[i] || o[i] > mx[i]) return false; continue; }
-        float t1 = (mn[i] - o[i]) / d[i], t2 = (mx[i] - o[i]) / d[i];
-        if(t1 > t2) std::swap(t1, t2);
-        tMin = std::max(tMin, t1);
-        tMax = std::min(tMax, t2);
-        if(tMin > tMax) return false;
-    }
-    return true;
-}
 
 static float distanceToSegment(const QPointF& p, const QPointF& a, const QPointF& b){
     const QPointF ab = b - a;

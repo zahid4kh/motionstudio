@@ -118,6 +118,10 @@ void MainWindow::buildMenu() {
     };
     mkA(file, "file-plus",       "&New Project",    &MainWindow::newProject,   QKeySequence::New);
     mkA(file, "folder-open",     "&Open Project…", &MainWindow::openProject,  QKeySequence::Open);
+    {
+        auto* recent = file->addMenu(Theme::icon("history"), "Open &Recent");
+        connect(recent, &QMenu::aboutToShow, this, [this, recent]{ fillRecentMenu(recent); });
+    }
     mkA(file, "layout-template", "Open &Template…",&MainWindow::openTemplate);
     file->addSeparator();
     mkA(file, "file-input",      "&Import STEP…",  &MainWindow::importStep);
@@ -146,6 +150,14 @@ void MainWindow::buildMenu() {
     m_redoAction->setEnabled(false);
     connect(m_redoAction, &QAction::triggered, m_undo, &UndoManager::redo);
     edit->addAction(m_redoAction);
+    edit->addSeparator();
+    {
+        auto* dup = new QAction(Theme::icon("copy"), "&Duplicate", this);
+        dup->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+        connect(dup, &QAction::triggered, this, [this]{ duplicateObject(m_scene->selectedObjectId()); });
+        edit->addAction(dup);
+        addAction(dup);   // so Ctrl+D also works from floating panels
+    }
 
     // Menu bar on the frame, the toolbar island below it (filled by buildToolbar)
     auto* top = new QWidget;
@@ -412,6 +424,7 @@ QDockWidget* MainWindow::makeDock(const QString& title, const QString& icon, QWi
 
 void MainWindow::buildDocks() {
     m_hierarchy  = new HierarchyPanel(m_scene, this);
+    connect(m_hierarchy, &HierarchyPanel::duplicateRequested, this, &MainWindow::duplicateObject);
     m_properties = new PropertiesPanel(m_scene, this);
 
     m_hierarchyDock  = makeDock("Hierarchy",  "list-tree", m_hierarchy, Qt::LeftDockWidgetArea);
@@ -497,6 +510,7 @@ bool MainWindow::openFile(const QString& path) {
     m_sim->reset();
     if(ProjectSerializer::load(*m_scene, path)){
         m_currentFile = path;
+        rememberRecentFile(path);
         m_dirty = false;
         updateTitle();
         m_undo->reset();
@@ -539,6 +553,7 @@ void MainWindow::saveProject() {
     if(m_currentFile.isEmpty()){ saveProjectAs(); return; }
     if(ProjectSerializer::save(*m_scene, m_currentFile)){
         m_dirty = false;
+        rememberRecentFile(m_currentFile);
         updateTitle();
         showStatus("Saved: " + QFileInfo(m_currentFile).fileName());
     } else {
@@ -554,6 +569,43 @@ void MainWindow::saveProjectAs() {
     if(path.isEmpty()) return;
     m_currentFile = path;
     saveProject();
+}
+
+static constexpr int kMaxRecentFiles = 8;
+
+void MainWindow::rememberRecentFile(const QString& path) {
+    QSettings settings("MotionStudio", "MotionStudio");
+    const QString absolute = QFileInfo(path).absoluteFilePath();
+    QStringList recent = settings.value("file/recent").toStringList();
+    recent.removeAll(absolute);
+    recent.prepend(absolute);
+    while(recent.size() > kMaxRecentFiles) recent.removeLast();
+    settings.setValue("file/recent", recent);
+}
+
+void MainWindow::fillRecentMenu(QMenu* menu) {
+    menu->clear();
+    QSettings settings("MotionStudio", "MotionStudio");
+    const QStringList recent = settings.value("file/recent").toStringList();
+    if(recent.isEmpty()){
+        menu->addAction("No recent projects")->setEnabled(false);
+        return;
+    }
+    for(const QString& path : recent){
+        const QFileInfo info(path);
+        QAction* a = menu->addAction(info.fileName() + "  \u2014  " + info.absolutePath());
+        a->setEnabled(info.exists());
+        connect(a, &QAction::triggered, this, [this, path]{
+            if(m_dirty && QMessageBox::question(this, "Open Project",
+                "You have unsaved changes. Discard and open another project?",
+                QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes) return;
+            openFile(path);
+        });
+    }
+    menu->addSeparator();
+    menu->addAction("Clear Recent", this, []{
+        QSettings("MotionStudio", "MotionStudio").remove("file/recent");
+    });
 }
 
 // ── STEP import ───────────────────────────────────────────────────────────────
@@ -718,6 +770,16 @@ void MainWindow::addMotorToSelected() {
     int mid = m_scene->addActuatorForJoint(joint->id);
     const Motor* m = m_scene->getMotor(mid);
     showStatus(QString("Actuator %1 added — drive it from a sequence in the Automation panel").arg(m ? m->name : ""));
+}
+
+void MainWindow::duplicateObject(int id) {
+    const SceneObject* obj = m_scene->getObject(id);
+    if(!obj){ showStatus("Nothing selected", false); return; }
+    if(m_sim->isActive()){ showStatus("Reset the simulation before duplicating", false); return; }
+    const QString name = obj->name;
+    const int copyId = m_scene->duplicateObject(id);
+    m_scene->selectObject(copyId);
+    showStatus("Duplicated " + name + " — drag the gizmo to move the copy");
 }
 
 void MainWindow::deleteSelected() {

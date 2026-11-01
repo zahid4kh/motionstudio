@@ -14,7 +14,7 @@ Goal: See objects.
 - [x] Zoom camera (scroll wheel)
 - [x] Grid floor (XZ plane, 40 × 40 units)
 - [x] Object rendering with Phong shading
-- [x] Object selection via ray–AABB intersection (left click)
+- [x] Object selection by clicking the visible surface (bounding boxes prefilter, then a triangle test)
 - [x] Selected object highlight (yellow tint)
 
 ---
@@ -111,7 +111,8 @@ Goal: Projects persist.
 - [ ] Sensors
 - [ ] Digital Twin
 - [x] Undo / Redo (whole-scene snapshots, Ctrl+Z / Ctrl+Shift+Z)
-- [ ] Object duplication
+- [x] Object duplication (Ctrl+D, or Duplicate in the hierarchy menu): copies the subtree with its joints, actuators, rigid bodies and conveyor belts
+- [x] File › Open Recent
 - [ ] Multi-select
   - Partly done: the hierarchy has extended selection (Ctrl/Shift click) for deleting several items. The viewport and Properties panel still work on one object.
 - [ ] Timeline scrubbing

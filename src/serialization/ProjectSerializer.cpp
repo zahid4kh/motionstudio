@@ -4,6 +4,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QByteArray>
+#include "../scene/MeshWeld.h"
 #include <cstring>
 #include <map>
 #include <algorithm>
@@ -56,24 +57,81 @@ static PrimitiveType primitiveFromStr(const QString& s) {
 // Mesh geometry is stored once per unique MeshGeometry (shared_ptr identity)
 // in a top-level "meshes" array; objects with the same imported part reference
 // it by index so repeated assembly instances don't duplicate triangle data.
+//
+// On disk a mesh is welded into indexed form (lossless, see MeshWeld.h) and
+// both arrays are zlib-compressed before base64. Older files stored the raw
+// triangle soup as "vertexData"; those still load.
+static QString packArray(const void* data, size_t bytes) {
+    return QString::fromLatin1(qCompress(QByteArray::fromRawData(static_cast<const char*>(data),
+                                                                 qsizetype(bytes))).toBase64());
+}
+template <typename T>
+static std::vector<T> unpackArray(const QJsonValue& v) {
+    const QByteArray raw = qUncompress(QByteArray::fromBase64(v.toString().toLatin1()));
+    std::vector<T> out(size_t(raw.size()) / sizeof(T));
+    if (!out.empty()) memcpy(out.data(), raw.constData(), out.size() * sizeof(T));
+    return out;
+}
+
 static QJsonObject meshToJson(const MeshGeometry& m) {
-    QByteArray raw(reinterpret_cast<const char*>(m.interleaved.data()),
-                   int(m.interleaved.size() * sizeof(float)));
+    const WeldedMesh w = weldMesh(m.interleaved);
     QJsonObject o;
-    o["vertexData"] = QString::fromLatin1(raw.toBase64());
-    o["aabbMin"]    = vec3ToJson(m.aabbMin);
-    o["aabbMax"]    = vec3ToJson(m.aabbMax);
+    o["encoding"] = "indexed-zlib";
+    o["vertices"] = packArray(w.vertices.data(), w.vertices.size() * sizeof(float));
+    o["indices"]  = packArray(w.indices.data(), w.indices.size() * sizeof(uint32_t));
+    o["aabbMin"]  = vec3ToJson(m.aabbMin);
+    o["aabbMax"]  = vec3ToJson(m.aabbMax);
     return o;
 }
 static std::shared_ptr<MeshGeometry> meshFromJson(const QJsonObject& o) {
     auto m = std::make_shared<MeshGeometry>();
-    QByteArray raw = QByteArray::fromBase64(o["vertexData"].toString().toLatin1());
-    m->interleaved.resize(size_t(raw.size()) / sizeof(float));
-    if (!m->interleaved.empty())
-        memcpy(m->interleaved.data(), raw.constData(), size_t(raw.size()));
+    if (o["encoding"].toString() == "indexed-zlib") {
+        m->interleaved = unweldMesh(unpackArray<float>(o["vertices"]), unpackArray<uint32_t>(o["indices"]));
+    } else {
+        QByteArray raw = QByteArray::fromBase64(o["vertexData"].toString().toLatin1());
+        m->interleaved.resize(size_t(raw.size()) / sizeof(float));
+        if (!m->interleaved.empty())
+            memcpy(m->interleaved.data(), raw.constData(), m->interleaved.size() * sizeof(float));
+    }
     m->aabbMin = vec3FromJson(o["aabbMin"].toObject());
     m->aabbMax = vec3FromJson(o["aabbMax"].toObject());
     return m;
+}
+
+// ── MeshPool ─────────────────────────────────────────────────────────────────
+
+int MeshPool::add(const std::shared_ptr<MeshGeometry>& mesh) {
+    auto it = m_keys.find(mesh.get());
+    if (it != m_keys.end()) return it->second;
+    const int key = m_nextKey++;
+    m_keys[mesh.get()] = key;
+    m_meshes[key] = mesh;
+    return key;
+}
+
+std::shared_ptr<MeshGeometry> MeshPool::get(int key) const {
+    auto it = m_meshes.find(key);
+    return it != m_meshes.end() ? it->second : nullptr;
+}
+
+void MeshPool::retainOnly(const std::set<int>& keys) {
+    for (auto it = m_meshes.begin(); it != m_meshes.end();) {
+        if (keys.count(it->first)) { ++it; continue; }
+        m_keys.erase(it->second.get());
+        it = m_meshes.erase(it);
+    }
+}
+
+void MeshPool::clear() {
+    m_keys.clear();
+    m_meshes.clear();
+}
+
+void MeshPool::collectKeys(const QJsonObject& snapshot, std::set<int>* keys) {
+    for (auto v : snapshot["meshes"].toArray()) {
+        const QJsonObject o = v.toObject();
+        if (o.contains("ref")) keys->insert(o["ref"].toInt());
+    }
 }
 
 static QString collisionTypeToStr(CollisionType t) {
@@ -94,7 +152,7 @@ static CollisionType collisionTypeFromStr(const QString& s) {
 
 // ── save ─────────────────────────────────────────────────────────────────────
 
-QJsonObject ProjectSerializer::toJson(const SceneGraph& scene) {
+QJsonObject ProjectSerializer::toJson(const SceneGraph& scene, MeshPool* pool) {
     QJsonArray objects, joints, motors, rigidBodies, conveyorBelts, meshes;
 
     // De-dupe by MeshGeometry identity so shared assembly parts serialize once
@@ -125,7 +183,7 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene) {
                 idx = it->second;
             } else {
                 idx = meshes.size();
-                meshes.append(meshToJson(*obj.mesh));
+                meshes.append(pool ? QJsonObject{{"ref", pool->add(obj.mesh)}} : meshToJson(*obj.mesh));
                 meshIndex[obj.mesh.get()] = idx;
             }
             o["meshId"] = idx;
@@ -251,7 +309,7 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene) {
     }
 
     QJsonObject root;
-    root["version"]       = 2;
+    root["version"]       = 3;
     root["objects"]       = objects;
     root["joints"]        = joints;
     root["motors"]        = motors;
@@ -273,13 +331,15 @@ bool ProjectSerializer::save(const SceneGraph& scene, const QString& filePath) {
 
 // ── load ─────────────────────────────────────────────────────────────────────
 
-bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root) {
+bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root, const MeshPool* pool) {
     scene.clear();
 
     // Shared mesh geometry, indexed as written by save()
     std::vector<std::shared_ptr<MeshGeometry>> meshList;
-    for (auto v : root["meshes"].toArray())
-        meshList.push_back(meshFromJson(v.toObject()));
+    for (auto v : root["meshes"].toArray()) {
+        const QJsonObject o = v.toObject();
+        meshList.push_back(pool && o.contains("ref") ? pool->get(o["ref"].toInt()) : meshFromJson(o));
+    }
 
     struct ObjData {
         int id; QString name; PrimitiveType type; int parentId; Transform transform;
@@ -310,7 +370,7 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root) {
         idMap[d.id] = newId;
         if (SceneObject* obj = scene.getObject(newId)) {
             obj->transform = d.transform;
-            if (d.meshId >= 0 && d.meshId < int(meshList.size()))
+            if (d.meshId >= 0 && d.meshId < int(meshList.size()) && meshList[size_t(d.meshId)])
                 obj->mesh = meshList[size_t(d.meshId)];
         }
     }

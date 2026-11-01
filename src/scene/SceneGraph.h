@@ -19,6 +19,12 @@ public:
     // Objects
     int              addObject(const QString& name, PrimitiveType type, int parentId = -1);
     void             removeObject(int id);
+    // Copies the object and its subtree next to the original: same parent
+    // and transform, shared mesh geometry, plus the joints into the copied
+    // objects (with their actuators, renamed to free symbols), rigid bodies
+    // and conveyor belts. Poses and sequences are not copied. Returns the
+    // copy's id, or -1.
+    int              duplicateObject(int id);
     SceneObject*     getObject(int id);
     const SceneObject* getObject(int id) const;
     const std::vector<int>&                       rootObjects() const { return m_roots; }

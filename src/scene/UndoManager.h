@@ -3,6 +3,7 @@
 #include <QJsonObject>
 #include <QTimer>
 #include <vector>
+#include "../serialization/ProjectSerializer.h"
 
 class SceneGraph;
 
@@ -16,6 +17,8 @@ class SceneGraph;
 // millisecond, so the cost of "just snapshot everything" is negligible next
 // to the correctness win: every mutation type is covered automatically,
 // with no risk of a hand-written Command forgetting to touch some field.
+// Mesh geometry is not copied: snapshots reference it through a MeshPool, so
+// a checkpoint costs the same on a large imported assembly as on a cube.
 //
 // Rapid-fire signals from one user gesture (dragging the translate gizmo
 // emits objectChanged on every mouse-move) are coalesced by a short idle
@@ -45,7 +48,12 @@ private slots:
     void commitCheckpoint();
 
 private:
+    QJsonObject snapshot();
+    void        restore(const QJsonObject& snapshot);
+    void        pruneMeshPool();
+
     SceneGraph*          m_scene;
+    MeshPool             m_meshPool;
     QTimer               m_coalesceTimer;
     QJsonObject          m_baseline;
     std::vector<QJsonObject> m_undoStack;

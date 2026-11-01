@@ -58,6 +58,62 @@ int SceneGraph::addObject(const QString& name, PrimitiveType type, int parentId)
     return obj.id;
 }
 
+int SceneGraph::duplicateObject(int id) {
+    const SceneObject* source = getObject(id);
+    if (!source) return -1;
+
+    std::unordered_map<int, int> copyOf;   // original object id → copy id
+    auto copySubtree = [&](auto& self, int originalId, int parentId) -> void {
+        const SceneObject original = m_objects.at(originalId);   // by value: addObject may rehash
+        const int copyId = addObject(originalId == id ? original.name + " copy" : original.name,
+                                     original.type, parentId);
+        SceneObject& copy = m_objects.at(copyId);
+        copy.transform = original.transform;
+        copy.mesh      = original.mesh;
+        copyOf[originalId] = copyId;
+        emit objectChanged(copyId);
+        for (int childId : original.childIds) self(self, childId, copyId);
+    };
+    copySubtree(copySubtree, id, source->parentId);
+
+    // Joints moving a copied object; a joint to a parent outside the subtree
+    // (the copy's root hanging off the same parent) keeps that parent
+    std::vector<int> jointIds;
+    for (auto& [jid, j] : m_joints)
+        if (copyOf.count(j.childBodyId)) jointIds.push_back(jid);
+    std::sort(jointIds.begin(), jointIds.end());
+    for (int jid : jointIds) {
+        Joint joint = m_joints.at(jid);
+        const float currentValue = joint.currentValue;
+        joint.childBodyId = copyOf.at(joint.childBodyId);
+        if (copyOf.count(joint.parentBodyId)) joint.parentBodyId = copyOf.at(joint.parentBodyId);
+        const int copyJointId = addJoint(joint);
+        m_joints.at(copyJointId).currentValue = currentValue;
+        if (const Motor* motor = motorForJoint(jid)) {
+            Motor copy = *motor;
+            copy.jointId = copyJointId;
+            addMotor(copy);   // the name is taken, so addMotor picks a free one (J1 → J1_2)
+        }
+    }
+
+    for (auto& [originalId, copyId] : copyOf) {
+        if (const RigidBody* rb = getRigidBody(originalId)) {
+            RigidBody copy = *rb;
+            addRigidBody(copyId);
+            copy.objectId = copyId;
+            *getRigidBody(copyId) = copy;
+            emit rigidBodyChanged(copyId);
+        }
+        if (const ConveyorBelt* belt = getConveyorBelt(originalId)) {
+            const ConveyorBelt copy = *belt;
+            addConveyorBelt(copyId);
+            *getConveyorBelt(copyId) = copy;
+            emit conveyorBeltChanged(copyId);
+        }
+    }
+    return copyOf.at(id);
+}
+
 void SceneGraph::removeObject(int id) {
     auto it = m_objects.find(id);
     if (it == m_objects.end()) return;

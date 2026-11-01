@@ -1,6 +1,5 @@
 #include "UndoManager.h"
 #include "SceneGraph.h"
-#include "../serialization/ProjectSerializer.h"
 
 UndoManager::UndoManager(SceneGraph* scene, QObject* parent)
     : QObject(parent), m_scene(scene)
@@ -25,7 +24,27 @@ UndoManager::UndoManager(SceneGraph* scene, QObject* parent)
     connect(scene, &SceneGraph::floorChanged,       this, &UndoManager::onSceneMutated);
     connect(scene, &SceneGraph::automationChanged,  this, &UndoManager::onSceneMutated);
 
-    m_baseline = ProjectSerializer::toJson(*m_scene);
+    m_baseline = snapshot();
+}
+
+QJsonObject UndoManager::snapshot() {
+    return ProjectSerializer::toJson(*m_scene, &m_meshPool);
+}
+
+void UndoManager::restore(const QJsonObject& snapshot) {
+    m_restoring = true;
+    ProjectSerializer::fromJson(*m_scene, snapshot, &m_meshPool);
+    m_restoring = false;
+}
+
+// Releases meshes no snapshot refers to any more (deleted parts that fell
+// off the end of the history, or the previous project after reset())
+void UndoManager::pruneMeshPool() {
+    std::set<int> keys;
+    MeshPool::collectKeys(m_baseline, &keys);
+    for (auto& s : m_undoStack) MeshPool::collectKeys(s, &keys);
+    for (auto& s : m_redoStack) MeshPool::collectKeys(s, &keys);
+    m_meshPool.retainOnly(keys);
 }
 
 void UndoManager::onSceneMutated() {
@@ -35,7 +54,7 @@ void UndoManager::onSceneMutated() {
 
 void UndoManager::commitCheckpoint() {
     if (m_restoring) return;
-    QJsonObject current = ProjectSerializer::toJson(*m_scene);
+    QJsonObject current = snapshot();
     if (current == m_baseline) return;
 
     m_undoStack.push_back(m_baseline);
@@ -43,6 +62,7 @@ void UndoManager::commitCheckpoint() {
         m_undoStack.erase(m_undoStack.begin());
     m_redoStack.clear();
     m_baseline = current;
+    pruneMeshPool();
     emit historyChanged();
 }
 
@@ -55,9 +75,7 @@ void UndoManager::undo() {
     m_undoStack.pop_back();
     m_redoStack.push_back(m_baseline);
 
-    m_restoring = true;
-    ProjectSerializer::fromJson(*m_scene, prev);
-    m_restoring = false;
+    restore(prev);
 
     m_baseline = prev;
     emit historyChanged();
@@ -72,9 +90,7 @@ void UndoManager::redo() {
     m_redoStack.pop_back();
     m_undoStack.push_back(m_baseline);
 
-    m_restoring = true;
-    ProjectSerializer::fromJson(*m_scene, next);
-    m_restoring = false;
+    restore(next);
 
     m_baseline = next;
     emit historyChanged();
@@ -84,6 +100,7 @@ void UndoManager::reset() {
     m_coalesceTimer.stop();
     m_undoStack.clear();
     m_redoStack.clear();
-    m_baseline = ProjectSerializer::toJson(*m_scene);
+    m_meshPool.clear();
+    m_baseline = snapshot();
     emit historyChanged();
 }
