@@ -6,6 +6,7 @@
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QShortcut>
+#include <QScrollBar>
 #include "Theme.h"
 #include "PrimitiveIcons.h"
 
@@ -44,6 +45,12 @@ HierarchyPanel::HierarchyPanel(SceneGraph* scene, QWidget* parent)
             this, &HierarchyPanel::onItemDoubleClicked);
     connect(m_tree, &QTreeWidget::customContextMenuRequested,
             this, &HierarchyPanel::showContextMenu);
+    auto remember = [this](QTreeWidgetItem* item, bool collapsed){
+        const QString path = item->data(0, Qt::UserRole + 1).toString();
+        if(collapsed) m_collapsed.insert(path); else m_collapsed.remove(path);
+    };
+    connect(m_tree, &QTreeWidget::itemCollapsed, this, [remember](QTreeWidgetItem* i){ remember(i, true); });
+    connect(m_tree, &QTreeWidget::itemExpanded,  this, [remember](QTreeWidgetItem* i){ remember(i, false); });
 
     auto* renameShortcut = new QShortcut(QKeySequence(Qt::Key_F2), m_tree);
     renameShortcut->setContext(Qt::WidgetShortcut);
@@ -61,13 +68,15 @@ HierarchyPanel::HierarchyPanel(SceneGraph* scene, QWidget* parent)
     connect(scene, &SceneGraph::rigidBodyRemoved,  this, &HierarchyPanel::onRigidBodyChanged);
 }
 
-void HierarchyPanel::addItem(int objectId, QTreeWidgetItem* parentItem) {
+void HierarchyPanel::addItem(int objectId, QTreeWidgetItem* parentItem, const QString& parentPath) {
     const SceneObject* obj = m_scene->getObject(objectId);
     if(!obj) return;
 
     auto* item = new QTreeWidgetItem();
     item->setText(0, obj->name);
     item->setData(0, Qt::UserRole, objectId);
+    const QString path = parentPath + '/' + obj->name;
+    item->setData(0, Qt::UserRole + 1, path);
 
     if(parentItem)
         parentItem->addChild(item);
@@ -75,11 +84,11 @@ void HierarchyPanel::addItem(int objectId, QTreeWidgetItem* parentItem) {
         m_tree->addTopLevelItem(item);
 
     m_items[objectId] = item;
-    item->setExpanded(true);
+    item->setExpanded(!m_collapsed.contains(path));
     applyRigidBodyIcon(item, objectId);
 
     for(int childId : obj->childIds)
-        addItem(childId, item);
+        addItem(childId, item, path);
 }
 
 // The item's icon shows the primitive type; objects that carry a RigidBody are
@@ -99,30 +108,47 @@ void HierarchyPanel::onRigidBodyChanged(int objectId) {
 }
 
 void HierarchyPanel::rebuild() {
+    m_rebuildPending = false;
     m_ignoreSelection = true;
+    const int scroll = m_tree->verticalScrollBar()->value();
+    m_tree->setUpdatesEnabled(false);
     m_tree->clear();
     m_items.clear();
     for(int rootId : m_scene->rootObjects())
-        addItem(rootId, nullptr);
+        addItem(rootId, nullptr, QString());
+    m_tree->verticalScrollBar()->setValue(scroll);
+    m_tree->setUpdatesEnabled(true);
     m_ignoreSelection = false;
+    // Keep showing the scene's selection; the tree is new, so select it again
+    revealSelection(m_scene->selectedObjectId(), false);
 }
 
-void HierarchyPanel::onObjectAdded(int) { rebuild(); }
-void HierarchyPanel::onObjectRemoved(int) { rebuild(); }
-void HierarchyPanel::onSceneCleared() { rebuild(); }
+void HierarchyPanel::scheduleRebuild() {
+    if(m_rebuildPending) return;
+    m_rebuildPending = true;
+    QMetaObject::invokeMethod(this, [this]{ if(m_rebuildPending) rebuild(); }, Qt::QueuedConnection);
+}
+
+void HierarchyPanel::onObjectAdded(int) { scheduleRebuild(); }
+void HierarchyPanel::onObjectRemoved(int) { scheduleRebuild(); }
+void HierarchyPanel::onSceneCleared() { scheduleRebuild(); }
 
 void HierarchyPanel::onSelectionChanged(int id) {
     // If this fired because the tree itself just changed m_scene's selection
     // (see onTreeSelectionChanged), don't fight the tree's own selection —
     // that would collapse a multi-selection back down to one item.
     if(m_ignoreSelection) return;
+    if(m_rebuildPending){ rebuild(); return; }   // rebuild() selects it
+    revealSelection(id, true);
+}
 
+// Selects the object's item; picked in the viewport, maybe deep in a
+// collapsed assembly, it opens the way to it and brings it into view
+void HierarchyPanel::revealSelection(int id, bool centre) {
     m_ignoreSelection = true;
     m_tree->clearSelection();
     if(id != -1 && m_items.contains(id)){
         QTreeWidgetItem* item = m_items[id];
-        // Picked in the viewport, maybe deep in a collapsed assembly: open
-        // the way to it and bring it into view
         bool opened = false;
         for(QTreeWidgetItem* p = item->parent(); p; p = p->parent())
             if(!p->isExpanded()){ p->setExpanded(true); opened = true; }
@@ -131,7 +157,8 @@ void HierarchyPanel::onSelectionChanged(int id) {
         // left alone when it's already in view
         const bool inView = m_tree->viewport()->rect().contains(m_tree->visualItemRect(item));
         m_tree->setCurrentItem(item, 0, QItemSelectionModel::ClearAndSelect);
-        if(!inView) m_tree->scrollToItem(item, QAbstractItemView::PositionAtCenter);
+        if(!inView) m_tree->scrollToItem(item, centre ? QAbstractItemView::PositionAtCenter
+                                                      : QAbstractItemView::EnsureVisible);
     }
     m_ignoreSelection = false;
 }
@@ -233,8 +260,11 @@ void HierarchyPanel::showContextMenu(const QPoint& pos) {
 }
 
 void HierarchyPanel::deleteSelectedItems(const QList<QTreeWidgetItem*>& items) {
+    std::vector<int> ids;
     for(QTreeWidgetItem* item : items)
-        m_scene->removeObject(item->data(0, Qt::UserRole).toInt());
+        ids.push_back(item->data(0, Qt::UserRole).toInt());
+    for(int id : ids)
+        m_scene->removeObject(id);
 }
 
 void HierarchyPanel::setRelation(int childId, int parentId) {

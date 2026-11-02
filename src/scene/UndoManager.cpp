@@ -32,10 +32,53 @@ QJsonObject UndoManager::snapshot() {
     return ProjectSerializer::toJson(*m_scene, &m_meshPool);
 }
 
+namespace {
+
+// Where an object sits in the tree, as names from the root down; the index
+// tells same-named siblings apart. Ids are reallocated on restore, so this is
+// how the selection finds its object again.
+using TreePath = std::vector<std::pair<QString, int>>;
+
+TreePath pathOf(const SceneGraph& scene, int id) {
+    TreePath path;
+    for (const SceneObject* o = scene.getObject(id); o; o = scene.getObject(o->parentId)) {
+        const SceneObject* parent = scene.getObject(o->parentId);
+        const std::vector<int>& siblings = parent ? parent->childIds : scene.rootObjects();
+        int n = 0;
+        for (int s : siblings) {
+            if (s == o->id) break;
+            if (const SceneObject* so = scene.getObject(s); so && so->name == o->name) n++;
+        }
+        path.insert(path.begin(), {o->name, n});
+    }
+    return path;
+}
+
+int objectAt(const SceneGraph& scene, const TreePath& path) {
+    int id = -1;
+    for (const auto& [name, index] : path) {
+        const SceneObject* parent = scene.getObject(id);
+        const std::vector<int>& siblings = parent ? parent->childIds : scene.rootObjects();
+        int n = 0, found = -1;
+        for (int s : siblings) {
+            const SceneObject* so = scene.getObject(s);
+            if (so && so->name == name && n++ == index) { found = s; break; }
+        }
+        if (found == -1) return -1;
+        id = found;
+    }
+    return id;
+}
+
+} // namespace
+
 void UndoManager::restore(const QJsonObject& snapshot) {
+    const TreePath selected = pathOf(*m_scene, m_scene->selectedObjectId());
     m_restoring = true;
     ProjectSerializer::fromJson(*m_scene, snapshot, &m_meshPool);
     m_restoring = false;
+    // Keep the selection on the same part, so its panels stay open
+    m_scene->selectObject(selected.empty() ? -1 : objectAt(*m_scene, selected));
 }
 
 // Releases meshes no snapshot refers to any more (deleted parts that fell
@@ -78,7 +121,10 @@ void UndoManager::undo() {
 
     restore(prev);
 
-    m_baseline = prev;
+    // Re-taken rather than prev: loading closes gaps in the ids, so the
+    // scene no longer serializes to prev exactly, and the next undo would
+    // record that difference as an edit of its own
+    m_baseline = snapshot();
     emit historyChanged();
 }
 
@@ -93,7 +139,10 @@ void UndoManager::redo() {
 
     restore(next);
 
-    m_baseline = next;
+    // Re-taken rather than next: loading closes gaps in the ids, so the
+    // scene no longer serializes to next exactly, and the next undo would
+    // record that difference as an edit of its own
+    m_baseline = snapshot();
     emit historyChanged();
 }
 

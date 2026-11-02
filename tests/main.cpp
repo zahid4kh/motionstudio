@@ -179,6 +179,47 @@ TEST(opacityMultipliesDownDuplicatesAndSaves) {
     CHECK(std::abs(u.allObjects().begin()->second.opacity - 0.3f) < 1e-6f);
 }
 
+TEST(undoKeepsTheSelectedPart) {
+    SceneGraph u;
+    UndoManager undo(&u);
+    auto settle = [&]{
+        QElapsedTimer wait; wait.start();
+        while (wait.elapsed() < 700) QCoreApplication::processEvents();
+    };
+    addBox(u, "Base", {0, 0, 0}, {1, 1, 1});
+    const int asm_ = u.addObject("Asm", PrimitiveType::ImportedMesh);
+    addBox(u, "P", {0, 0, 0}, {1, 1, 1}, asm_);
+    const int p2 = addBox(u, "P", {1, 0, 0}, {1, 1, 1}, asm_);
+    addBox(u, "Q", {2, 0, 0}, {1, 1, 1}, asm_);
+    undo.reset();
+
+    // Deleting leaves a gap in the ids, which the restore closes up
+    u.removeObject(u.rootObjects().front());
+    settle();
+    u.selectObject(p2);
+    u.getObject(p2)->opacity = 0.3f;
+    emit u.objectChanged(p2);
+    settle();
+
+    auto selected = [&]() -> const SceneObject* { return u.getObject(u.selectedObjectId()); };
+    undo.undo();
+    const SceneObject* s = selected();
+    CHECK(s && s->name == "P" && s->opacity == 1.0f && u.getObject(s->parentId)->childIds[1] == s->id);
+    undo.undo();   // Base is back, ids shift again
+    s = selected();
+    CHECK(!undo.canUndo());
+    CHECK(u.allObjects().size() == 5);
+    CHECK(s && s->name == "P" && u.getObject(s->parentId)->childIds[1] == s->id);
+    undo.redo();
+    undo.redo();
+    s = selected();
+    CHECK(s && s->name == "P" && std::abs(s->opacity - 0.3f) < 1e-6f);
+
+    u.deselectAll();
+    undo.undo();
+    CHECK(u.selectedObjectId() == -1);
+}
+
 // ── Sensors ─────────────────────────────────────────────────────────────────
 
 TEST(sensorBeamDetectsAndMeasures) {

@@ -110,9 +110,13 @@ Mates are saved in the project. Dragging or typing the position of a mated part 
 
 While the simulation is active (from the first Play/Step until Reset), automation definitions, joints and actuators are locked. Undo/redo are disabled.
 
+Undo (Ctrl+Z) and redo (Ctrl+Shift+Z) keep the selected part selected, so its properties stay open while you step back and forth. They stay quick on large imported assemblies.
+
 ---
 
 ## Properties panel
+
+Shows the selected part. With nothing selected (click empty space in the viewport) it says so instead of showing the last part's values.
 
 ### Transform
 - **Position** — local position relative to parent
@@ -271,6 +275,7 @@ A real PLC (or CODESYS, OpenPLC…) can drive the model over Modbus TCP. Give si
 - Shows parent-child tree of all objects
 - **Click** an item to select it
 - Selecting a part in the viewport selects it here too: collapsed assemblies open up to it and the tree scrolls it into view
+- Assemblies you collapse stay collapsed when the tree updates (after undo, adding or deleting parts)
 - **Double-click** to rename
 - **Right-click** → Rename, Duplicate, **Add Sensor Here…**, Delete
 

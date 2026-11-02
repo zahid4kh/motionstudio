@@ -136,6 +136,15 @@ PropertiesPanel::PropertiesPanel(SceneGraph* scene, QWidget* parent)
     buildPhysicsSection();
     buildConveyorSection();
 
+    // Shown instead of the object's sections while nothing is selected
+    m_emptyHint = new QLabel("Nothing selected.\nClick a part in the viewport or the Hierarchy "
+                             "to see and edit its properties.");
+    m_emptyHint->setObjectName("hint");
+    m_emptyHint->setWordWrap(true);
+    m_emptyHint->setAlignment(Qt::AlignCenter);
+    m_emptyHint->setContentsMargins(8, 24, 8, 8);
+    vbox->addWidget(m_emptyHint);
+
     vbox->addWidget(m_nameLabel->parentWidget());
     vbox->addWidget(m_pointGroup);
     vbox->addWidget(m_transformGroup);
@@ -150,7 +159,7 @@ PropertiesPanel::PropertiesPanel(SceneGraph* scene, QWidget* parent)
     // Initial hidden state
     m_nameLabel->parentWidget()->hide();
     m_pointGroup->hide();
-    m_transformGroup->setEnabled(false);
+    m_transformGroup->hide();
     showConnectionsGroup(false);
     showJointGroup(false);
     showMotorGroup(false);
@@ -158,6 +167,8 @@ PropertiesPanel::PropertiesPanel(SceneGraph* scene, QWidget* parent)
     m_conveyorGroup->hide();
 
     connect(scene, &SceneGraph::selectionChanged, this, &PropertiesPanel::onSelectionChanged);
+    // Clearing the scene drops the selection without a signal (undo then selects again)
+    connect(scene, &SceneGraph::sceneCleared,     this, [this]{ onSelectionChanged(-1); });
     connect(scene, &SceneGraph::objectChanged,    this, [this](int id){
         if (id == m_currentId) loadObject(id);
     });
@@ -949,10 +960,12 @@ void PropertiesPanel::updateConveyorUI(int objectId) {
 // ── Load / selection ──────────────────────────────────────────────────────────
 
 void PropertiesPanel::onSelectionChanged(int id) {
+    if (!m_scene->getObject(id)) id = -1;
     m_currentId = id;
+    m_emptyHint->setVisible(id == -1);
     if (id == -1) {
         m_nameLabel->parentWidget()->hide();
-        m_transformGroup->setEnabled(false);
+        m_transformGroup->hide();
         showConnectionsGroup(false);
         showJointGroup(false);
         showMotorGroup(false);
@@ -961,7 +974,7 @@ void PropertiesPanel::onSelectionChanged(int id) {
         return;
     }
     m_nameLabel->parentWidget()->show();
-    m_transformGroup->setEnabled(true);
+    m_transformGroup->show();
     m_physicsGroup->show();
     m_conveyorGroup->show();
     loadObject(id);

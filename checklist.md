@@ -129,6 +129,7 @@ Goal: Projects persist.
 - [x] Colours per part (presets, inherited by children, read from STEP)
 - [x] Opacity per part (slider or 0–1 box, multiplies down to children, click-through below 0.5, saved)
 - [x] Viewport selection reveals the part in the Hierarchy (expands, scrolls)
+- [x] Fast undo on large assemblies; undo keeps the selection; Properties clears when nothing is selected
 - [x] Section view and measure tool (snaps to hole centres, bore axes, corners)
 - [x] Assembly mates (Tools › Assemble): flush faces, aligned axes, insert, coincident, parallel, perpendicular; minimal motion, solved together, kept while dragging
 - [x] Component library (File › Insert Component…)

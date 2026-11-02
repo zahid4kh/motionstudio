@@ -2,6 +2,7 @@
 #include <QWidget>
 #include <QTreeWidget>
 #include <QMap>
+#include <QSet>
 #include <QIcon>
 #include "../scene/SceneGraph.h"
 
@@ -27,7 +28,9 @@ private slots:
 
 private:
     void rebuild();
-    void addItem(int objectId, QTreeWidgetItem* parent);
+    void scheduleRebuild();
+    void revealSelection(int id, bool centre);
+    void addItem(int objectId, QTreeWidgetItem* parent, const QString& parentPath);
     void applyRigidBodyIcon(QTreeWidgetItem* item, int objectId);
     void combineSelectedIntoRigidBody(const QList<QTreeWidgetItem*>& items);
     void deleteSelectedItems(const QList<QTreeWidgetItem*>& items);
@@ -37,4 +40,9 @@ private:
     SceneGraph*               m_scene;
     QMap<int, QTreeWidgetItem*> m_items;
     bool                       m_ignoreSelection = false;
+    // Scene changes come in bursts (an undo re-adds every object), so the
+    // tree is rebuilt once, after the burst, instead of once per object
+    bool                       m_rebuildPending = false;
+    // Assemblies the user collapsed, by name path, kept across rebuilds
+    QSet<QString>              m_collapsed;
 };

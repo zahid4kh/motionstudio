@@ -96,6 +96,8 @@ private:
     QString    m_lastPointName;
     QVector3D  m_lastPointPos;
 
+    QLabel*         m_emptyHint  = nullptr;
+
     // Name card
     QLabel*         m_typeIcon   = nullptr;
     QLabel*         m_nameLabel  = nullptr;
