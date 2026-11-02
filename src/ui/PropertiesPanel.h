@@ -10,6 +10,8 @@
 #include <vector>
 #include "../scene/SceneGraph.h"
 
+class QSlider;
+
 enum class LengthUnit { Meters, Millimeters };
 
 class PropertiesPanel : public QWidget {
@@ -115,6 +117,11 @@ private:
     QLabel*         m_colorHint      = nullptr;
     void setObjectColor(const QColor& c);
     void updateColorRow(int id);
+    QSlider*        m_opacitySlider  = nullptr;   // 0…100 %
+    QDoubleSpinBox* m_opacitySpin    = nullptr;   // 0…1
+    QLabel*         m_opacityHint    = nullptr;
+    void setObjectOpacity(double opacity);
+    void updateOpacityRow(int id);
 
     // Connections
     QGroupBox*      m_connectionsGroup = nullptr;

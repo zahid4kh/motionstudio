@@ -127,6 +127,8 @@ Goal: Projects persist.
 - [x] Cycle time with critical path; interference check between moving parts
 - [x] Joint couplings (gears, belts, rack and pinion, mirrored fingers)
 - [x] Colours per part (presets, inherited by children, read from STEP)
+- [x] Opacity per part (slider or 0–1 box, multiplies down to children, click-through below 0.5, saved)
+- [x] Viewport selection reveals the part in the Hierarchy (expands, scrolls)
 - [x] Section view and measure tool (snaps to hole centres, bore axes, corners)
 - [x] Assembly mates (Tools › Assemble): flush faces, aligned axes, insert, coincident, parallel, perpendicular; minimal motion, solved together, kept while dragging
 - [x] Component library (File › Insert Component…)

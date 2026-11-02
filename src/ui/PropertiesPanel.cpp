@@ -8,6 +8,8 @@
 #include <QColorDialog>
 #include <QPainter>
 #include <QToolButton>
+#include <QSlider>
+#include <algorithm>
 #include <functional>
 #include <cmath>
 #include "Theme.h"
@@ -327,6 +329,45 @@ void PropertiesPanel::buildTransformSection() {
         connect(m_colorReset, &QToolButton::clicked, this, [this]{ setObjectColor(QColor()); });
     }
 
+    // Opacity: slider for dragging, box for an exact 0–1 value. Multiplies
+    // down onto the children, like colour.
+    {
+        auto* row = new QHBoxLayout;
+        row->setSpacing(6);
+        auto* l = new QLabel("Opacity");
+        l->setObjectName("fieldLabel");
+        l->setFixedWidth(70);
+        row->addWidget(l);
+        m_opacitySlider = new QSlider(Qt::Horizontal);
+        m_opacitySlider->setRange(0, 100);
+        m_opacitySlider->setSingleStep(1);
+        m_opacitySlider->setPageStep(10);
+        m_opacitySlider->setValue(100);
+        m_opacitySlider->setToolTip("How solid the part looks: 1 is solid, 0 is invisible. An assembly's "
+                                    "opacity applies to all its parts. Parts below 0.5 are clicked through.");
+        row->addWidget(m_opacitySlider, 1);
+        m_opacitySpin = new QDoubleSpinBox;
+        m_opacitySpin->setRange(0.0, 1.0);
+        m_opacitySpin->setDecimals(2);
+        m_opacitySpin->setSingleStep(0.05);
+        m_opacitySpin->setValue(1.0);
+        m_opacitySpin->setFixedWidth(m_opacitySpin->fontMetrics().horizontalAdvance("0.00") + 44);
+        // Typed values apply on Enter, so "0." on the way to 0.5 doesn't hide the part
+        m_opacitySpin->setKeyboardTracking(false);
+        m_opacitySpin->setToolTip(m_opacitySlider->toolTip());
+        row->addWidget(m_opacitySpin);
+        vb->addLayout(row);
+
+        m_opacityHint = new QLabel;
+        m_opacityHint->setObjectName("hint");
+        m_opacityHint->setContentsMargins(70 + row->spacing(), 0, 0, 0);
+        m_opacityHint->hide();
+        vb->addWidget(m_opacityHint);
+
+        connect(m_opacitySlider, &QSlider::valueChanged, this, [this](int v){ setObjectOpacity(v / 100.0); });
+        connect(m_opacitySpin, &QDoubleSpinBox::valueChanged, this, [this](double v){ setObjectOpacity(v); });
+    }
+
     auto wire = [this](QDoubleSpinBox* s){
         connect(s, &QDoubleSpinBox::valueChanged, this, &PropertiesPanel::onTransformEdited);
     };
@@ -365,6 +406,31 @@ void PropertiesPanel::updateColorRow(int id) {
     if (obj->color.isValid()) m_colorHint->setText(obj->color.name().toUpper());
     else if (source != -1) m_colorHint->setText("Inherited from " + m_scene->getObject(source)->name);
     else m_colorHint->setText("Default colour");
+}
+
+void PropertiesPanel::setObjectOpacity(double opacity) {
+    SceneObject* obj = m_scene->getObject(m_currentId);
+    if (!obj || m_loading) return;
+    const float v = float(std::clamp(opacity, 0.0, 1.0));
+    if (std::abs(obj->opacity - v) < 1e-4f) return;
+    obj->opacity = v;
+    updateOpacityRow(m_currentId);           // keep the slider and the box together
+    emit m_scene->objectChanged(m_currentId);   // repaints, and one undo step per drag
+}
+
+void PropertiesPanel::updateOpacityRow(int id) {
+    const SceneObject* obj = m_scene->getObject(id);
+    if (!obj) return;
+    {
+        QSignalBlocker a(m_opacitySlider), b(m_opacitySpin);
+        m_opacitySlider->setValue(int(std::lround(obj->opacity * 100.0f)));
+        if (!m_opacitySpin->hasFocus() || std::abs(m_opacitySpin->value() - obj->opacity) > 0.005)
+            m_opacitySpin->setValue(obj->opacity);
+    }
+    // A faded parent fades this part too: say so, or the slider looks wrong
+    const float shown = m_scene->opacityOf(id);
+    m_opacityHint->setVisible(std::abs(shown - obj->opacity) > 1e-3f);
+    m_opacityHint->setText(QString("Shown at %1 (a parent is faded too)").arg(shown, 0, 'f', 2));
 }
 
 void PropertiesPanel::buildConnectionsSection() {
@@ -925,6 +991,7 @@ void PropertiesPanel::loadObject(int id) {
     m_sy->setValue(obj->transform.scale.y() * lf);
     m_sz->setValue(obj->transform.scale.z() * lf);
     updateColorRow(id);
+    updateOpacityRow(id);
 
     // Joint / Motor
     Joint* joint = m_scene->jointForChild(id);

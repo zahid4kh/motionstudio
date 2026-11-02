@@ -129,6 +129,8 @@ private:
 
     void tryPickObject(int x, int y);
     std::pair<int,float> pickNearest(const QVector3D& orig, const QVector3D& dir) const;
+    // Below 50% opacity a part is clicked through to the solid part behind it
+    bool seeThrough(int id) const;
     void updateHover  (int x, int y);
     bool rayAABB(const QVector3D& orig, const QVector3D& dir,
                  const QVector3D& mn,  const QVector3D& mx,  float& t);
@@ -203,6 +205,8 @@ private:
     // Nearest triangle (of MeshFeatures) a world ray meets, its object and
     // the ray parameter; -1 when it meets nothing
     int  featureTriangleAt(const QVector3D& orig, const QVector3D& dir, int* objectId, float* worldT);
+    int  featureTriangleAt(const QVector3D& orig, const QVector3D& dir, int* objectId, float* worldT,
+                           bool fadedOnly);
     void commitAxisCandidate();
 
     struct MeasurePoint {

@@ -16,6 +16,11 @@ Then press **Play** (Space) and drive the machine from the **Runtime** tab.
 
 > **Tip:** the fastest way to learn is to open a working example. Use **File › Open Template…**, load *Robotic Arm — Pick & Place*, press Play, then switch **Start** ON in the Runtime tab. Every tab shows how the pieces fit together.
 
+## Finding your way around a big model
+
+- **Click a part in the viewport** and the Hierarchy opens its assembly and scrolls to it, so you see where it sits in the tree.
+- **See inside:** select a housing, panel or door and lower its **Opacity** in Properties (slider, or type 0–1). Fade an assembly to fade all its parts. Parts below 0.5 are clicked through, so the next click picks what's behind them. **Section** in the viewport cuts the model open instead.
+
 ## The mental model
 
 - **Joints** describe what is *possible*: the axis, the pivot and the limits.

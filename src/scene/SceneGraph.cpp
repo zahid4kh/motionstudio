@@ -71,6 +71,7 @@ int SceneGraph::duplicateObject(int id) {
         copy.transform = original.transform;
         copy.mesh      = original.mesh;
         copy.color     = original.color;
+        copy.opacity   = original.opacity;
         copyOf[originalId] = copyId;
         emit objectChanged(copyId);
         for (int childId : original.childIds) self(self, childId, copyId);
@@ -502,6 +503,12 @@ int SceneGraph::colorSource(int id) const {
 QColor SceneGraph::colorOf(int id) const {
     const SceneObject* o = getObject(colorSource(id));
     return o ? o->color : QColor();
+}
+
+float SceneGraph::opacityOf(int id) const {
+    float a = 1.0f;
+    for (const SceneObject* o = getObject(id); o; o = getObject(o->parentId)) a *= o->opacity;
+    return a;
 }
 
 void SceneGraph::setWorldTransform(int id, const QMatrix4x4& world) {

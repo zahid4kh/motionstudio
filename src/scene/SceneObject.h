@@ -34,6 +34,9 @@ struct SceneObject {
 
     // Own colour; invalid = inherit the parent's (see SceneGraph::colorOf)
     QColor      color;
+    // Own opacity, 0 (invisible) … 1 (solid); multiplies down onto the
+    // children (see SceneGraph::opacityOf)
+    float       opacity = 1.0f;
 
     // Only set for ImportedMesh; null for assembly group nodes (tree-only, no geometry)
     std::shared_ptr<MeshGeometry> mesh;

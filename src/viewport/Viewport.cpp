@@ -61,12 +61,13 @@ uniform bool  isAlert;
 uniform bool  clipOn;
 uniform vec4  clipPlane;
 uniform vec3  sectionColor;
+uniform float opacity;
 out vec4 fragColor;
 void main(){
     if(clipOn){
         if(dot(vec4(fragPos, 1.0), clipPlane) < 0.0) discard;
         // Through the cut we see the inside (back faces): fill it flat
-        if(!gl_FrontFacing){ fragColor = vec4(sectionColor, 1.0); return; }
+        if(!gl_FrontFacing){ fragColor = vec4(sectionColor, opacity); return; }
     }
     vec3 n = normalize(normal);
     vec3 l = normalize(keyDir);
@@ -80,7 +81,7 @@ void main(){
     if(isAlert)    col = mix(col, vec3(1.0, 0.15, 0.12), 0.55);
     if(isHovered)  col = mix(col, vec3(0.45, 0.72, 1.0), 0.28);
     if(isSelected) col = mix(col, vec3(1.0, 0.75, 0.1),  0.40);
-    fragColor = vec4(col, 1.0);
+    fragColor = vec4(col, opacity);
 }
 )";
 
@@ -847,13 +848,13 @@ void Viewport::drawScene(){
         m_objShader->setUniformValue("sectionColor", QVector3D(sc.redF(), sc.greenF(), sc.blueF()) * 0.85f);
     }
 
-    for(auto& [id,obj] : m_scene->allObjects()){
-        QMatrix4x4 model=m_scene->worldTransform(id);
+    auto drawObject = [&](int id, const SceneObject& obj, const QMatrix4x4& model, float opacity){
         m_objShader->setUniformValue("model",      model);
         m_objShader->setUniformValue("normMat",    model.normalMatrix());
         const QColor own = m_scene->colorOf(id);
         m_objShader->setUniformValue("objColor",   own.isValid() ? QVector3D(own.redF(), own.greenF(), own.blueF())
                                                                  : primitiveColor(obj.type));
+        m_objShader->setUniformValue("opacity",    opacity);
         m_objShader->setUniformValue("isSelected", obj.selected);
         m_objShader->setUniformValue("isHovered",  id == m_hoveredId && !obj.selected);
         m_objShader->setUniformValue("isActive",   m_movingObjects.contains(id));
@@ -868,6 +869,37 @@ void Viewport::drawScene(){
                 if (const MeshData* md = meshFor(obj)) drawMesh(*md);
                 break;
         }
+    };
+
+    // Solid parts first; see-through ones after, farthest first, blended
+    // over them without writing depth
+    struct Faded { int id; const SceneObject* obj; QMatrix4x4 model; float opacity, depth; };
+    std::vector<Faded> faded;
+    for(auto& [id,obj] : m_scene->allObjects()){
+        const QMatrix4x4 model=m_scene->worldTransform(id);
+        float opacity = m_scene->opacityOf(id);
+        // A hidden part still shows faintly while it is selected
+        if(obj.selected) opacity = std::max(opacity, 0.12f);
+        if(opacity >= 0.999f){ drawObject(id, obj, model, 1.0f); continue; }
+        if(opacity <= 0.0f) continue;
+        const QVector3D centre = model.map((obj.aabbMin() + obj.aabbMax()) * 0.5f);
+        faded.push_back({id, &obj, model, opacity, (view.map(centre)).z()});
+    }
+    if(!faded.empty()){
+        // View space looks down -z: the most negative z is the farthest
+        std::sort(faded.begin(), faded.end(), [](const Faded& a, const Faded& b){ return a.depth < b.depth; });
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDepthMask(GL_FALSE);
+        glEnable(GL_CULL_FACE);
+        for(const Faded& f : faded){
+            // Its far side first, then its near side over it
+            glCullFace(GL_FRONT); drawObject(f.id, *f.obj, f.model, f.opacity);
+            glCullFace(GL_BACK);  drawObject(f.id, *f.obj, f.model, f.opacity);
+        }
+        glDisable(GL_CULL_FACE);
+        glDepthMask(GL_TRUE);
+        glDisable(GL_BLEND);
     }
     m_objShader->release();
 }
@@ -1427,11 +1459,21 @@ bool Viewport::rayAABB(const QVector3D& orig,const QVector3D& dir,
     t=tMin; return tMin>=0;
 }
 
-// The object whose drawn surface the ray meets first (see scenequery::rayCast)
+// The object whose drawn surface the ray meets first (see scenequery::rayCast).
+// Mostly see-through parts are clicked through when something solid is behind
+// them; invisible ones can't be picked.
 std::pair<int,float> Viewport::pickNearest(const QVector3D& orig, const QVector3D& dir) const {
-    const scenequery::RayHit hit = scenequery::rayCast(*m_scene, orig, dir);
+    const scenequery::RayHit hit = scenequery::rayCast(*m_scene, orig, dir,
+        std::numeric_limits<float>::max(), [this](int id){ return m_scene->opacityOf(id) > 0.0f; });
+    if (hit.hit() && seeThrough(hit.objectId)) {
+        const scenequery::RayHit behind = scenequery::rayCast(*m_scene, orig, dir,
+            std::numeric_limits<float>::max(), [this](int id){ return !seeThrough(id); });
+        if (behind.hit()) return {behind.objectId, behind.t};
+    }
     return {hit.objectId, hit.t};
 }
+
+bool Viewport::seeThrough(int id) const { return m_scene->opacityOf(id) < 0.5f; }
 
 void Viewport::tryPickObject(int x, int y){
     float aspect=float(m_vpW)/float(std::max(m_vpH,1));
@@ -1720,10 +1762,22 @@ static float distanceToSegment(const QPointF& p, const QPointF& a, const QPointF
 }
 
 int Viewport::featureTriangleAt(const QVector3D& orig, const QVector3D& dir, int* objectId, float* worldT){
+    // Solid parts first, so mostly see-through ones are picked through (as in
+    // pickNearest); a see-through part only when nothing solid is behind it
+    for(const bool throughFaded : {false, true}){
+        const int tri = featureTriangleAt(orig, dir, objectId, worldT, throughFaded);
+        if(tri != -1) return tri;
+    }
+    return -1;
+}
+
+int Viewport::featureTriangleAt(const QVector3D& orig, const QVector3D& dir, int* objectId, float* worldT,
+                                bool fadedOnly){
     int hitTri = -1;
     float bestT = std::numeric_limits<float>::max();
     *objectId = -1;
     for(auto& [id, obj] : m_scene->allObjects()){
+        if(seeThrough(id) != fadedOnly || m_scene->opacityOf(id) <= 0.0f) continue;
         const MeshFeatures* features = featuresFor(obj);
         if(!features) continue;
         const QMatrix4x4 wt = m_scene->worldTransform(id);

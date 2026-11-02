@@ -119,6 +119,7 @@ While the simulation is active (from the first Play/Step until Reset), automatio
 - **Rotation** — Euler angles in degrees (XYZ order)
 - **Scale** — local scale
 - **Colour** — click the swatch for any colour, or pick a preset (steel, aluminium, anthracite, safety orange, signal yellow, blue, green, red); **×** removes it. A part without its own colour uses its parent's, so colouring an assembly colours all its parts. STEP imports keep the colours stored in the file.
+- **Opacity** — drag the slider, or type an exact value from 0 (invisible) to 1 (solid) in the box and press Enter. Fading an assembly fades all its parts (a part's own opacity multiplies with its parents'; the panel then says *Shown at 0.40*). Parts below 0.5 are clicked through: a click selects the solid part behind them, so you can fade a housing and pick what's inside. A part at 0 can only be selected in the Hierarchy, and shows faintly while selected. Opacity is saved with the project, and dragging the slider is one undo step.
 
 ### Joint (visible when object has a joint)
 
@@ -269,6 +270,7 @@ A real PLC (or CODESYS, OpenPLC…) can drive the model over Modbus TCP. Give si
 
 - Shows parent-child tree of all objects
 - **Click** an item to select it
+- Selecting a part in the viewport selects it here too: collapsed assemblies open up to it and the tree scrolls it into view
 - **Double-click** to rename
 - **Right-click** → Rename, Duplicate, **Add Sensor Here…**, Delete
 

@@ -141,6 +141,9 @@ public:
     // invalid when none has one (the viewport then uses the type's default)
     QColor colorOf(int id) const;
     int    colorSource(int id) const;   // object whose colour colorOf() returns, or -1
+    // Drawn opacity: the object's own times every ancestor's, so fading an
+    // assembly fades its parts
+    float  opacityOf(int id) const;
 
     // Transform helpers
     QMatrix4x4 worldTransform(int id) const;

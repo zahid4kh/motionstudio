@@ -2,6 +2,7 @@
 //   cmake -B build -DMOTIONSTUDIO_TESTS=ON && cmake --build build
 // and run ./build/MotionStudioTests [filter]. Exit code 0 means all passed.
 #include <QCoreApplication>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <cmath>
 #include <cstdio>
@@ -130,6 +131,52 @@ TEST(colorsInheritDuplicateAndSave) {
         if (o.name == "A") { CHECK(!o.color.isValid() && h.colorOf(id) == QColor("#ff7a1a")); ++n; }
     }
     CHECK(n == 4);
+}
+
+TEST(opacityMultipliesDownDuplicatesAndSaves) {
+    SceneGraph g;
+    int group = g.addObject("Assembly", PrimitiveType::ImportedMesh);
+    int a = addBox(g, "A", {0, 0, 0}, {1, 1, 1}, group);
+    int b = addBox(g, "B", {1, 0, 0}, {1, 1, 1}, group);
+    CHECK(g.opacityOf(a) == 1.0f);
+    g.getObject(group)->opacity = 0.5f;
+    g.getObject(b)->opacity = 0.4f;
+    CHECK(std::abs(g.opacityOf(a) - 0.5f) < 1e-6f);
+    CHECK(std::abs(g.opacityOf(b) - 0.2f) < 1e-6f);
+    int copy = g.duplicateObject(group);
+    const SceneObject* c = g.getObject(copy);
+    CHECK(c && c->opacity == 0.5f);
+    CHECK(c && std::abs(g.opacityOf(c->childIds[1]) - 0.2f) < 1e-6f);
+
+    // Solid objects write nothing, so older files and solid scenes look the same
+    const QJsonObject json = ProjectSerializer::toJson(g);
+    int written = 0;
+    for (const QJsonValue& v : json["objects"].toArray()) written += v.toObject().contains("opacity");
+    CHECK(written == 4);   // two assemblies, two B parts
+
+    SceneGraph h;
+    roundTrip(g, h);
+    int n = 0;
+    for (auto& [id, o] : h.allObjects()) {
+        if (o.name == "A") { CHECK(o.opacity == 1.0f && std::abs(h.opacityOf(id) - 0.5f) < 1e-6f); ++n; }
+        if (o.name == "B") { CHECK(std::abs(o.opacity - 0.4f) < 1e-6f); ++n; }
+    }
+    CHECK(n == 4);
+
+    // A slider drag is one undo step
+    SceneGraph u;
+    UndoManager undo(&u);
+    const int x = addBox(u, "X", {0, 0, 0}, {1, 1, 1});
+    undo.reset();
+    for (float v : {0.9f, 0.6f, 0.3f}) { u.getObject(x)->opacity = v; emit u.objectChanged(x); }
+    QElapsedTimer wait; wait.start();
+    while (!undo.canUndo() && wait.elapsed() < 2000) QCoreApplication::processEvents();
+    CHECK(undo.canUndo());
+    undo.undo();
+    CHECK(u.allObjects().size() == 1 && u.allObjects().begin()->second.opacity == 1.0f);
+    CHECK(!undo.canUndo());
+    undo.redo();
+    CHECK(std::abs(u.allObjects().begin()->second.opacity - 0.3f) < 1e-6f);
 }
 
 // ── Sensors ─────────────────────────────────────────────────────────────────

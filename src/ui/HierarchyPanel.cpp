@@ -120,7 +120,18 @@ void HierarchyPanel::onSelectionChanged(int id) {
     m_ignoreSelection = true;
     m_tree->clearSelection();
     if(id != -1 && m_items.contains(id)){
-        m_items[id]->setSelected(true);
+        QTreeWidgetItem* item = m_items[id];
+        // Picked in the viewport, maybe deep in a collapsed assembly: open
+        // the way to it and bring it into view
+        bool opened = false;
+        for(QTreeWidgetItem* p = item->parent(); p; p = p->parent())
+            if(!p->isExpanded()){ p->setExpanded(true); opened = true; }
+        if(opened) m_tree->doItemsLayout();   // so the scroll range includes the opened rows
+        // Centred when it has to scroll, so the parts around it show too;
+        // left alone when it's already in view
+        const bool inView = m_tree->viewport()->rect().contains(m_tree->visualItemRect(item));
+        m_tree->setCurrentItem(item, 0, QItemSelectionModel::ClearAndSelect);
+        if(!inView) m_tree->scrollToItem(item, QAbstractItemView::PositionAtCenter);
     }
     m_ignoreSelection = false;
 }
