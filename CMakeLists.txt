@@ -59,6 +59,7 @@ add_library(MotionStudioCore STATIC
     src/scene/SceneQuery.cpp
     src/scene/Interference.cpp
     src/scene/SceneMerge.cpp
+    src/scene/Assembly.cpp
     src/physics/SimulationEngine.cpp
     src/physics/Recording.cpp
     src/automation/Expression.cpp

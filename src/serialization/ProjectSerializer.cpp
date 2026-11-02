@@ -303,6 +303,27 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene, MeshPool* pool) {
         poses.append(o);
     }
 
+    QJsonArray mates;
+    for (auto& [id, m] : scene.allMates()) {
+        auto feature = [](const MateFeature& f) {
+            QJsonObject o{{"objectId", f.objectId}, {"kind", mateFeatureKindName(f.kind)},
+                          {"point", vec3ToJson(f.point)}};
+            if (f.hasDirection()) o["direction"] = vec3ToJson(f.direction);
+            if (f.radius > 0) o["radius"] = double(f.radius);
+            return o;
+        };
+        QJsonObject o;
+        o["id"]      = m.id;
+        o["name"]    = m.name;
+        o["type"]    = mateTypeName(m.type);
+        o["moving"]  = feature(m.moving);
+        o["fixed"]   = feature(m.fixed);
+        o["aligned"] = m.aligned;
+        o["offset"]  = double(m.offset);
+        if (!m.enabled) o["enabled"] = false;
+        mates.append(o);
+    }
+
     for (int objectId : sortedKeys(scene.allRigidBodies())) {
         const RigidBody& rb = scene.allRigidBodies().at(objectId);
         QJsonObject o;
@@ -346,6 +367,7 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene, MeshPool* pool) {
     root["signals"]       = signalsArr;
     root["sequences"]     = sequences;
     root["poses"]         = poses;
+    if (!mates.isEmpty()) root["mates"] = mates;
     return root;
 }
 
@@ -497,6 +519,27 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root, con
             if (jid != -1) p.jointValues[jid] = float(po["value"].toDouble());
         }
         poseIdMap[o["id"].toInt(-1)] = scene.addPose(p);
+    }
+
+    // Mates (dropped when a part they refer to is missing)
+    for (auto v : root["mates"].toArray()) {
+        auto o = v.toObject();
+        auto feature = [&](const QJsonObject& fo, MateFeature* f) {
+            f->objectId  = idMap.value(fo["objectId"].toInt(-1), -1);
+            f->kind      = mateFeatureKindFromName(fo["kind"].toString());
+            f->point     = vec3FromJson(fo["point"].toObject());
+            f->direction = vec3FromJson(fo["direction"].toObject());
+            f->radius    = float(fo["radius"].toDouble());
+            return f->objectId != -1;
+        };
+        Mate m;
+        m.name    = o["name"].toString();
+        m.type    = mateTypeFromName(o["type"].toString());
+        m.aligned = o["aligned"].toBool(false);
+        m.offset  = float(o["offset"].toDouble());
+        m.enabled = o["enabled"].toBool(true);
+        if (feature(o["moving"].toObject(), &m.moving) && feature(o["fixed"].toObject(), &m.fixed))
+            scene.addMate(m);
     }
 
     // Sequences

@@ -18,6 +18,7 @@
 #include "scene/Interference.h"
 #include "io/ModbusServer.h"
 #include "scene/SceneMerge.h"
+#include "scene/Assembly.h"
 #include "io/RobotFormats.h"
 #include <QTemporaryDir>
 #ifdef MUJOCO_ENABLED
@@ -1138,6 +1139,246 @@ TEST(sensorFollowsPhysics) {
 #endif
 
 } // namespace
+
+// ── Assembly mates ───────────────────────────────────────────────────────────
+
+MateFeature feat(int objectId, MateFeature::Kind kind, QVector3D point, QVector3D dir = {}) {
+    MateFeature f;
+    f.objectId = objectId;
+    f.kind = kind;
+    f.point = point;
+    f.direction = dir;
+    return f;
+}
+
+int addMate(SceneGraph& g, MateType type, const MateFeature& moving, const MateFeature& fixed, float offset = 0) {
+    Mate m;
+    m.name = assembly::nextName(g);
+    m.type = type;
+    m.moving = moving;
+    m.fixed = fixed;
+    m.offset = offset;
+    m.aligned = assembly::closestAlignment(g, m);
+    return g.addMate(m);
+}
+
+TEST(mateFlushMovesLeast) {
+    SceneGraph g;
+    const int base = addBox(g, "Base", {0, 0, 0}, {1, 1, 1});
+    const int block = addBox(g, "Block", {2, 1.3f, 0.4f}, {1, 1, 1});
+    g.getObject(block)->transform.rotation = {0, 0, 10};
+    using K = MateFeature::Kind;
+    const int id = addMate(g, MateType::Flush, feat(block, K::Plane, {0, -0.5f, 0}, {0, -1, 0}),
+                           feat(base, K::Plane, {0, 0.5f, 0}, {0, 1, 0}));
+    CHECK(!g.getMate(id)->aligned);   // faces against each other
+    CHECK(assembly::movingBody(g, *g.getMate(id)) == block);
+    const auto r = assembly::solve(g);
+    CHECK(r.ok());
+    CHECK(r.moved.size() == 1 && r.moved[0] == block);
+    const Transform& t = g.getObject(block)->transform;
+    CHECK_NEAR(t.position.y(), 1.0, 1e-5);
+    CHECK_NEAR(t.rotation.z(), 0.0, 1e-3);
+    // Turned about the face centre, slid along the normal only
+    CHECK_NEAR(t.position.x(), 2.0 + 0.5 * std::sin(qDegreesToRadians(10.0)), 1e-5);
+    CHECK_NEAR(t.position.z(), 0.4, 1e-6);
+    CHECK_NEAR(g.getObject(base)->transform.position.length(), 0.0, 1e-9);
+    // Solving again moves nothing
+    CHECK(assembly::solve(g).moved.empty());
+
+    // The face is free to slide: a drag along it stays, a lift is undone
+    g.getObject(block)->transform.position += QVector3D(0.7f, 0.5f, -0.2f);
+    assembly::solve(g);
+    CHECK_NEAR(g.getObject(block)->transform.position.y(), 1.0, 1e-5);
+    CHECK_NEAR(g.getObject(block)->transform.position.z(), 0.2, 1e-5);
+
+    // A gap, and level faces instead
+    g.getMate(id)->offset = 0.1f;
+    assembly::solve(g);
+    CHECK_NEAR(g.getObject(block)->transform.position.y(), 1.1, 1e-5);
+    g.getMate(id)->offset = 0;
+    g.getMate(id)->aligned = true;
+    assembly::solve(g);
+    CHECK_NEAR(g.getObject(block)->transform.position.y(), 0.0, 1e-5);   // bottom faces level
+    CHECK(assembly::residual(g, *g.getMate(id)).satisfied());
+}
+
+TEST(matesSolveTogether) {
+    SceneGraph g;
+    using K = MateFeature::Kind;
+    const int base = addBox(g, "Base", {0, 0, 0}, {1, 1, 1});
+    const int pin = g.addObject("Pin", PrimitiveType::Cylinder);
+    g.getObject(pin)->transform.position = {1, 2, 1};
+    g.getObject(pin)->transform.rotation = {30, 0, 15};
+    g.getObject(pin)->transform.scale = {0.2f, 1, 0.2f};
+    // Seat the pin's bottom edge on the top face, then line up the axes
+    addMate(g, MateType::Flush, feat(pin, K::Circle, {0, -0.5f, 0}, {0, 1, 0}),
+            feat(base, K::Plane, {0, 0.5f, 0}, {0, 1, 0}));
+    assembly::solve(g);
+    addMate(g, MateType::Concentric, feat(pin, K::Axis, {0, 0, 0}, {0, 1, 0}),
+            feat(base, K::Axis, {0, 0, 0}, {0, 1, 0}));
+    const auto r = assembly::solve(g);
+    CHECK(r.ok());
+    for (auto& [id, m] : g.allMates()) CHECK(assembly::residual(g, m).satisfied());
+    const QMatrix4x4 w = g.worldTransform(pin);
+    CHECK_NEAR(w.map(QVector3D(0, -0.5f, 0)).y(), 0.5, 1e-5);
+    CHECK_NEAR(w.map(QVector3D(0, 0, 0)).x(), 0.0, 1e-5);
+    CHECK_NEAR(w.map(QVector3D(0, 0, 0)).z(), 0.0, 1e-5);
+    CHECK_NEAR(w.mapVector(QVector3D(0, 1, 0)).normalized().y(), 1.0, 1e-5);
+
+    // Two flush mates on parallel faces at different heights can't both hold
+    const int shelf = addBox(g, "Shelf", {3, 0.2f, 0}, {1, 1, 1});
+    const int bad = addMate(g, MateType::Flush, feat(pin, K::Circle, {0, -0.5f, 0}, {0, 1, 0}),
+                            feat(shelf, K::Plane, {0, 0.5f, 0}, {0, 1, 0}));
+    const auto r2 = assembly::solve(g);
+    CHECK(!r2.ok());
+    CHECK(!r2.problems.isEmpty());
+    g.removeMate(bad);
+    CHECK(assembly::solve(g).ok());
+}
+
+TEST(mateInsertAndCoincident) {
+    SceneGraph g;
+    using K = MateFeature::Kind;
+    const int plate = addBox(g, "Plate", {0, 0, 0}, {1, 0.1f, 1});
+    const int bolt = g.addObject("Bolt", PrimitiveType::Cylinder);
+    g.getObject(bolt)->transform.position = {0.4f, 1, -0.3f};
+    g.getObject(bolt)->transform.rotation = {80, 0, 0};
+    // The bolt's bottom rim into the hole's top rim (axis = plate normal), 5 mm proud
+    const int id = addMate(g, MateType::Insert, feat(bolt, K::Circle, {0, -0.5f, 0}, {0, 1, 0}),
+                           feat(plate, K::Circle, {0.2f, 0.5f, 0.1f}, {0, 1, 0}), 0.005f);
+    CHECK(assembly::typesFor(K::Circle, K::Circle).front() == MateType::Insert);
+    CHECK(assembly::solve(g).ok());
+    const QVector3D rim = g.worldTransform(bolt).map(QVector3D(0, -0.5f, 0));
+    CHECK_NEAR(rim.x(), 0.2, 1e-5);
+    CHECK_NEAR(rim.y(), 0.055, 1e-5);
+    (void)id;
+    CHECK_NEAR(rim.z(), 0.1, 1e-5);
+
+    const int cube = addBox(g, "Cube", {5, 5, 5}, {0.1f, 0.1f, 0.1f});
+    addMate(g, MateType::Coincident, feat(cube, K::Point, {0.5f, 0.5f, 0.5f}),
+            feat(plate, K::Point, {-0.5f, 0.5f, -0.5f}));
+    CHECK(assembly::solve(g).ok());
+    const QVector3D corner = g.worldTransform(cube).map(QVector3D(0.5f, 0.5f, 0.5f));
+    CHECK_NEAR((corner - QVector3D(-0.5f, 0.05f, -0.5f)).length(), 0.0, 1e-5);
+    CHECK_NEAR(g.getObject(cube)->transform.rotation.length(), 0.0, 1e-6);   // points don't turn it
+}
+
+TEST(mateMovesTheRightBranch) {
+    SceneGraph g;
+    using K = MateFeature::Kind;
+    const int asmA = g.addObject("AssemblyA", PrimitiveType::ImportedMesh);
+    const int partA = addBox(g, "PartA", {0, 0, 0}, {1, 1, 1}, asmA);
+    const int partA2 = addBox(g, "PartA2", {2, 0, 0}, {1, 1, 1}, asmA);
+    const int asmB = g.addObject("AssemblyB", PrimitiveType::ImportedMesh);
+    const int sub = g.addObject("Sub", PrimitiveType::ImportedMesh, asmB);
+    const int partB = addBox(g, "PartB", {0, 3, 0}, {1, 1, 1}, sub);
+
+    Mate m;
+    m.type = MateType::Flush;
+    m.moving = feat(partB, K::Plane, {0, -0.5f, 0}, {0, -1, 0});
+    m.fixed = feat(partA, K::Plane, {0, 0.5f, 0}, {0, 1, 0});
+    CHECK(assembly::movingBody(g, m) == asmB);       // no shared ancestor: the whole tree
+    m.fixed = feat(partA, K::Plane, {0, 0.5f, 0}, {0, 1, 0});
+    m.moving = feat(partA2, K::Plane, {0, -0.5f, 0}, {0, -1, 0});
+    CHECK(assembly::movingBody(g, m) == partA2);     // inside one assembly: just the part
+    m.moving = feat(asmA, K::Plane, {0, 0, 0}, {0, 1, 0});
+    QString why;
+    CHECK(assembly::movingBody(g, m, &why) == -1);   // holds the fixed part
+    CHECK(!why.isEmpty());
+    m.moving = feat(partA, K::Plane, {0, 0, 0}, {0, 1, 0});
+    CHECK(assembly::movingBody(g, m) == -1);          // same part
+    (void)sub;
+}
+
+TEST(matesSaveUndoAndFollowEdits) {
+    SceneGraph g;
+    using K = MateFeature::Kind;
+    const int base = addBox(g, "Base", {0, 0, 0}, {1, 1, 1});
+    const int grp = g.addObject("Group", PrimitiveType::ImportedMesh);
+    const int a = addBox(g, "A", {0, 2, 0}, {1, 1, 1}, grp);
+    const int b = addBox(g, "B", {3, 2, 0}, {1, 1, 1}, grp);
+    addMate(g, MateType::Flush, feat(a, K::Plane, {0, -0.5f, 0}, {0, -1, 0}), feat(base, K::Plane, {0, 0.5f, 0}, {0, 1, 0}), 0.25f);
+    addMate(g, MateType::Flush, feat(b, K::Plane, {0, 0.5f, 0}, {0, 1, 0}), feat(a, K::Plane, {0, 0.5f, 0}, {0, 1, 0}));
+    g.getMate(g.allMates().rbegin()->first)->enabled = false;
+    CHECK(assembly::solve(g).ok());
+
+    SceneGraph h;
+    roundTrip(g, h);
+    CHECK(h.allMates().size() == 2);
+    const Mate& m1 = h.allMates().begin()->second;
+    CHECK(m1.type == MateType::Flush && m1.name == "Mate1");
+    CHECK_NEAR(m1.offset, 0.25, 1e-6);
+    CHECK(h.getObject(m1.moving.objectId)->name == "A");
+    CHECK(!h.allMates().rbegin()->second.enabled);
+    CHECK(assembly::solve(h).moved.empty());   // loaded already solved
+    // load → save is stable
+    SceneGraph h2;
+    roundTrip(h, h2);
+    CHECK(QJsonDocument(ProjectSerializer::toJson(h)).toJson() == QJsonDocument(ProjectSerializer::toJson(h2)).toJson());
+
+    // Moving the fixed part brings the mated one along
+    g.getObject(base)->transform.position.setY(-1);
+    assembly::solve(g);
+    CHECK_NEAR(g.worldTransform(grp).map(QVector3D()).y() + g.getObject(a)->transform.position.y(), 0.25, 1e-5);
+
+    // Duplicating the group copies the mate between its parts; removing a part drops its mates
+    g.getMate(g.allMates().rbegin()->first)->enabled = true;
+    const size_t before = g.allMates().size();
+    g.duplicateObject(grp);
+    CHECK(g.allMates().size() == before + 1);
+    g.removeObject(a);
+    CHECK(g.allMates().size() == 1);   // only the copy's internal mate is left
+
+    // Undo brings a removed mate back
+    SceneGraph u;
+    UndoManager undo(&u);
+    const int x = addBox(u, "X", {0, 0, 0}, {1, 1, 1});
+    const int y = addBox(u, "Y", {0, 3, 0}, {1, 1, 1});
+    undo.reset();
+    const int mid = addMate(u, MateType::Flush, feat(y, K::Plane, {0, -0.5f, 0}, {0, -1, 0}), feat(x, K::Plane, {0, 0.5f, 0}, {0, 1, 0}));
+    QCoreApplication::processEvents();
+    QElapsedTimer wait; wait.start();
+    while (!undo.canUndo() && wait.elapsed() < 2000) QCoreApplication::processEvents();
+    CHECK(undo.canUndo());
+    undo.undo();
+    CHECK(u.allMates().empty());
+    undo.redo();
+    CHECK(u.allMates().size() == 1);
+    (void)mid;
+}
+
+TEST(mateMergeRemapsAndRenames) {
+    SceneGraph target, source;
+    using K = MateFeature::Kind;
+    const int t1 = addBox(target, "T1", {0, 0, 0}, {1, 1, 1});
+    const int t2 = addBox(target, "T2", {0, 3, 0}, {1, 1, 1});
+    addMate(target, MateType::Flush, feat(t2, K::Plane, {0, -0.5f, 0}, {0, -1, 0}), feat(t1, K::Plane, {0, 0.5f, 0}, {0, 1, 0}));
+    const int root = source.addObject("Comp", PrimitiveType::ImportedMesh);
+    const int s1 = addBox(source, "S1", {0, 0, 0}, {1, 1, 1}, root);
+    const int s2 = addBox(source, "S2", {1, 0, 0}, {1, 1, 1}, root);
+    addMate(source, MateType::Coincident, feat(s2, K::Point, {}), feat(s1, K::Point, {0.5f, 0, 0}));
+    mergeScene(target, source);
+    CHECK(target.allMates().size() == 2);
+    const Mate& copy = target.allMates().rbegin()->second;
+    CHECK(copy.name == "Mate2");
+    CHECK(target.getObject(copy.moving.objectId)->name == "S2");
+    CHECK(target.getObject(copy.fixed.objectId)->name == "S1");
+}
+
+TEST(mateFeatureFromWorldWithScale) {
+    SceneGraph g;
+    const int o = addBox(g, "Scaled", {1, 2, 3}, {2, 0.5f, 1});
+    g.getObject(o)->transform.rotation = {0, 30, 0};
+    // A slanted face normal must come back the same under non-uniform scale
+    const QVector3D n = QVector3D(1, 1, 0).normalized();
+    const QVector3D p(1.5f, 2.2f, 3.1f);
+    const MateFeature f = assembly::fromWorld(g, o, MateFeature::Kind::Plane, p, n);
+    const auto w = assembly::toWorld(g, f);
+    CHECK_NEAR((w.point - p).length(), 0.0, 1e-5);
+    CHECK_NEAR((w.direction - n).length(), 0.0, 1e-5);
+    const MateFeature ax = assembly::fromWorld(g, o, MateFeature::Kind::Axis, p, n);
+    CHECK_NEAR((assembly::toWorld(g, ax).direction - n).length(), 0.0, 1e-5);
+}
 
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);

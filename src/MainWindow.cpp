@@ -79,6 +79,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(m_scene, &SceneGraph::jointAdded,    this, &MainWindow::onSceneDirtied);
     connect(m_scene, &SceneGraph::motorAdded,    this, &MainWindow::onSceneDirtied);
     connect(m_scene, &SceneGraph::automationChanged, this, &MainWindow::onSceneDirtied);
+    connect(m_scene, &SceneGraph::matesChanged, this, &MainWindow::onSceneDirtied);
 
     connect(m_undo, &UndoManager::historyChanged, this, &MainWindow::updateUndoActions);
 

@@ -120,6 +120,26 @@ int SceneGraph::duplicateObject(int id) {
             emit conveyorBeltChanged(copyId);
         }
     }
+    // Mates between parts inside the copy
+    std::vector<Mate> mateCopies;
+    for (auto& [mid, m] : m_mates) {
+        auto a = copyOf.find(m.moving.objectId), b = copyOf.find(m.fixed.objectId);
+        if (a == copyOf.end() || b == copyOf.end()) continue;
+        Mate copy = m;
+        copy.moving.objectId = a->second;
+        copy.fixed.objectId = b->second;
+        mateCopies.push_back(copy);
+    }
+    for (Mate& copy : mateCopies) {
+        for (int i = 1;; ++i) {
+            const QString n = QString("Mate%1").arg(i);
+            if (std::none_of(m_mates.begin(), m_mates.end(), [&](auto& e) { return e.second.name == n; })) {
+                copy.name = n;
+                break;
+            }
+        }
+        addMate(copy);
+    }
     return copyOf.at(id);
 }
 
@@ -176,8 +196,18 @@ void SceneGraph::removeObject(int id) {
 
     m_rigidBodies.erase(id);
     m_conveyorBelts.erase(id);
+    bool matesRemoved = false;
+    for (auto m = m_mates.begin(); m != m_mates.end();) {
+        if (m->second.moving.objectId == id || m->second.fixed.objectId == id) {
+            m = m_mates.erase(m);
+            matesRemoved = true;
+        } else {
+            ++m;
+        }
+    }
     m_objects.erase(it);
     emit objectRemoved(id);
+    if (matesRemoved) emit matesChanged();
 }
 
 SceneObject* SceneGraph::getObject(int id) {
@@ -347,6 +377,28 @@ int SceneGraph::addPose(Pose pose) {
 void SceneGraph::removePose(int id) {
     if (!m_poses.erase(id)) return;
     emit automationChanged();
+}
+
+int SceneGraph::addMate(Mate mate) {
+    mate.id = m_nextId++;
+    m_mates[mate.id] = mate;
+    emit matesChanged();
+    return mate.id;
+}
+
+void SceneGraph::removeMate(int id) {
+    if (!m_mates.erase(id)) return;
+    emit matesChanged();
+}
+
+Mate* SceneGraph::getMate(int id) {
+    auto it = m_mates.find(id);
+    return it != m_mates.end() ? &it->second : nullptr;
+}
+
+const Mate* SceneGraph::getMate(int id) const {
+    auto it = m_mates.find(id);
+    return it != m_mates.end() ? &it->second : nullptr;
 }
 
 Pose* SceneGraph::getPose(int id) {
@@ -688,6 +740,7 @@ void SceneGraph::clear() {
     m_signals.clear();
     m_sequences.clear();
     m_poses.clear();
+    m_mates.clear();
     m_roots.clear();
     m_selectedId = -1;
     m_nextId     = 1;

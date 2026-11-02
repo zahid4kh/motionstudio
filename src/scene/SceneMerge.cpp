@@ -1,5 +1,6 @@
 #include "SceneMerge.h"
 #include "SceneGraph.h"
+#include "Assembly.h"
 #include <algorithm>
 #include <functional>
 #include <unordered_map>
@@ -128,6 +129,15 @@ std::vector<int> mergeScene(SceneGraph& target, SceneGraph& source, int parentId
             for (int& p : op.predecessors) p = remap(ops, p);
         }
         target.addSequence(copy);
+    }
+    for (auto& [id, m] : source.allMates()) {
+        Mate copy = m;
+        copy.moving.objectId = remap(objects, m.moving.objectId);
+        copy.fixed.objectId = remap(objects, m.fixed.objectId);
+        if (copy.moving.objectId < 0 || copy.fixed.objectId < 0) continue;
+        for (auto& [tid, t] : target.allMates())
+            if (t.name == copy.name) { copy.name = assembly::nextName(target); break; }
+        target.addMate(copy);
     }
     target.applyCouplings();
     target.notifyAutomationChanged();

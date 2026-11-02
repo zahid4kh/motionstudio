@@ -4,6 +4,7 @@
 #include "Motor.h"
 #include "RigidBody.h"
 #include "ConveyorBelt.h"
+#include "Mate.h"
 #include "../automation/Automation.h"
 #include <QObject>
 #include <QMatrix4x4>
@@ -69,6 +70,16 @@ public:
     Pose*  getPose(int id);
     const Pose* getPose(int id) const;
     const std::map<int, Pose>& allPoses() const { return m_poses; }
+
+    // Assembly mates (see scene/Assembly.h for solving them). Removing an
+    // object removes the mates that refer to it or its subtree.
+    int   addMate(Mate m);
+    void  removeMate(int id);
+    Mate* getMate(int id);
+    const Mate* getMate(int id) const;
+    const std::map<int, Mate>& allMates() const { return m_mates; }
+    // Emits matesChanged() — call after editing a mate in place
+    void  notifyMatesChanged() { emit matesChanged(); }
 
     int  allocateId() { return m_nextId++; }
 
@@ -166,6 +177,7 @@ signals:
     void sceneCleared();
     void automationChanged();
     void jointsMoved();
+    void matesChanged();
 
 private:
     std::unordered_map<int, SceneObject>   m_objects;
@@ -176,6 +188,7 @@ private:
     std::map<int, Signal>                  m_signals;
     std::map<int, Sequence>                m_sequences;
     std::map<int, Pose>                    m_poses;
+    std::map<int, Mate>                    m_mates;
     std::vector<int>                       m_roots;
     int  m_nextId      = 1;
     int  m_selectedId  = -1;

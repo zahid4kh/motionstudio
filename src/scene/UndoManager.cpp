@@ -23,6 +23,7 @@ UndoManager::UndoManager(SceneGraph* scene, QObject* parent)
     connect(scene, &SceneGraph::conveyorBeltChanged,this, &UndoManager::onSceneMutated);
     connect(scene, &SceneGraph::floorChanged,       this, &UndoManager::onSceneMutated);
     connect(scene, &SceneGraph::automationChanged,  this, &UndoManager::onSceneMutated);
+    connect(scene, &SceneGraph::matesChanged,       this, &UndoManager::onSceneMutated);
 
     m_baseline = snapshot();
 }
