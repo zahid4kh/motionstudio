@@ -26,6 +26,7 @@ struct Topic { const char* id; const char* title; const char* icon; };
 const Topic kTopics[] = {
     {"start",       "Getting Started",        "book-open"},
     {"actuators",   "Joints & Actuators",     "cog"},
+    {"assembly",    "Assembling Parts",       "puzzle"},
     {"poses",       "Poses",                  "camera"},
     {"kinematics",  "Robot Tools & IK",       "move-diagonal-2"},
     {"sequences",   "Sequences & Operations", "list-ordered"},

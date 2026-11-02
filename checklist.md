@@ -128,6 +128,7 @@ Goal: Projects persist.
 - [x] Joint couplings (gears, belts, rack and pinion, mirrored fingers)
 - [x] Colours per part (presets, inherited by children, read from STEP)
 - [x] Section view and measure tool (snaps to hole centres, bore axes, corners)
+- [x] Assembly mates (Tools › Assemble): flush faces, aligned axes, insert, coincident, parallel, perpendicular; minimal motion, solved together, kept while dragging
 - [x] Component library (File › Insert Component…)
 - [x] URDF / MJCF import and export
 - [x] Headless regression tests (`-DMOTIONSTUDIO_TESTS=ON`)

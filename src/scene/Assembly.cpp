@@ -255,8 +255,11 @@ int movingBody(const SceneGraph& scene, const Mate& m, QString* why) {
     return pa.back();   // no shared ancestor: the moving part's whole tree moves
 }
 
-bool closestAlignment(const SceneGraph& scene, const Mate& m) {
+bool defaultAlignment(const SceneGraph& scene, const Mate& m) {
     if (!directional(m.moving.kind) || !directional(m.fixed.kind)) return m.aligned;
+    // Faces and round edges point out of their part: they go against each
+    // other. Only a line's direction is arbitrary, so it takes the nearer one.
+    if (normalLike(m.moving.kind) && normalLike(m.fixed.kind)) return false;
     const WorldFeature a = toWorld(scene, m.moving), b = toWorld(scene, m.fixed);
     return QVector3D::dotProduct(a.direction, b.direction) > 0;
 }

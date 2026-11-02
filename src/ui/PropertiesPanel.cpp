@@ -1,4 +1,5 @@
 #include "PropertiesPanel.h"
+#include "scene/Assembly.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
@@ -1000,6 +1001,9 @@ void PropertiesPanel::onTransformEdited() {
     obj->transform.rotation = { float(m_rx->value()), float(m_ry->value()), float(m_rz->value()) };
     obj->transform.scale    = { float(m_sx->value() / f), float(m_sy->value() / f), float(m_sz->value() / f) };
     emit m_scene->objectChanged(m_currentId);
+    // Mates hold: the part keeps only the motion they leave free, and parts
+    // mated to it follow
+    if (!m_simActive && !m_scene->allMates().empty()) assembly::solve(*m_scene);
 }
 
 void PropertiesPanel::onJointEdited() {

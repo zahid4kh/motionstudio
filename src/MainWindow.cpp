@@ -275,6 +275,13 @@ void MainWindow::buildToolsMenu() {
     connect(measure, &QAction::toggled, m_viewport, &Viewport::setMeasureMode);
     connect(m_viewport, &Viewport::measureModeChanged, measure, &QAction::setChecked);
     addAction(measure);
+    m_assembleAction = tools->addAction(Theme::icon("puzzle"), "&Assemble");
+    m_assembleAction->setCheckable(true);
+    m_assembleAction->setShortcut(Qt::Key_A);
+    m_assembleAction->setToolTip("Place parts by their geometry: flush faces, aligned axes, bolts in holes (A; Esc ends)");
+    connect(m_assembleAction, &QAction::toggled, m_viewport, &Viewport::setAssembleMode);
+    connect(m_viewport, &Viewport::assembleModeChanged, m_assembleAction, &QAction::setChecked);
+    addAction(m_assembleAction);
     tools->addSeparator();
     tools->addAction(Theme::icon("network"), "External &I/O (Modbus TCP)…", this, &MainWindow::openExternalIo);
 }
@@ -296,6 +303,7 @@ void MainWindow::buildHelpMenu() {
     auto* help = m_menuBar->addMenu("&Help");
     const struct { const char* icon; const char* text; const char* topic; } topics[] = {
         {"book-open",    "&Getting Started",           "start"},
+        {"puzzle",       "&Assembling Parts",          "assembly"},
         {"cog",          "&Joints && Actuators",       "actuators"},
         {"list-ordered", "&Sequences && Operations",   "sequences"},
         {"code-xml",     "&Expression Reference",      "expressions"},
@@ -930,6 +938,8 @@ void MainWindow::onSimStateChanged(bool running) {
 
 void MainWindow::onSimActiveChanged(bool active) {
     m_viewport->setIkAvailable(!active);
+    m_viewport->setAssemblyAvailable(!active);
+    m_assembleAction->setEnabled(!active);
     m_properties->setSimulationActive(active);
     updateUndoActions();
     if (!active) {

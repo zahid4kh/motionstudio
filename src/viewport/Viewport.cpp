@@ -4,6 +4,8 @@
 #include "scene/MeshWeld.h"
 #include "scene/PrimitiveMesh.h"
 #include "scene/SceneQuery.h"
+#include "scene/Assembly.h"
+#include "AssemblePanel.h"
 #include <QVector4D>
 #include "automation/Sensors.h"
 #include "automation/Kinematics.h"
@@ -361,6 +363,10 @@ Viewport::Viewport(SceneGraph* scene, QWidget* parent)
         Theme::repolish(m_btnIk);
         update();
     });
+    m_assemblePanel = new AssemblePanel(m_scene, this);
+    m_assemblePanel->hide();
+    connect(m_assemblePanel, &AssemblePanel::changed, this, [this]{ update(); });
+    connect(m_assemblePanel, &AssemblePanel::closeRequested, this, [this]{ setAssembleMode(false); });
     m_sectionPanel = new SectionPanel(this);
     m_btnSection = new QPushButton(Theme::icon("scissors"), "Section", this);
     m_btnSection->setObjectName("viewButton");
@@ -455,6 +461,10 @@ void Viewport::repositionOverlays() {
     m_btnSection->move(m_btnLight->x() - m_btnSection->width() - gap, mg);
     m_btnIk->move(m_btnSection->x() - m_btnIk->width() - gap, mg);
     m_viewCube->move(m_vpW - m_viewCube->width() - 2, m_btnFloor->y() + m_btnFloor->height() + gap);
+    if (m_assemblePanel) {
+        m_assemblePanel->adjustSize();
+        m_assemblePanel->move(mg, m_btnFront->y() + m_btnFront->height() + 10);
+    }
 }
 
 // ── Camera ───────────────────────────────────────────────────────────────────
@@ -548,6 +558,7 @@ void Viewport::paintGL() {
     drawJointAxes(p);
     drawAxisPickBanner(p);
     drawMeasure(p);
+    drawAssemble(p);
 }
 
 void Viewport::setIkAvailable(bool available) {
@@ -1086,7 +1097,7 @@ void Viewport::drawPill(QPainter& p, const QPointF& topLeft, const QString& text
 }
 
 void Viewport::drawKeyPoints(QPainter& p) {
-    if (m_hoveredId == -1 || m_axisPickId != -1) { m_nearKeyPointIdx = -1; return; }
+    if (m_hoveredId == -1 || m_axisPickId != -1 || m_assembleMode) { m_nearKeyPointIdx = -1; return; }
     const SceneObject* obj = m_scene->getObject(m_hoveredId);
     if (!obj) { m_nearKeyPointIdx = -1; return; }
 
@@ -1476,6 +1487,11 @@ void Viewport::mousePressEvent(QMouseEvent* e){
         return;
     }
 
+    if(m_assembleMode && e->button()==Qt::LeftButton && !(e->modifiers()&Qt::AltModifier)){
+        handleMateClick(e->pos().x(), e->pos().y());
+        return;
+    }
+
     if(m_measureMode && e->button()==Qt::LeftButton && !(e->modifiers()&Qt::AltModifier)){
         const MeasurePoint p = measurePointAt(e->pos().x(), e->pos().y());
         if(p.valid){
@@ -1561,11 +1577,20 @@ void Viewport::mouseMoveEvent(QMouseEvent* e){
                 obj->transform.position = parentWorldInv.map(newWorldPos);
             }
             emit m_scene->objectChanged(selId);
+            // Mated parts slide only where their mates let them, and parts
+            // mated to this one come along
+            if(m_assemblyAvailable && !m_scene->allMates().empty()) assembly::solve(*m_scene);
         }
         update();
         return;
     }
 
+    if(m_dragBtn==Qt::NoButton && m_assembleMode){
+        m_mateHover = matePickAt(pos.x(), pos.y());
+        setCursor(Qt::CrossCursor);
+        update();
+        return;
+    }
     if(m_dragBtn==Qt::NoButton && m_measureMode){
         m_measureHover = measurePointAt(pos.x(), pos.y());
         setCursor(Qt::CrossCursor);
@@ -1627,6 +1652,16 @@ void Viewport::keyPressEvent(QKeyEvent* e){
     if(e->key() == Qt::Key_Escape){
         if(m_axisPickId != -1){ cancelAxisPick(); return; }
         if(m_measureMode){ setMeasureMode(false); return; }
+        if(m_assembleMode){
+            if(m_mateFirst.valid){ m_mateFirst = MatePick{}; m_assemblePanel->setStage(0); update(); }
+            else if(m_assemblePanel->editedMate() >= 0) m_assemblePanel->finishEdit();
+            else setAssembleMode(false);
+            return;
+        }
+    }
+    if(m_assembleMode && (e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter)){
+        m_assemblePanel->finishEdit();
+        return;
     }
     if(e->key() == Qt::Key_F && e->modifiers() == Qt::NoModifier){ fitAll(); return; }
     QOpenGLWidget::keyPressEvent(e);
@@ -1711,7 +1746,7 @@ int Viewport::featureTriangleAt(const QVector3D& orig, const QVector3D& dir, int
 
 void Viewport::setMeasureMode(bool on){
     if(on == m_measureMode) return;
-    if(on) cancelAxisPick();
+    if(on){ cancelAxisPick(); setAssembleMode(false); }
     m_measureMode = on;
     m_measureA = m_measureB = m_measureHover = MeasurePoint{};
     setCursor(on ? Qt::CrossCursor : Qt::ArrowCursor);
@@ -1859,6 +1894,259 @@ void Viewport::drawMeasure(QPainter& p){
             QFont small = font(); small.setPointSize(8);
             p.setFont(small);
             drawPill(p, mid + QPointF(10, 2), QString("ΔX %1   ΔY %2   ΔZ %3").arg(fmt(d.x()), fmt(d.y()), fmt(d.z())));
+            p.setFont(f);
+        }
+    }
+}
+
+// ── Assemble ─────────────────────────────────────────────────────────────────
+
+void Viewport::setAssembleMode(bool on){
+    if(on && !m_assemblyAvailable) on = false;
+    if(on == m_assembleMode) return;
+    if(on){ cancelAxisPick(); setMeasureMode(false); }
+    m_assembleMode = on;
+    m_mateFirst = m_mateHover = MatePick{};
+    if(on){
+        m_assemblePanel->setStage(0);
+        m_assemblePanel->show();
+        m_assemblePanel->raise();
+        repositionOverlays();
+        setFocus();
+    } else {
+        m_assemblePanel->finishEdit();
+        m_assemblePanel->hide();
+    }
+    setCursor(on ? Qt::CrossCursor : Qt::ArrowCursor);
+    emit assembleModeChanged(on);
+    update();
+}
+
+void Viewport::setAssemblyAvailable(bool available){
+    m_assemblyAvailable = available;
+    if(!available) setAssembleMode(false);
+}
+
+Viewport::MatePick Viewport::matePickAt(int x, int y){
+    using K = MateFeature::Kind;
+    MatePick mp;
+    const float aspect = float(m_vpW) / float(std::max(m_vpH, 1));
+    QVector3D orig, dir;
+    m_camera.ray((2.0f * x) / m_vpW - 1.0f, 1.0f - (2.0f * y) / m_vpH, aspect, &orig, &dir);
+    int objectId = -1;
+    float t = 0;
+    const int tri = featureTriangleAt(orig, dir, &objectId, &t);
+    if(tri < 0) return mp;
+    const SceneObject* obj = m_scene->getObject(objectId);
+    const MeshFeatures* features = featuresFor(*obj);
+    const QMatrix4x4 wt = m_scene->worldTransform(objectId);
+    const QMatrix4x4 normalWt = wt.inverted().transposed();
+    const float scale = wt.mapVector(QVector3D(1, 0, 0)).length();
+    auto fmt = [](float m){ return m < 1.0f ? QString("%1 mm").arg(double(m) * 1000, 0, 'f', 1)
+                                            : QString("%1 m").arg(double(m), 0, 'f', 3); };
+    mp.valid = true;
+    mp.objectId = objectId;
+    mp.point = orig + dir * t;
+
+    // Near the cursor: an edge end (corner), then a round or straight edge
+    float nearestEnd = 9.0f, nearestEdge = 7.0f;   // px
+    const AxisFeature* edgePick = nullptr;
+    QVector3D corner;
+    bool haveCorner = false;
+    for(const AxisFeature* edge : features->edgesAround(tri)){
+        if(edge->kind == AxisFeature::Kind::StraightEdge && edge->outline.size() >= 2){
+            QVector3D lo = edge->outline.front(), hi = lo;
+            for(const QVector3D& q : edge->outline){
+                if(QVector3D::dotProduct(q - lo, edge->axis) < 0) lo = q;
+                if(QVector3D::dotProduct(q - hi, edge->axis) > 0) hi = q;
+            }
+            for(const QVector3D& end : {lo, hi}){
+                QPointF ps;
+                if(!toScreen(wt.map(end), &ps)) continue;
+                const float d = float(std::hypot(ps.x() - x, ps.y() - y));
+                if(d < nearestEnd){ nearestEnd = d; corner = end; haveCorner = true; }
+            }
+        }
+        if(edge->kind != AxisFeature::Kind::StraightEdge && edge->kind != AxisFeature::Kind::CircularEdge) continue;
+        for(size_t i = 0; i + 1 < edge->outline.size(); i += 2){
+            QPointF pa, pb;
+            if(!toScreen(wt.map(edge->outline[i]), &pa) || !toScreen(wt.map(edge->outline[i + 1]), &pb)) continue;
+            const float d = distanceToSegment(QPointF(x, y), pa, pb);
+            if(d < nearestEdge){ nearestEdge = d; edgePick = edge; }
+        }
+    }
+    if(haveCorner){
+        mp.kind = K::Point;
+        mp.point = wt.map(corner);
+        mp.what = "corner";
+        // A small cross marks it
+        return mp;
+    }
+    if(edgePick){
+        mp.outline = edgePick->outline;
+        if(edgePick->kind == AxisFeature::Kind::CircularEdge){
+            mp.kind = K::Circle;
+            mp.point = wt.map(edgePick->origin);
+            mp.direction = normalWt.mapVector(edgePick->axis).normalized();
+            // Point it out of the part: along the clicked face's normal when
+            // that face is flat (an end or a face with a hole), else away
+            // from the part's middle
+            const AxisFeature& onFace = features->faceFeature(tri);
+            QVector3D out = mp.point - wt.map((obj->aabbMin() + obj->aabbMax()) * 0.5f);
+            if(onFace.kind == AxisFeature::Kind::FlatFace){
+                out = normalWt.mapVector(onFace.axis);
+                if(QVector3D::dotProduct(out, dir) > 0) out = -out;
+            }
+            if(QVector3D::dotProduct(mp.direction, out) < 0) mp.direction = -mp.direction;
+            mp.radius = edgePick->radius * scale;
+            mp.what = "round edge Ø " + fmt(2 * mp.radius);
+        } else {
+            mp.kind = K::Axis;
+            mp.point = wt.map(edgePick->origin);
+            mp.direction = wt.mapVector(edgePick->axis).normalized();
+            mp.what = "straight edge";
+        }
+        return mp;
+    }
+    const AxisFeature& face = features->faceFeature(tri);
+    mp.outline = face.outline;
+    if(face.kind == AxisFeature::Kind::CylindricalFace){
+        mp.kind = K::Axis;
+        mp.direction = wt.mapVector(face.axis).normalized();
+        const QVector3D o = wt.map(face.origin);
+        mp.point = o + mp.direction * QVector3D::dotProduct(mp.point - o, mp.direction);
+        mp.radius = face.radius * scale;
+        mp.what = "axis of Ø " + fmt(2 * mp.radius);
+    } else if(face.kind == AxisFeature::Kind::FlatFace){
+        mp.kind = K::Plane;
+        mp.direction = normalWt.mapVector(face.axis).normalized();
+        // The side you clicked faces you: that's the outward normal
+        if(QVector3D::dotProduct(mp.direction, dir) > 0) mp.direction = -mp.direction;
+        mp.what = "flat face";
+    } else {
+        mp.kind = K::Point;
+        mp.outline.clear();
+        mp.what = "point on " + obj->name;
+    }
+    return mp;
+}
+
+void Viewport::handleMateClick(int x, int y){
+    const MatePick pick = matePickAt(x, y);
+    if(!pick.valid) return;
+    const SceneObject* obj = m_scene->getObject(pick.objectId);
+    if(!m_mateFirst.valid){
+        m_assemblePanel->finishEdit();
+        m_mateFirst = pick;
+        m_assemblePanel->setStage(1, QString("%1 (%2)").arg(obj->name, pick.what));
+        m_assemblePanel->adjustSize();
+        update();
+        return;
+    }
+    if(pick.objectId == m_mateFirst.objectId) return;   // a second feature on the same part: ignore
+    auto toFeature = [&](const MatePick& p){
+        return assembly::fromWorld(*m_scene, p.objectId, p.kind, p.point, p.direction, p.radius);
+    };
+    const MateFeature moving = toFeature(m_mateFirst), fixed = toFeature(pick);
+    m_mateFirst = MatePick{};
+    m_assemblePanel->createMate(moving, fixed);
+    m_assemblePanel->setStage(0);
+    m_assemblePanel->adjustSize();
+    m_mateHover = matePickAt(x, y);
+    update();
+}
+
+void Viewport::drawMateGlyph(QPainter& p, const MateFeature& f, const QColor& color){
+    using K = MateFeature::Kind;
+    const SceneObject* obj = m_scene->getObject(f.objectId);
+    if(!obj) return;
+    const assembly::WorldFeature w = assembly::toWorld(*m_scene, f);
+    const QMatrix4x4 wt = m_scene->worldTransform(f.objectId);
+    const float size = std::max(0.01f, 0.25f * wt.mapVector(obj->aabbMax() - obj->aabbMin()).length());
+    auto line = [&](const QVector3D& a, const QVector3D& b){
+        QPointF sa, sb;
+        if(toScreen(a, &sa) && toScreen(b, &sb)) p.drawLine(sa, sb);
+    };
+    p.setPen(QPen(color, 2.5));
+    p.setBrush(Qt::NoBrush);
+    if(f.kind == K::Point){
+        QPointF s;
+        if(!toScreen(w.point, &s)) return;
+        p.setPen(QPen(Theme::colors().viewport, 1.5));
+        p.setBrush(color);
+        p.drawEllipse(s, 5, 5);
+        return;
+    }
+    QVector3D u = QVector3D::crossProduct(w.direction, QVector3D(0, 1, 0));
+    if(u.length() < 1e-3f) u = QVector3D::crossProduct(w.direction, QVector3D(1, 0, 0));
+    u.normalize();
+    const QVector3D v = QVector3D::crossProduct(w.direction, u).normalized();
+    if(f.kind == K::Plane){
+        const float h = size * 0.5f;
+        const QVector3D c[4] = {w.point + (u + v) * h, w.point + (u - v) * h, w.point - (u + v) * h, w.point + (v - u) * h};
+        for(int i = 0; i < 4; ++i) line(c[i], c[(i + 1) % 4]);
+        line(w.point, w.point + w.direction * size * 0.6f);   // the normal
+    } else if(f.kind == K::Axis){
+        p.setPen(QPen(color, 2.5, Qt::DashDotLine));
+        line(w.point - w.direction * size, w.point + w.direction * size);
+    } else {
+        const float r = f.radius > 0 ? f.radius : size * 0.3f;
+        QVector3D prev = w.point + u * r;
+        for(int i = 1; i <= 32; ++i){
+            const float a = float(i) / 32 * 2 * float(M_PI);
+            const QVector3D q = w.point + (u * std::cos(a) + v * std::sin(a)) * r;
+            line(prev, q);
+            prev = q;
+        }
+        p.setPen(QPen(color, 1.5, Qt::DashDotLine));
+        line(w.point - w.direction * size, w.point + w.direction * size);
+    }
+}
+
+void Viewport::drawAssemble(QPainter& p){
+    if(!m_assembleMode) return;
+    const Theme::Colors& c = Theme::colors();
+    p.setRenderHint(QPainter::Antialiasing);
+    QFont f = font(); f.setPointSize(9); f.setBold(true);
+    p.setFont(f);
+
+    // The mate being edited or selected in the list
+    const int mateId = m_assemblePanel->editedMate() >= 0 ? m_assemblePanel->editedMate()
+                                                          : m_assemblePanel->selectedMate();
+    if(const Mate* m = m_scene->getMate(mateId)){
+        drawMateGlyph(p, m->fixed, c.accent);
+        drawMateGlyph(p, m->moving, c.warning);
+    }
+
+    auto outline = [&](const MatePick& mp, const QColor& col){
+        if(!m_scene->getObject(mp.objectId)) return;
+        const QMatrix4x4 wt = m_scene->worldTransform(mp.objectId);
+        p.setPen(QPen(col, 2.5));
+        for(size_t i = 0; i + 1 < mp.outline.size(); i += 2){
+            QPointF a, b;
+            if(toScreen(wt.map(mp.outline[i]), &a) && toScreen(wt.map(mp.outline[i + 1]), &b)) p.drawLine(a, b);
+        }
+        if(mp.kind == MateFeature::Kind::Point || mp.kind == MateFeature::Kind::Circle){
+            QPointF s;
+            if(toScreen(mp.point, &s)){
+                p.setPen(QPen(c.viewport, 1.5));
+                p.setBrush(col);
+                p.drawEllipse(s, 4.5, 4.5);
+                p.setBrush(Qt::NoBrush);
+            }
+        }
+    };
+    if(m_mateFirst.valid) outline(m_mateFirst, c.warning);
+    if(m_mateHover.valid){
+        const bool samePart = m_mateFirst.valid && m_mateHover.objectId == m_mateFirst.objectId;
+        outline(m_mateHover, samePart ? c.muted : c.info);
+        QPointF s;
+        if(toScreen(m_mateHover.point, &s)){
+            QFont small = font(); small.setPointSize(8);
+            p.setFont(small);
+            const SceneObject* o = m_scene->getObject(m_mateHover.objectId);
+            drawPill(p, s + QPointF(12, 8), samePart ? "same part: pick another one"
+                                                     : QString("%1 · %2").arg(o ? o->name : QString(), m_mateHover.what));
             p.setFont(f);
         }
     }

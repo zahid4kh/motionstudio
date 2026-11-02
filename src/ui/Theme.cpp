@@ -228,6 +228,7 @@ QPushButton#viewButton:hover { background: @hoverstrong@; border-color: @handle@
 QPushButton#viewButton:pressed { background: @sel@; }
 QPushButton#viewButton[active="true"] { background: @accent@; color: @onaccent@; border-color: @accent@; }
 QFrame#lightingPanel { background: @panel@; border: 1px solid @handle@; }
+QFrame#assemblePanel { background: @panel@; border: 1px solid @handle@; border-radius: 12px; }
 QLabel#viewOverlay { background: @overlay@; color: @fg@; border: 1px solid @border@; border-radius: 10px;
     padding: 6px 10px; font-size: 11px; }
 

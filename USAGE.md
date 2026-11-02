@@ -65,6 +65,23 @@ The templates (**File › Open Template…**) are complete working examples. *Ro
 
 Click two points on parts: the viewport shows their distance, ΔX/ΔY/ΔZ, and the angle between the two surfaces. Points snap to the **centre of a round edge** (holes, bosses), the **axis of a bore or shaft**, and the **ends of straight edges**; the hovered snap is outlined and labelled (e.g. *centre of Ø 12.0 mm*). A third click starts a new measurement; **Esc** ends measuring.
 
+### Assemble (Tools › Assemble, A)
+
+Put parts together by their geometry. Click a feature on the part that should **move**, then one on the part it goes against (that one stays put). The hovered feature is outlined: a **flat face**, a **round edge** (hole rim, shaft end; its centre and axis), a **round face** (its centre line), a **straight edge**, or an **edge end** (corner). The part moves into place at once, and the **Assemble** panel shows the new mate:
+
+| Mate | Picks | Holds |
+|---|---|---|
+| Flush faces | face + face | faces touching (against each other, or **Level**), with an optional **Offset** gap |
+| Seat on face | round edge + face | the rim on the face, axis square to it |
+| Insert | round edge + round edge | one axis, rim centres together (bolt in a hole); Offset along the axis |
+| Align axes | axis/rim + axis/rim | centre lines on one line; slides and turns freely |
+| Coincident, Point on face, Point on axis | a corner + anything | the point on it |
+| Parallel, Faces/Axes at 90° | two directions | orientation only |
+
+The mate moves the part as little as possible: it turns it only as far as needed, about the clicked feature, and slides it only along the directions the mate fixes. If the part is inside an imported assembly, its sub-assembly moves with it. All mates are solved together, so earlier ones keep holding. Faces and rims meet face to face by default; **Flip**/**Level** turns that around. Changing the type, Flip or Offset re-solves from where the parts were before the mate; **Remove** puts the part back. **Enter** keeps the mate, **Esc** steps back or ends the mode.
+
+Mates are saved in the project. Dragging or typing the position of a mated part moves it only where its mates allow, and parts mated to it follow. The panel's **Mates** list edits, switches off (checkbox), re-solves (**Solve**) or deletes mates; ⚠ marks one that conflicts with the others. Mates are not enforced while simulating (joints move parts then). Duplicate copies the mates inside the copy; deleting a part deletes its mates.
+
 ### Viewport buttons (top right)
 
 | Button | Does |

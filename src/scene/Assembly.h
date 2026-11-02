@@ -46,8 +46,10 @@ bool usesAlignment(MateType type, MateFeature::Kind moving, MateFeature::Kind fi
 // `why` then says so.
 int movingBody(const SceneGraph& scene, const Mate& mate, QString* why = nullptr);
 
-// The `aligned` setting that needs the least rotation from the current pose
-bool closestAlignment(const SceneGraph& scene, const Mate& mate);
+// The starting `aligned` setting: opposed for two faces or round edges
+// (their directions point out of the part, so they go against each other),
+// otherwise whichever needs the least rotation from the current pose
+bool defaultAlignment(const SceneGraph& scene, const Mate& mate);
 
 // How far the mate is from being satisfied
 struct Residual {

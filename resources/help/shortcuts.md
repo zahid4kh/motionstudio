@@ -15,6 +15,7 @@
 | Move a robot tool by its joints (inverse kinematics) | Turn **IK** on, then drag the tool's gizmo |
 | Look inside an assembly | **Section**, then *Cut the model* |
 | Measure a distance or angle | M, then click two points (snaps to hole centres, bore axes, corners); Esc ends |
+| Assemble parts (flush faces, aligned axes, bolts in holes) | A, then click the part to move and where it goes; Enter keeps the mate, Esc steps back |
 
 ## Application
 

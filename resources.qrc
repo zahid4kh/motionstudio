@@ -45,6 +45,8 @@
         <file alias="icons/network.svg">resources/icons/network.svg</file>
         <file alias="icons/scissors.svg">resources/icons/scissors.svg</file>
         <file alias="icons/ruler.svg">resources/icons/ruler.svg</file>
+        <file alias="icons/puzzle.svg">resources/icons/puzzle.svg</file>
+        <file alias="icons/link.svg">resources/icons/link.svg</file>
         <file alias="icons/package.svg">resources/icons/package.svg</file>
         <file alias="icons/download.svg">resources/icons/download.svg</file>
         <file alias="icons/move-diagonal-2.svg">resources/icons/move-diagonal-2.svg</file>
@@ -119,6 +121,7 @@
         <file alias="icons/workflow.svg">resources/icons/workflow.svg</file>
         <file alias="icons/x.svg">resources/icons/x.svg</file>
         <file alias="help/start.md">resources/help/start.md</file>
+        <file alias="help/assembly.md">resources/help/assembly.md</file>
         <file alias="help/actuators.md">resources/help/actuators.md</file>
         <file alias="help/poses.md">resources/help/poses.md</file>
 

@@ -61,11 +61,21 @@ public:
     void setMeasureMode(bool on);
     bool measureMode() const { return m_measureMode; }
 
+    // Assemble mode: click a face, edge or hole on the part to move, then one
+    // on the part it goes against; a mate (flush, concentric, insert …) is
+    // made and solved, and edited in a panel. Off while simulating.
+    void setAssembleMode(bool on);
+    bool assembleMode() const { return m_assembleMode; }
+    // While false (simulation running) assemble mode is unavailable and
+    // dragging a part doesn't re-solve its mates
+    void setAssemblyAvailable(bool available);
+
 signals:
     void keyPointSelected(const QString& name, const QVector3D& worldPos);
     // Axis (and, when `setPivot`, rotation origin) in the parent's local frame
     void axisPicked(int objectId, const QVector3D& localAxis, const QVector3D& localPivot, bool setPivot);
     void measureModeChanged(bool on);
+    void assembleModeChanged(bool on);
 
 protected:
     void initializeGL()          override;
@@ -101,6 +111,7 @@ private:
     void drawKeyPoints (QPainter& p);
     void drawAxisPickBanner(QPainter& p);
     void drawMeasure(QPainter& p);
+    void drawAssemble(QPainter& p);
     // The selected object's joint axis and, in axis-pick mode, the hovered candidate
     void drawJointAxes(QPainter& p);
     void drawAxisArrow(QPainter& p, const QVector3D& origin, const QVector3D& axis, bool revolute,
@@ -203,6 +214,26 @@ private:
     bool         m_measureMode = false;
     MeasurePoint m_measureA, m_measureB, m_measureHover;
     MeasurePoint measurePointAt(int x, int y);
+
+    // Assemble mode: the feature under the cursor and the first pick
+    struct MatePick {
+        bool      valid = false;
+        int       objectId = -1;
+        MateFeature::Kind kind = MateFeature::Kind::Point;
+        QVector3D point, direction;      // world
+        float     radius = 0.0f;         // world
+        QString   what;                  // "flat face", "round edge Ø 12.0 mm", …
+        std::vector<QVector3D> outline;  // object-local segments (follow the part when it moves)
+    };
+    bool           m_assembleMode = false;
+    bool           m_assemblyAvailable = true;
+    MatePick       m_mateFirst, m_mateHover;
+    class AssemblePanel* m_assemblePanel = nullptr;
+    MatePick matePickAt(int x, int y);
+    void     handleMateClick(int x, int y);
+    // A mate feature drawn as a glyph: a square on a plane, a line along an
+    // axis, a ring for a round edge, a dot for a point
+    void     drawMateGlyph(QPainter& p, const MateFeature& f, const QColor& color);
 
     // Faces and edges recognised on each part's mesh, built on first use.
     // The weak pointer notices a freed geometry whose address was reused.

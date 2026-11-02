@@ -1158,7 +1158,7 @@ int addMate(SceneGraph& g, MateType type, const MateFeature& moving, const MateF
     m.moving = moving;
     m.fixed = fixed;
     m.offset = offset;
-    m.aligned = assembly::closestAlignment(g, m);
+    m.aligned = assembly::defaultAlignment(g, m);
     return g.addMate(m);
 }
 
@@ -1211,7 +1211,7 @@ TEST(matesSolveTogether) {
     g.getObject(pin)->transform.rotation = {30, 0, 15};
     g.getObject(pin)->transform.scale = {0.2f, 1, 0.2f};
     // Seat the pin's bottom edge on the top face, then line up the axes
-    addMate(g, MateType::Flush, feat(pin, K::Circle, {0, -0.5f, 0}, {0, 1, 0}),
+    addMate(g, MateType::Flush, feat(pin, K::Circle, {0, -0.5f, 0}, {0, -1, 0}),
             feat(base, K::Plane, {0, 0.5f, 0}, {0, 1, 0}));
     assembly::solve(g);
     addMate(g, MateType::Concentric, feat(pin, K::Axis, {0, 0, 0}, {0, 1, 0}),
@@ -1227,7 +1227,7 @@ TEST(matesSolveTogether) {
 
     // Two flush mates on parallel faces at different heights can't both hold
     const int shelf = addBox(g, "Shelf", {3, 0.2f, 0}, {1, 1, 1});
-    const int bad = addMate(g, MateType::Flush, feat(pin, K::Circle, {0, -0.5f, 0}, {0, 1, 0}),
+    const int bad = addMate(g, MateType::Flush, feat(pin, K::Circle, {0, -0.5f, 0}, {0, -1, 0}),
                             feat(shelf, K::Plane, {0, 0.5f, 0}, {0, 1, 0}));
     const auto r2 = assembly::solve(g);
     CHECK(!r2.ok());
@@ -1244,14 +1244,15 @@ TEST(mateInsertAndCoincident) {
     g.getObject(bolt)->transform.position = {0.4f, 1, -0.3f};
     g.getObject(bolt)->transform.rotation = {80, 0, 0};
     // The bolt's bottom rim into the hole's top rim (axis = plate normal), 5 mm proud
-    const int id = addMate(g, MateType::Insert, feat(bolt, K::Circle, {0, -0.5f, 0}, {0, 1, 0}),
+    const int id = addMate(g, MateType::Insert, feat(bolt, K::Circle, {0, -0.5f, 0}, {0, -1, 0}),
                            feat(plate, K::Circle, {0.2f, 0.5f, 0.1f}, {0, 1, 0}), 0.005f);
     CHECK(assembly::typesFor(K::Circle, K::Circle).front() == MateType::Insert);
     CHECK(assembly::solve(g).ok());
     const QVector3D rim = g.worldTransform(bolt).map(QVector3D(0, -0.5f, 0));
     CHECK_NEAR(rim.x(), 0.2, 1e-5);
     CHECK_NEAR(rim.y(), 0.055, 1e-5);
-    (void)id;
+    CHECK(!g.getMate(id)->aligned);   // rims against each other: the bolt stands up out of the hole
+    CHECK_NEAR(g.worldTransform(bolt).mapVector(QVector3D(0, 1, 0)).normalized().y(), 1.0, 1e-5);
     CHECK_NEAR(rim.z(), 0.1, 1e-5);
 
     const int cube = addBox(g, "Cube", {5, 5, 5}, {0.1f, 0.1f, 0.1f});

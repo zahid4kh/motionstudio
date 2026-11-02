@@ -106,6 +106,7 @@ private:
 
     QAction* m_undoAction = nullptr;
     QAction* m_redoAction = nullptr;
+    QAction* m_assembleAction = nullptr;
 
     QLabel*  m_timeLabel   = nullptr;
     QTimer   m_statusTimer;

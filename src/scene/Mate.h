@@ -14,8 +14,10 @@ struct MateFeature {
     int       objectId = -1;
     Kind      kind = Kind::Plane;
     QVector3D point;
-    QVector3D direction;   // unit; unused for Point
-    float     radius = 0.0f;   // circles and cylinders, for the label
+    // Unit; unused for Point. Planes and circles point out of the part (out
+    // of a face, out of the end a rim is on); an axis's sign is arbitrary.
+    QVector3D direction;
+    float     radius = 0.0f;   // circles and cylinders as picked (world, m); for display
 
     bool hasDirection() const { return kind != Kind::Point; }
 };
