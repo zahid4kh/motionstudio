@@ -20,6 +20,7 @@
 #include "scene/SceneMerge.h"
 #include "scene/Assembly.h"
 #include "io/RobotFormats.h"
+#include "import/StepImporter.h"
 #include <QTemporaryDir>
 #ifdef MUJOCO_ENABLED
 #include <mujoco/mujoco.h>
@@ -1380,6 +1381,210 @@ TEST(mateFeatureFromWorldWithScale) {
     const MateFeature ax = assembly::fromWorld(g, o, MateFeature::Kind::Axis, p, n);
     CHECK_NEAR((assembly::toWorld(g, ax).direction - n).length(), 0.0, 1e-5);
 }
+
+TEST(stepImportEstimator) {
+    using StepImporter::Progress;
+    StepImporter::Estimator::Rates rates;
+    rates.readSecPerMB = 0.25;
+    rates.translateRatio = 2.5;
+    rates.meshRatio = 1.0;
+    StepImporter::Estimator est(4 * 1024 * 1024, rates);   // reading guessed at 1 s
+    Progress p;
+    est.update(p, 0.5);
+    CHECK(!est.confident());                       // nothing measured in the first second
+    CHECK_NEAR(est.fraction(), 0.5 / 4.5, 1e-6);   // read 1 + translate 2.5 + mesh 1
+    est.update(p, 1.5);                            // reading runs past its guess
+    CHECK(!est.confident());
+    p.stage = Progress::Stage::Translating;
+    p.stageFraction = 0.08;                        // OCCT's figure: ignored, it's too uneven
+    est.update(p, 2.0);                            // read took 2 s → translate 5, mesh 2
+    CHECK(est.confident());
+    CHECK_NEAR(est.secondsLeft(), 7.0, 1e-6);
+    const double before = est.fraction();
+    p.stage = Progress::Stage::Meshing;
+    p.stageFraction = 0.5;
+    est.update(p, 7.0);                            // translate took 5 s; meshing starts
+    CHECK_NEAR(est.secondsLeft(), 2.0, 1e-6);      // just started: the guess (2× reading)
+    est.update(p, 8.0);                            // half done after 1 s → 1 s left
+    CHECK(est.fraction() >= before);
+    CHECK_NEAR(est.secondsLeft(), 1.0, 1e-6);
+    CHECK(est.confident());
+    est.update(p, 11.0);                           // stuck at 50% for 3 s (one big part)
+    CHECK(!est.confident());
+    CHECK(est.secondsLeft() >= 3.0);               // expects at least as long as it's been stuck
+    CHECK(est.fraction() <= 0.99);
+    p.stageFraction = 1.0;
+    est.update(p, 12.0);
+    const auto learned = est.learn(12.0);
+    // Half the old rate, half this import's (read 0.5 s/MB, translate 2.5×, mesh 2.5×)
+    CHECK_NEAR(learned.readSecPerMB, 0.375, 1e-6);
+    CHECK_NEAR(learned.translateRatio, 2.5, 1e-6);
+    CHECK_NEAR(learned.meshRatio, 1.75, 1e-6);
+
+    CHECK(StepImporter::Estimator(0, rates).fraction() == 0.0);
+}
+
+#ifdef OCCT_ENABLED
+#include <BRepPrimAPI_MakeBox.hxx>
+#include <BRepPrimAPI_MakeCylinder.hxx>
+#include <BRepPrimAPI_MakePrism.hxx>
+#include <BRepBuilderAPI_MakeEdge.hxx>
+#include <BRepBuilderAPI_MakeFace.hxx>
+#include <BRepBuilderAPI_MakePolygon.hxx>
+#include <BRepBuilderAPI_MakeWire.hxx>
+#include <gp_Circ.hxx>
+#include <gp_Pln.hxx>
+#include <STEPCAFControl_Writer.hxx>
+#include <TDataStd_Name.hxx>
+#include <TDocStd_Document.hxx>
+#include <XCAFApp_Application.hxx>
+#include <XCAFDoc_DocumentTool.hxx>
+#include <XCAFDoc_ShapeTool.hxx>
+#include <gp_Trsf.hxx>
+#include <Interface_Static.hxx>
+#include <Message.hxx>
+#include <Message_Messenger.hxx>
+#include <Message_PrinterOStream.hxx>
+
+// An assembly: one 100 × 50 × 20 mm block used twice, and a pin
+static QString writeTestStep(const QString& dir) {
+    Handle(XCAFApp_Application) app = XCAFApp_Application::GetApplication();
+    Handle(TDocStd_Document) doc;
+    app->NewDocument("MDTV-XCAF", doc);
+    Handle(XCAFDoc_ShapeTool) tool = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
+    const TDF_Label block = tool->AddShape(BRepPrimAPI_MakeBox(100, 50, 20).Shape(), false);
+    TDataStd_Name::Set(block, "Block");
+    const TDF_Label pin = tool->AddShape(BRepPrimAPI_MakeCylinder(5, 40).Shape(), false);
+    TDataStd_Name::Set(pin, "Pin");
+    const TDF_Label assy = tool->NewShape();
+    TDataStd_Name::Set(assy, "Fixture");
+    gp_Trsf up; up.SetTranslation(gp_Vec(0, 0, 20));
+    gp_Trsf right; right.SetTranslation(gp_Vec(200, 0, 0));
+    tool->AddComponent(assy, block, TopLoc_Location());
+    tool->AddComponent(assy, block, TopLoc_Location(right));
+    tool->AddComponent(assy, pin, TopLoc_Location(up));
+    tool->UpdateAssemblies();
+    // The writer prints transfer statistics; keep the test output clean
+    Message::DefaultMessenger()->RemovePrinters(STANDARD_TYPE(Message_PrinterOStream));
+    STEPCAFControl_Writer writer;
+    Interface_Static::SetCVal("xstep.cascade.unit", "MM");   // the shapes are in mm (an import sets M)
+    const QString path = dir + "/fixture.step";
+    writer.Transfer(doc, STEPControl_AsIs);
+    writer.Write(path.toUtf8().constData());
+    app->Close(doc);
+    return path;
+}
+
+TEST(stepImportReportsProgressAndCancels) {
+    QTemporaryDir dir;
+    const QString path = writeTestStep(dir.path());
+    using StepImporter::Progress;
+
+    std::vector<Progress> seen;
+    StepImporter::Part root;
+    QString error;
+    const bool ok = StepImporter::importFile(path, root, error, [&](const Progress& p) {
+        seen.push_back(p);
+        return true;
+    });
+    CHECK(ok);
+    CHECK(error.isEmpty());
+    CHECK(root.name == "Fixture");
+    CHECK(root.children.size() == 3);
+    if (root.children.size() == 3) {
+        // The two blocks share one mesh; geometry is in metres
+        CHECK(root.children[0].mesh && root.children[0].mesh == root.children[1].mesh);
+        CHECK(root.children[2].mesh && root.children[2].mesh != root.children[0].mesh);
+        if (root.children[0].mesh) {
+            const QVector3D size = root.children[0].mesh->aabbMax - root.children[0].mesh->aabbMin;
+            CHECK_NEAR(size.x(), 0.1, 1e-4);
+            CHECK_NEAR(size.z(), 0.02, 1e-4);
+        }
+        CHECK_NEAR(root.children[1].position.x(), 0.2, 1e-5);
+    }
+    // Stages arrive in order and meshing ends complete
+    CHECK(!seen.empty());
+    bool ordered = true;
+    for (size_t i = 1; i < seen.size(); i++)
+        if (int(seen[i].stage) < int(seen[i - 1].stage)) ordered = false;
+    CHECK(ordered);
+    if (!seen.empty()) {
+        CHECK(seen.front().stage == Progress::Stage::Reading);
+        CHECK(seen.back().stage == Progress::Stage::Meshing);
+        CHECK(seen.back().total == 2);              // two distinct parts
+        CHECK(seen.back().done == 2);
+        CHECK_NEAR(seen.back().stageFraction, 1.0, 1e-9);
+    }
+
+    // Cancelling while reading stops at the next point the import can stop
+    int calls = 0;
+    StepImporter::Part none;
+    const bool cancelled = StepImporter::importFile(path, none, error, [&](const Progress&) {
+        ++calls;
+        return false;
+    });
+    CHECK(!cancelled);
+    CHECK(error == StepImporter::cancelledMessage());
+    CHECK(none.children.empty() && !none.mesh);
+    CHECK(calls <= 2);
+
+    // Cancelling during meshing too
+    const bool late = StepImporter::importFile(path, none, error, [&](const Progress& p) {
+        return p.stage != Progress::Stage::Meshing;
+    });
+    CHECK(!late);
+    CHECK(error == StepImporter::cancelledMessage());
+}
+
+// A grille: a 200 × 100 × 5 mm plate with 8 × 10 round holes of r 4 mm,
+// so its faces have more holes than the default triangulator handles well
+TEST(stepImportMeshesFacesWithManyHoles) {
+    TopoDS_Wire outer = BRepBuilderAPI_MakePolygon(gp_Pnt(0, 0, 0), gp_Pnt(200, 0, 0),
+                                                   gp_Pnt(200, 100, 0), gp_Pnt(0, 100, 0), true).Wire();
+    BRepBuilderAPI_MakeFace face(gp_Pln(gp::XOY()), outer);
+    for (int i = 0; i < 10; i++)
+        for (int j = 0; j < 8; j++) {
+            gp_Circ c(gp_Ax2(gp_Pnt(15 + i * 19, 15 + j * 10, 0), gp::DZ()), 4);
+            TopoDS_Wire hole = BRepBuilderAPI_MakeWire(BRepBuilderAPI_MakeEdge(c).Edge()).Wire();
+            hole.Reverse();
+            face.Add(hole);
+        }
+    const TopoDS_Shape plate = BRepPrimAPI_MakePrism(face.Face(), gp_Vec(0, 0, 5)).Shape();
+
+    Handle(XCAFApp_Application) app = XCAFApp_Application::GetApplication();
+    Handle(TDocStd_Document) doc;
+    app->NewDocument("MDTV-XCAF", doc);
+    Handle(XCAFDoc_ShapeTool) tool = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
+    TDataStd_Name::Set(tool->AddShape(plate, false), "Grille");
+    QTemporaryDir dir;
+    const QString path = dir.path() + "/grille.step";
+    Message::DefaultMessenger()->RemovePrinters(STANDARD_TYPE(Message_PrinterOStream));
+    STEPCAFControl_Writer writer;
+    Interface_Static::SetCVal("xstep.cascade.unit", "MM");   // the shapes are in mm (an import sets M)
+    writer.Transfer(doc, STEPControl_AsIs);
+    writer.Write(path.toUtf8().constData());
+    app->Close(doc);
+
+    StepImporter::Part root;
+    QString error;
+    CHECK(StepImporter::importFile(path, root, error));
+    CHECK(root.mesh != nullptr);
+    if (!root.mesh) return;
+    // Every face meshed and the holes left open: the triangles' area is the
+    // plate's surface (two faces with holes, the outer sides, the hole walls)
+    const auto& v = root.mesh->interleaved;
+    double area = 0;
+    for (size_t t = 0; t + 18 <= v.size(); t += 18) {
+        const QVector3D a(v[t], v[t + 1], v[t + 2]), b(v[t + 6], v[t + 7], v[t + 8]),
+                        c(v[t + 12], v[t + 13], v[t + 14]);
+        area += 0.5 * QVector3D::crossProduct(b - a, c - a).length();
+    }
+    const double holes = 80 * M_PI * 0.004 * 0.004;
+    const double expected = 2 * (0.2 * 0.1 - holes) + 2 * (0.2 + 0.1) * 0.005
+                          + 80 * 2 * M_PI * 0.004 * 0.005;
+    CHECK_NEAR(area, expected, expected * 0.02);
+}
+#endif
 
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);

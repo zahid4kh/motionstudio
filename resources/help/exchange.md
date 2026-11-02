@@ -14,6 +14,14 @@
 
 Both formats are Z-up, and MotionStudio is Y-up, so the model is placed under a root frame turned upright. The import notes list anything that was approximated or skipped.
 
+**STEP:** you can also drop `.step` or `.stp` files onto the window. A progress window shows the three stages (**Read file**, **Build shapes**, **Mesh parts**), the percentage and the time left, which part is being meshed, and how long it has been running. Large assemblies can take a while:
+
+- **Time left** is guessed from the file size at first. MotionStudio remembers how fast each stage ran, so the guess gets better with every import.
+- **Working…** in place of a time means progress has stopped moving, usually while one very large part is meshing. The window names that part.
+- **Cancel** (or Esc) stops the import and adds nothing. Reading the file can't be interrupted, so a cancel during **Read file** takes effect once the file is read.
+
+Identical parts are meshed once, several parts are meshed at the same time, and the status bar shows how long the import took.
+
 ## Send models out
 
 **File › Export › URDF (ROS)…** and **MJCF (MuJoCo)…** write the mechanism with every part's geometry as STL files in a `meshes` folder next to the file. The pose with all joint values at 0 is the reference pose.

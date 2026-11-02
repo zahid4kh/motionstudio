@@ -6,6 +6,7 @@
 #include "io/RobotFormats.h"
 #include "serialization/ProjectSerializer.h"
 #include "import/StepImporter.h"
+#include "ui/ImportProgressDialog.h"
 #include "ui/TemplateDialog.h"
 #include "ui/HelpDialog.h"
 #include "ui/Island.h"
@@ -790,39 +791,42 @@ void MainWindow::importStepFile(const QString& path) {
 
     m_stepImportName = QFileInfo(path).fileName();
 
-    // Large assemblies can take a minute-plus to triangulate (OCCT is CPU-bound
-    // and single-threaded per shape) — run it off the GUI thread so the window
-    // doesn't appear to hang, with a modal progress dialog since there's nothing
-    // useful to do until it finishes.
-    m_stepProgress = new QProgressDialog("Importing " + m_stepImportName + "…", QString(), 0, 0, this);
-    m_stepProgress->setWindowTitle("STEP Import");
-    m_stepProgress->setWindowModality(Qt::WindowModal);
-    m_stepProgress->setMinimumDuration(0);
-    m_stepProgress->setCancelButton(nullptr);  // OCCT translation can't be safely interrupted mid-flight
-    m_stepProgress->setValue(0);
+    // Large assemblies take a while to translate and mesh: run it off the GUI
+    // thread so the window keeps painting, with a modal dialog showing the
+    // stage, percentage and time left (and a Cancel)
+    m_stepProgress = new ImportProgressDialog(path, this);
     m_stepProgress->show();
 
     m_stepWatcher = new QFutureWatcher<StepImportResult>(this);
     connect(m_stepWatcher, &QFutureWatcher<StepImportResult>::finished,
             this, &MainWindow::onStepImportFinished);
 
-    QFuture<StepImportResult> future = QtConcurrent::run([path]() -> StepImportResult {
-        StepImportResult r;
-        r.ok = StepImporter::importFile(path, r.root, r.error);
-        return r;
-    });
+    QFuture<StepImportResult> future = QtConcurrent::run(
+        [path, progress = m_stepProgress->callback()]() -> StepImportResult {
+            StepImportResult r;
+            r.ok = StepImporter::importFile(path, r.root, r.error, progress);
+            return r;
+        });
     m_stepWatcher->setFuture(future);
 }
 
 void MainWindow::onStepImportFinished() {
     StepImportResult result = m_stepWatcher->result();
 
-    m_stepProgress->close();
+    const bool cancelled = m_stepProgress->cancelRequested();
+    const double seconds = m_stepProgress->elapsedSeconds();
+    m_stepProgress->finish(result.ok && !cancelled);
+    m_stepProgress->hide();
     m_stepProgress->deleteLater();
     m_stepProgress = nullptr;
     m_stepWatcher->deleteLater();
     m_stepWatcher = nullptr;
 
+    // Cancelled while reading (which can't stop): the import finished anyway
+    if(cancelled){
+        showStatus("STEP import cancelled");
+        return;
+    }
     if(!result.ok){
         QMessageBox::critical(this, "STEP Import Failed",
             "Could not import:\n" + m_stepImportName + "\n\n" + result.error);
@@ -840,8 +844,9 @@ void MainWindow::onStepImportFinished() {
         for(const auto& c : p.children) count(c);
     };
     count(result.root);
-    showStatus(QString("Imported %1  —  %2 part%3")
-        .arg(m_stepImportName).arg(partCount).arg(partCount == 1 ? "" : "s"));
+    showStatus(QString("Imported %1  —  %2 part%3 in %4 s")
+        .arg(m_stepImportName).arg(partCount).arg(partCount == 1 ? "" : "s")
+        .arg(seconds < 10 ? QString::number(seconds, 'f', 1) : QString::number(qRound(seconds))));
 }
 
 // ── Drag & drop ───────────────────────────────────────────────────────────────

@@ -283,7 +283,7 @@ A real PLC (or CODESYS, OpenPLC…) can drive the model over Modbus TCP. Give si
 
 ## Import and export
 
-- **File › Import STEP…** — CAD assemblies (part tree, colours)
+- **File › Import STEP…** — CAD assemblies (part tree, colours). You can also drop `.step`/`.stp` files on the window or pass one on the command line (`MotionStudio part.step`). The import runs in the background with a progress window: the three stages (**Read file**, **Build shapes**, **Mesh parts**), the percentage and time left above the bar, the part being meshed and the elapsed time. **Cancel** (or Esc) stops it; reading the file itself can't be interrupted, so a cancel then takes effect once the file is read. The time left is guessed from the file size at first and gets better with every import (MotionStudio remembers how fast the stages ran); while one very large part is meshing, it says **Working…** instead of guessing. Parts are meshed in parallel, the biggest first, and identical parts are meshed once.
 - **File › Import URDF / MJCF…** — robots from ROS (`.urdf`) or MuJoCo (`.xml`): links/bodies, visuals (boxes, cylinders, spheres, STL/OBJ meshes), revolute/continuous/prismatic (hinge/slide) joints with limits, mimic joints and joint equalities as couplings, colours, MJCF default classes. Movable joints get actuators. Z-up models are stood upright.
 - **File › Export › URDF / MJCF** — the mechanism at joint value 0, every part's geometry as STL in `meshes/`, limits, couplings, colours; MJCF adds actuators, free joints for rigid bodies and a floor, and loads straight into MuJoCo.
 

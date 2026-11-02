@@ -2,7 +2,6 @@
 #include <QMainWindow>
 #include <QLabel>
 #include <QTimer>
-#include <QProgressDialog>
 #include <QFutureWatcher>
 #include "scene/SceneGraph.h"
 #include "scene/UndoManager.h"
@@ -13,6 +12,7 @@
 #include "ui/automation/AutomationPanel.h"
 #include "import/StepImporter.h"
 
+class ImportProgressDialog;
 class QAction;
 class QDockWidget;
 class QMenuBar;
@@ -31,6 +31,8 @@ public:
 
     // Opens a .mstudio project (e.g. passed on the command line)
     bool openFile(const QString& path);
+    // Imports a .step/.stp file into the current scene, in the background
+    void importStepFile(const QString& path);
 
 protected:
     void dragEnterEvent(QDragEnterEvent* e) override;
@@ -79,7 +81,6 @@ private:
     void rememberRecentFile(const QString& path);
     void fillRecentMenu(QMenu* menu);
 
-    void importStepFile(const QString& path);
     int  addImportedPart(const StepImporter::Part& part, int parentId);
 
     // "success" = green feedback, default = error (red)
@@ -113,10 +114,10 @@ private:
     QString  m_currentFile;
     bool     m_dirty = false;
 
-    // STEP import runs on a worker thread (large assemblies can take a
-    // minute-plus to triangulate); a modal progress dialog blocks further
-    // interaction until it completes.
+    // STEP import runs on a worker thread (large assemblies take a while to
+    // translate and mesh); a modal ImportProgressDialog shows the stages,
+    // percentage and time left, and can cancel it.
     QFutureWatcher<StepImportResult>* m_stepWatcher  = nullptr;
-    QProgressDialog*                  m_stepProgress = nullptr;
+    ImportProgressDialog*             m_stepProgress = nullptr;
     QString                           m_stepImportName;
 };

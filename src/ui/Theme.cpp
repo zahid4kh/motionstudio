@@ -160,6 +160,10 @@ QLabel#axisY { color: @axisy@; font-weight: 700; font-size: 11px; }
 QLabel#axisZ { color: @axisz@; font-weight: 700; font-size: 11px; }
 QLabel#subheading { color: @muted@; font-size: 11px; font-weight: 700; padding: 4px 0 0 0; }
 QLabel#dialogTitle { font-size: 15px; font-weight: 700; }
+QLabel#importStep { color: @muted@; font-size: 11px; font-weight: 600; }
+QLabel#importStep[done="true"] { color: @fg@; }
+QLabel#importStep[active="true"] { color: @accent@; font-weight: 700; }
+QLabel#importPercent { font-size: 20px; font-weight: 700; }
 QLabel#templateDesc { background: @island@; color: @fg@; border: 1px solid @border@; border-radius: 10px;
     padding: 10px 12px; min-height: 60px; }
 QTextBrowser#helpView { background: @island@; color: @fg@; border: 1px solid @border@; border-radius: 10px; }

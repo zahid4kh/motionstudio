@@ -106,6 +106,7 @@ set(SOURCES
     src/ui/PropertiesPanel.cpp
     src/ui/TemplateDialog.cpp
     src/ui/HelpDialog.cpp
+    src/ui/ImportProgressDialog.cpp
     src/ui/Theme.cpp
     src/ui/Island.cpp
     src/ui/TimelineBar.cpp
@@ -145,4 +146,9 @@ if(MOTIONSTUDIO_TESTS)
     add_executable(MotionStudioTests tests/main.cpp)
     target_link_libraries(MotionStudioTests PRIVATE MotionStudioCore)
     target_compile_definitions(MotionStudioTests PRIVATE MS_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+    if(OCCT_FOUND)
+        # The STEP import test writes its own small assembly with OCCT
+        target_include_directories(MotionStudioTests PRIVATE "${OCCT_INCLUDE_DIR}/opencascade")
+        target_link_libraries(MotionStudioTests PRIVATE TKPrim)
+    endif()
 endif()

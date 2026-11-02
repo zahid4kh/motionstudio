@@ -101,7 +101,7 @@ Goal: Projects persist.
 - [x] MuJoCo full physics integration (Milestone 3 completion)
 - [ ] Joint / motor limit visualisation overlays
 - [ ] CAD import (STEP, SolidWorks)
-  - STEP is done (OpenCASCADE XCAF, keeps the assembly tree, File › Import STEP… or drag and drop). Native SolidWorks files aren't supported.
+  - STEP is done (OpenCASCADE XCAF, keeps the assembly tree, File › Import STEP…, drag and drop or the command line). The progress window shows the stage, percentage, time left and the part being meshed, and can cancel. Parts are meshed in parallel. Native SolidWorks files aren't supported.
 - [x] Collision editing (Collision Body section in Properties: add/remove, shape type, dimensions)
 - [x] Inverse Kinematics (damped least squares on the joint tree: Cartesian jog, IK gizmo drag, MoveL straight-line moves)
 - [ ] Path Planning
