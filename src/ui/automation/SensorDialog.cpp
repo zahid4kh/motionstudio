@@ -4,6 +4,7 @@
 #include "scene/SceneGraph.h"
 #include "ui/Theme.h"
 #include <QCheckBox>
+#include <algorithm>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
@@ -40,8 +41,9 @@ SensorDialog::SensorDialog(const SceneGraph* scene, const QString& name, const S
     auto* title = new QLabel("Sensor " + name);
     title->setObjectName("dialogTitle");
     vb->addWidget(title);
-    auto* sub = new QLabel("A sensor is a Bool signal that is true while something is in its beam or zone. "
-                           "It moves with the object it is mounted on.");
+    auto* sub = new QLabel("A sensor is a signal read from the scene every scan: true while something is in its "
+                           "beam or zone, or the exact distance a laser measures. It moves with the object it is "
+                           "mounted on.");
     sub->setObjectName("hint");
     sub->setWordWrap(true);
     vb->addWidget(sub);
@@ -53,7 +55,9 @@ SensorDialog::SensorDialog(const SceneGraph* scene, const QString& name, const S
     m_type = new QComboBox;
     m_type->addItem(Theme::icon("scan-line"), "Beam: light barrier / part present", int(SensorType::Beam));
     m_type->addItem(Theme::icon("box"),       "Zone: presence / contact",          int(SensorType::Zone));
-    m_type->setCurrentIndex(cfg.type == SensorType::Zone ? 1 : 0);
+    m_type->addItem(Theme::icon("ruler"),     "Distance: laser, measures metres (Real)", int(SensorType::Distance));
+    m_type->addItem(Theme::icon("crosshair"), "Position: zone that reports where the part is", int(SensorType::Position));
+    m_type->setCurrentIndex(std::max(0, m_type->findData(int(cfg.type))));
     form->addRow("Type", m_type);
 
     m_mount = new QComboBox;
@@ -149,7 +153,7 @@ SensorConfig SensorDialog::config() const {
 
 void SensorDialog::updateForm() {
     const SensorConfig c = config();
-    const bool beam = c.type == SensorType::Beam;
+    const bool beam = sensorIsRay(c.type);
     m_form->setRowVisible(m_direction, beam);
     m_form->setRowVisible(m_range, beam);
     m_form->setRowVisible(m_bounds, !beam);
@@ -166,9 +170,20 @@ void SensorDialog::updateForm() {
     } else {
         const sensors::Reading r = sensors::read(*m_scene, c);
         const SceneObject* o = m_scene->getObject(r.objectId);
-        if (!r.active)
+        if (c.type == SensorType::Distance)
+            text = r.active ? QString("In the current pose: %1 m to %2.").arg(double(r.distance), 0, 'f', 4)
+                                  .arg(o ? o->name : QString("something"))
+                            : QString("In the current pose: nothing within range (reads %1 m).").arg(double(c.range), 0, 'f', 3);
+        else if (!r.active)
             text = "In the current pose: nothing detected (false).";
-        else if (beam)
+        else if (c.type == SensorType::Position) {
+            double p[sensors::kPositionFieldCount];
+            sensors::partPose(*m_scene, c, r.objectId, p);
+            text = QString("In the current pose: finds %1 at x %2, y %3, z %4 m, turned %5° %6° %7° (true).")
+                       .arg(o ? o->name : QString("something"))
+                       .arg(p[0], 0, 'f', 4).arg(p[1], 0, 'f', 4).arg(p[2], 0, 'f', 4)
+                       .arg(p[3], 0, 'f', 1).arg(p[4], 0, 'f', 1).arg(p[5], 0, 'f', 1);
+        } else if (beam)
             text = QString("In the current pose: detects %1 at %2 m (true).")
                        .arg(o ? o->name : QString("something")).arg(double(r.distance), 0, 'f', 3);
         else

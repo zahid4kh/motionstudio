@@ -196,8 +196,14 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
 
     // ── Right: operation editor ─────────────────────────────────────────────
     m_opForm = new QGroupBox("Operation");
-    m_opLayout = new QFormLayout(m_opForm);
-    m_opLayout->setContentsMargins(6, 12, 6, 6);
+    // The wrapping status text sits below the form, not in it: a
+    // height-for-width row makes QFormLayout (Qt 6.4) squeeze a shown row
+    // next to hidden ones
+    auto* opBox = new QVBoxLayout(m_opForm);
+    opBox->setContentsMargins(6, 12, 6, 6);
+    opBox->setSpacing(6);
+    m_opLayout = new QFormLayout;
+    opBox->addLayout(m_opLayout);
     m_opLayout->setVerticalSpacing(4);
     m_opLayout->setLabelAlignment(Qt::AlignRight);
     m_opName = new QLineEdit;
@@ -209,6 +215,15 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     m_opGripper = new QComboBox;
     m_opGripper->setToolTip("The object that holds the part, e.g. the robot's tool flange or gripper body");
     m_opPart = new QComboBox;
+    m_opOnPart = new QComboBox;
+    m_opOnPart->setToolTip("The pose was taught on a part: go to it relative to this part. A sensor finds it at "
+                           "that moment (the operation waits until it finds something; copies of the taught part "
+                           "count), or a fixed object");
+    // Long item names (sensors, objects deep in the tree) must not widen the form
+    for (QComboBox* c : {m_opPart, m_opOnPart}) {
+        c->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+        c->setMinimumContentsLength(12);
+    }
     m_opPart->setToolTip("What to pick up: whatever a sensor detects at that moment (waits until it detects "
                          "something), or always the same object");
     m_opTarget    = autoui::makeExprEdit(scene, autoui::ExprKind::Value, "e.g. 90  or  Pick ? -45 : 0");
@@ -235,6 +250,7 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     m_opLayout->addRow("Type", m_opType);
     m_opLayout->addRow("Actuator", m_opActuator);
     m_opLayout->addRow("Pose", m_opPose);
+    m_opLayout->addRow("On part", m_opOnPart);
     m_opLayout->addRow("Gripper", m_opGripper);
     m_opLayout->addRow("Part", m_opPart);
     m_opLayout->addRow("Target", m_opTarget);
@@ -245,7 +261,8 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     m_opLayout->addRow("Start when", m_opStartCond);
     m_opLayout->addRow("On start", m_opOnStart);
     m_opLayout->addRow("On finish", m_opOnFinish);
-    m_opLayout->addRow(m_opStatus);
+    opBox->addWidget(m_opStatus);
+    opBox->addStretch();
     auto* formScroll = new QScrollArea;
     formScroll->setWidgetResizable(true);
     formScroll->setFrameShape(QFrame::NoFrame);
@@ -293,9 +310,21 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
         commitOpForm();
     });
     connect(m_opActuator, &QComboBox::currentIndexChanged, this, &SequencesPage::commitOpForm);
-    connect(m_opPose,     &QComboBox::currentIndexChanged, this, &SequencesPage::commitOpForm);
+    connect(m_opPose,     &QComboBox::currentIndexChanged, this, [this]{
+        if (m_loading) return;
+        // A pose taught on a part brings its tool along
+        const Pose* p = m_scene->getPose(m_opPose->currentData().toInt());
+        if (p && p->isRelative() && kTypes[std::max(0, m_opType->currentIndex())] == OperationType::MoveL &&
+            m_opGripper->currentData().toInt() == -1) {
+            const QSignalBlocker block(m_opGripper);
+            m_opGripper->setCurrentIndex(std::max(0, m_opGripper->findData(p->toolId)));
+        }
+        updateOpFormVisibility(kTypes[std::max(0, m_opType->currentIndex())]);
+        commitOpForm();
+    });
     connect(m_opGripper,  &QComboBox::currentIndexChanged, this, &SequencesPage::commitOpForm);
     connect(m_opPart,     &QComboBox::currentIndexChanged, this, &SequencesPage::commitOpForm);
+    connect(m_opOnPart,   &QComboBox::currentIndexChanged, this, &SequencesPage::commitOpForm);
     for (auto* e : {m_opTarget, m_opVelocity, m_opDuration, m_opCondition, m_opStartCond, m_opOnStart, m_opOnFinish})
         connect(e, &ExpressionEdit::committed, this, &SequencesPage::commitOpForm);
 
@@ -369,6 +398,17 @@ QString SequencesPage::predecessorText(const Sequence& seq, const Operation& op)
     return out.isEmpty() ? QString("start") : out.join(", ");
 }
 
+QString SequencesPage::partText(const Operation& op) const {
+    const Pose* p = m_scene->getPose(op.poseId);
+    if (!p || !p->isRelative()) return {};
+    if (op.sensorId != -1) {
+        const Signal* sg = m_scene->getSignal(op.sensorId);
+        return " on part at " + (sg ? sg->name : QString("?"));
+    }
+    const SceneObject* o = m_scene->getObject(op.partId != -1 ? op.partId : p->frameId);
+    return " on " + (o ? o->name : QString("?"));
+}
+
 QString SequencesPage::describe(const Operation& op) const {
     const Motor* m = m_scene->getMotor(op.actuatorId);
     QString act = m ? m->name : QString("?");
@@ -378,7 +418,7 @@ QString SequencesPage::describe(const Operation& op) const {
                        op.velocity.trimmed().isEmpty() ? QString() : " @ " + op.velocity.trimmed());
         case OperationType::MoveToPose: {
             const Pose* p = m_scene->getPose(op.poseId);
-            return QString("→ %1%2").arg(p ? p->name : "?",
+            return QString("→ %1%2%3").arg(p ? p->name : "?", partText(op),
                        op.velocity.trimmed().isEmpty() ? QString() : QString(" @ %1 %").arg(op.velocity.trimmed()));
         }
         case OperationType::Run:     return QString("%1 at %2").arg(act, op.velocity.trimmed());
@@ -402,9 +442,9 @@ QString SequencesPage::describe(const Operation& op) const {
             return QString("%1 releases").arg(g ? g->name : "?");
         }
         case OperationType::MoveL: {
-            const SceneObject* t = m_scene->getObject(op.toolId);
             const Pose* p = m_scene->getPose(op.poseId);
-            return QString("%1 → %2 linear%3").arg(t ? t->name : "?", p ? p->name : "?",
+            const SceneObject* t = m_scene->getObject(op.toolId != -1 || !p ? op.toolId : p->toolId);
+            return QString("%1 → %2%3 linear%4").arg(t ? t->name : "?", p ? p->name : "?", partText(op),
                        op.velocity.trimmed().isEmpty() ? QString() : QString(" @ %1 m/s").arg(op.velocity.trimmed()));
         }
     }
@@ -464,6 +504,18 @@ void SequencesPage::updateOpFormVisibility(OperationType t) {
         ? "The object whose frame is the tool centre point; the actuated joints above it move it"
         : "The object that holds the part, e.g. the robot's tool flange or gripper body");
     m_opLayout->setRowVisible(m_opPart, t == OperationType::Grip);
+    // MoveL / MoveToPose to a pose taught on a part: which part this time
+    const Pose* chosen = m_scene->getPose(m_opPose->currentData().toInt());
+    const bool onPart = pose && chosen && chosen->isRelative();
+    m_opLayout->setRowVisible(m_opOnPart, onPart);
+    if (onPart) {
+        const SceneObject* taught = m_scene->getObject(chosen->frameId);
+        m_opOnPart->setItemText(0, QString("%1, where it was taught").arg(taught ? taught->name : QString("The part")));
+    }
+    // MoveL to such a pose may leave the tool to the pose
+    const SceneObject* poseTool = onPart ? m_scene->getObject(chosen->toolId) : nullptr;
+    m_opGripper->setItemText(0, t == OperationType::MoveL && poseTool
+                                    ? QString("%1 (the pose's tool)").arg(poseTool->name) : QString("(choose)"));
     if (t == OperationType::Run) {
         m_opVelLabel->setText("Speed");
         m_opVelocity->setPlaceholderText("signed speed, e.g. 90 or -0.2");
@@ -556,6 +608,13 @@ void SequencesPage::loadOpForm() {
         int idx = m_opPart->findData(cur);
         if (idx < 0 && !cur.isEmpty()) { m_opPart->addItem("(deleted)", cur); idx = m_opPart->count() - 1; }
         m_opPart->setCurrentIndex(std::max(0, idx));
+
+        // The same choices for a pose taught on a part; the first is the taught part itself
+        const QSignalBlocker block2(m_opOnPart);
+        m_opOnPart->clear();
+        for (int i = 0; i < m_opPart->count(); ++i)
+            m_opOnPart->addItem(m_opPart->itemIcon(i), m_opPart->itemText(i), m_opPart->itemData(i));
+        m_opOnPart->setCurrentIndex(std::max(0, idx));
     }
 
     if (!op) {
@@ -855,7 +914,8 @@ void SequencesPage::commitOpForm() {
         const int object   = m_opGripper->currentData().toInt();
         op->gripperId      = op->type == OperationType::MoveL ? -1 : object;
         op->toolId         = op->type == OperationType::MoveL ? object : -1;
-        const QString part = m_opPart->currentData().toString();
+        const bool onPart  = op->type == OperationType::MoveL || op->type == OperationType::MoveToPose;
+        const QString part = (onPart ? m_opOnPart : m_opPart)->currentData().toString();
         op->sensorId       = part.startsWith('s') ? part.mid(1).toInt() : -1;
         op->partId         = part.startsWith('o') ? part.mid(1).toInt() : -1;
         op->target         = m_opTarget->text();

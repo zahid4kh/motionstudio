@@ -51,7 +51,7 @@ void fillObjectCombo(QComboBox* combo, const SceneGraph& scene, int currentId, c
     if (!noneLabel.isEmpty()) combo->addItem(noneLabel, -1);
     std::function<void(int, int)> add = [&](int id, int depth) {
         const SceneObject* o = scene.getObject(id);
-        if (!o) return;
+        if (!o || o->copyOf != -1) return;   // copies made while simulating
         combo->addItem(QString(depth * 3, QChar(' ')) + o->name, id);
         for (int c : o->childIds) add(c, depth + 1);
     };

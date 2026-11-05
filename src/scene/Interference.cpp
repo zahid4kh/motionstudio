@@ -185,7 +185,7 @@ void InterferenceChecker::begin(const SceneGraph& scene) {
     m_active = true;
     std::vector<std::pair<int, int>> parts;   // (object, motion group)
     for (auto& [id, o] : scene.allObjects())
-        if (surfaceOf(o) && !underRigidBody(scene, id)) parts.push_back({id, motionGroup(scene, id)});
+        if (surfaceOf(o) && !o.parked && !underRigidBody(scene, id)) parts.push_back({id, motionGroup(scene, id)});
     std::sort(parts.begin(), parts.end());
     for (size_t i = 0; i < parts.size(); ++i)
         for (size_t j = i + 1; j < parts.size(); ++j) {
@@ -202,7 +202,7 @@ void InterferenceChecker::check(const SceneGraph& scene, double time) {
     m_now.clear();
     std::set<std::pair<int, int>> hit;
     for (const auto& pr : m_pairs)
-        if (intersect(scene, pr.first, pr.second)) {
+        if (!scene.isParked(pr.first) && !scene.isParked(pr.second) && intersect(scene, pr.first, pr.second)) {
             hit.insert(pr);
             m_now.insert(pr.first);
             m_now.insert(pr.second);

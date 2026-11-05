@@ -15,6 +15,8 @@ signals:
     void objectSelected(int id);
     void duplicateRequested(int id);
     void addSensorRequested(int id);
+    void addSourceRequested(int id);   // the object becomes an object source's template
+    void addSinkRequested(int id);     // a sink on the object's bounds
 
 private slots:
     void onObjectAdded(int id);

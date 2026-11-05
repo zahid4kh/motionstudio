@@ -38,6 +38,14 @@ struct SceneObject {
     // children (see SceneGraph::opacityOf)
     float       opacity = 1.0f;
 
+    // Simulation-time state, never saved (see SceneGraph::spawnCopy):
+    // made by an object source (the original's id and the source's), and
+    // whether the object is out of the run (a source's template, or a part
+    // a sink took). Parked objects are not drawn, picked, sensed or simulated.
+    int         copyOf   = -1;
+    int         sourceId = -1;
+    bool        parked   = false;
+
     // Only set for ImportedMesh; null for assembly group nodes (tree-only, no geometry)
     std::shared_ptr<MeshGeometry> mesh;
 

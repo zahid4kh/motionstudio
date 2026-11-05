@@ -70,7 +70,7 @@ HierarchyPanel::HierarchyPanel(SceneGraph* scene, QWidget* parent)
 
 void HierarchyPanel::addItem(int objectId, QTreeWidgetItem* parentItem, const QString& parentPath) {
     const SceneObject* obj = m_scene->getObject(objectId);
-    if(!obj) return;
+    if(!obj || obj->copyOf != -1) return;   // copies made while simulating aren't listed
 
     auto* item = new QTreeWidgetItem();
     item->setText(0, obj->name);
@@ -220,6 +220,12 @@ void HierarchyPanel::showContextMenu(const QPoint& pos) {
         });
         menu.addAction(Theme::icon("radio"), "Add Sensor Here…", [this, only](){
             emit addSensorRequested(only->data(0, Qt::UserRole).toInt());
+        });
+        menu.addAction(Theme::icon("boxes"), "Make Part Source…", [this, only](){
+            emit addSourceRequested(only->data(0, Qt::UserRole).toInt());
+        });
+        menu.addAction(Theme::icon("log-out"), "Add Part Sink Here…", [this, only](){
+            emit addSinkRequested(only->data(0, Qt::UserRole).toInt());
         });
         menu.addSeparator();
         menu.addAction(Theme::icon("trash-2", Theme::Tint::Danger), "Delete", [this, selected](){

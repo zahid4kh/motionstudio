@@ -23,6 +23,15 @@ const QList<TemplateDialog::TemplateInfo> TemplateDialog::s_templates = {
         "hand-grab"
     },
     {
+        "Part Flow Cell — Source, Sink & Vision Pick",
+        "A source feeds a box onto the belt every 4 s; a laser measures each one's height.\n"
+        "A position sensor finds where the box stopped and the gantry picks it there\n"
+        "(MoveL to a pose taught on the part), then drops it in a bin whose sink takes it.\n"
+        "Needs MuJoCo for the parts to ride the belt and fall. Press Play.",
+        ":/templates/part_flow_cell.mstudio",
+        "boxes"
+    },
+    {
         "Indexing Table",
         "A turntable indexes 90° (target = Table.target + 90), then a press stamps\n"
         "the part and retracts. A derived Safe signal interlocks the table; a counter\n"

@@ -43,8 +43,9 @@ SignalsPage::SignalsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* pare
     m_addInput->setToolTip("A signal you set by hand from the Runtime tab (buttons, switches, set-points)");
     m_addInternal->setToolTip("A state/flag written by operation actions (e.g. Gripper = true; Count = Count + 1)");
     m_addDerived->setToolTip("A signal recomputed every scan from an expression (e.g. Ready = J1.inPosition && !EStop)");
-    m_addSensor->setToolTip("A Bool that is true while something is in a beam or zone in the scene "
-                            "(part present, light barrier, contact). Mount it on the selected object.");
+    m_addSensor->setToolTip("A signal read from the scene: true while something is in a beam or zone (part "
+                            "present, light barrier, contact), a laser's distance, or where a part is. "
+                            "Mount it on the selected object.");
     for (auto* b : {m_addInput, m_addInternal, m_addDerived, m_addSensor}) bar->addWidget(b);
     bar->addStretch();
     auto* hint = new QLabel("Double-click a cell to edit. Names are used in expressions.");
@@ -118,7 +119,7 @@ void SignalsPage::refresh() {
             if (!s) return;
             edit([&]{
                 s->kind = SignalKind(k);
-                if (s->kind == SignalKind::Sensor) s->type = SignalType::Bool;
+                if (s->kind == SignalKind::Sensor) s->type = sensorSignalType(s->sensor.type);
                 m_scene->notifyAutomationChanged();
             });
             scheduleRefresh();
@@ -265,7 +266,11 @@ void SignalsPage::configureSensor(int signalId) {
     if (dlg.exec() != QDialog::Accepted) return;
     s = m_scene->getSignal(signalId);
     if (!s) return;
-    edit([&]{ s->sensor = dlg.config(); m_scene->notifyAutomationChanged(); });
+    edit([&]{
+        s->sensor = dlg.config();
+        s->type = sensorSignalType(s->sensor.type);
+        m_scene->notifyAutomationChanged();
+    });
     scheduleRefresh();
 }
 

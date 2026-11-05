@@ -3,6 +3,7 @@
 #include "RuntimePage.h"
 #include "SequencesPage.h"
 #include "SignalsPage.h"
+#include "PartFlowPage.h"
 #include "physics/SimulationEngine.h"
 #include "ui/HelpDialog.h"
 #include "ui/Theme.h"
@@ -28,9 +29,11 @@ AutomationPanel::AutomationPanel(SceneGraph* scene, SimulationEngine* sim, QWidg
     m_actuators = new ActuatorsPage(scene, sim);
     m_sequences = new SequencesPage(scene, sim);
     m_runtime   = new RuntimePage(scene, sim);
+    m_flow      = new PartFlowPage(scene, sim);
     m_tabs->addTab(m_signals,   Theme::icon("toggle-right"), "Signals");
     m_tabs->addTab(m_actuators, Theme::icon("cog"),          "Actuators && Poses");
     m_tabs->addTab(m_sequences, Theme::icon("list-ordered"), "Sequences");
+    m_tabs->addTab(m_flow,      Theme::icon("boxes"),        "Part Flow");
     m_tabs->addTab(m_runtime,   Theme::icon("activity"),     "Runtime");
     m_tabs->setIconSize(QSize(15, 15));
 
@@ -68,6 +71,7 @@ AutomationPanel::AutomationPanel(SceneGraph* scene, SimulationEngine* sim, QWidg
         HelpDialog::showTopic(tab == m_signals   ? "signals"
                             : tab == m_sequences ? "sequences"
                             : tab == m_runtime   ? "runtime"
+                            : tab == m_flow      ? "flow"
                                                  : "actuators", this);
     });
     ch->addWidget(guide);
@@ -75,7 +79,7 @@ AutomationPanel::AutomationPanel(SceneGraph* scene, SimulationEngine* sim, QWidg
     m_tabs->setCornerWidget(corner, Qt::TopRightCorner);
     vb->addWidget(m_tabs);
 
-    for (autoui::Page* p : std::initializer_list<autoui::Page*>{m_signals, m_actuators, m_sequences, m_runtime})
+    for (autoui::Page* p : std::initializer_list<autoui::Page*>{m_signals, m_actuators, m_sequences, m_flow, m_runtime})
         connect(p, &autoui::Page::statusMessage, this, &AutomationPanel::statusMessage);
 
     // Live values at ~20 Hz while active
@@ -115,7 +119,7 @@ AutomationPanel::AutomationPanel(SceneGraph* scene, SimulationEngine* sim, QWidg
 void AutomationPanel::setLocked(bool locked) {
     m_lockLabel->setVisible(locked);
     m_lockIcon->setVisible(locked);
-    for (autoui::Page* p : std::initializer_list<autoui::Page*>{m_signals, m_actuators, m_sequences, m_runtime})
+    for (autoui::Page* p : std::initializer_list<autoui::Page*>{m_signals, m_actuators, m_sequences, m_flow, m_runtime})
         p->setLocked(locked);
 }
 
@@ -148,6 +152,16 @@ void AutomationPanel::showProblems(const QStringList&) {
 void AutomationPanel::addSensorOn(int objectId) {
     m_tabs->setCurrentWidget(m_signals);
     m_signals->addSensorOn(objectId);
+}
+
+void AutomationPanel::addSourceFor(int objectId) {
+    m_tabs->setCurrentWidget(m_flow);
+    m_flow->addSourceFor(objectId);
+}
+
+void AutomationPanel::addSinkOn(int objectId) {
+    m_tabs->setCurrentWidget(m_flow);
+    m_flow->addSinkOn(objectId);
 }
 
 void AutomationPanel::showActuatorForJoint(int jointId) {

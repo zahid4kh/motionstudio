@@ -3,6 +3,7 @@
 #include "Sensors.h"
 #include "Kinematics.h"
 #include "../io/ModbusServer.h"
+#include "../scene/PrimitiveMesh.h"
 #include <QSet>
 #include <algorithm>
 #include <cmath>
@@ -33,6 +34,18 @@ const FieldInfo kSequenceFields[] = {
 constexpr int kSeqFieldCount = int(sizeof(kSequenceFields) / sizeof(kSequenceFields[0]));
 enum SeqField { SF_Running, SF_Done, SF_Cycles };
 
+const FieldInfo kSourceFields[] = {
+    {"count",   false, "copies made so far"},
+    {"blocked", true,  "a copy is due but a part still occupies the spot"},
+};
+enum SourceField { SrcF_Count, SrcF_Blocked };
+
+const char* const kPositionHelp[6] = {
+    "detected part's X in the sensor's frame (m)", "detected part's Y in the sensor's frame (m)",
+    "detected part's Z in the sensor's frame (m)", "detected part's rotation about X (deg)",
+    "detected part's rotation about Y (deg)",      "detected part's rotation about Z (deg)",
+};
+
 constexpr double kPosTol = 1e-4;
 
 QString opLabel(const Operation& op, int index) {
@@ -56,6 +69,18 @@ std::vector<AutomationEngine::Symbol> AutomationEngine::buildSymbols(const Scene
         sym.help     = signalKindName(s.kind) + " " + signalTypeName(s.type) +
                        (s.description.isEmpty() ? QString() : " — " + s.description);
         out.push_back(sym);
+        // A position sensor's coordinates follow its signal, in this order
+        if (s.kind == SignalKind::Sensor && s.sensor.type == SensorType::Position) {
+            for (int i = 0; i < sensors::kPositionFieldCount; ++i) {
+                Symbol f;
+                f.name    = s.name + "." + sensors::kPositionFields[i];
+                f.kind    = SymbolKind::Signal;
+                f.ownerId = id;
+                f.type    = SignalType::Real;
+                f.help    = QString("Sensor %1: %2").arg(s.name, kPositionHelp[i]);
+                out.push_back(f);
+            }
+        }
     }
     for (int mid : scene.motorIdsSorted()) {
         const Motor* m = scene.getMotor(mid);
@@ -81,6 +106,27 @@ std::vector<AutomationEngine::Symbol> AutomationEngine::buildSymbols(const Scene
             sym.help    = QString("Sequence %1: %2").arg(q.name, f.help);
             out.push_back(sym);
         }
+    }
+    for (auto& [id, src] : scene.allSources()) {
+        for (const auto& f : kSourceFields) {
+            Symbol sym;
+            sym.name    = src.name + "." + f.suffix;
+            sym.kind    = SymbolKind::Flow;
+            sym.ownerId = id;
+            sym.isBool  = f.isBool;
+            sym.type    = f.isBool ? SignalType::Bool : SignalType::Int;
+            sym.help    = QString("Source %1: %2").arg(src.name, f.help);
+            out.push_back(sym);
+        }
+    }
+    for (auto& [id, sink] : scene.allSinks()) {
+        Symbol sym;
+        sym.name    = sink.name + ".count";
+        sym.kind    = SymbolKind::Flow;
+        sym.ownerId = id;
+        sym.type    = SignalType::Int;
+        sym.help    = QString("Sink %1: parts taken so far").arg(sink.name);
+        out.push_back(sym);
     }
     return out;
 }
@@ -211,14 +257,37 @@ QStringList AutomationEngine::validateAll(const SceneGraph& scene) {
                     if (!scene.getObject(op.gripperId))
                         errs << where + (op.gripperId == -1 ? ": no gripper selected" : ": the gripper no longer exists");
                     break;
-                case OperationType::MoveL:
-                    if (!scene.getObject(op.toolId))
-                        errs << where + (op.toolId == -1 ? ": no tool selected" : ": the tool no longer exists");
-                    else if (kin::chainTo(scene, op.toolId).empty())
-                        errs << where + ": no actuated joint moves the tool";
-                    if (!scene.getPose(op.poseId)) errs << where + ": no pose selected";
+                case OperationType::MoveL: {
+                    const Pose* pose = scene.getPose(op.poseId);
+                    // To a pose taught on a part, the tool may be left to the pose
+                    const bool poseTool = op.toolId == -1 && pose && pose->isRelative();
+                    if (!poseTool) {
+                        if (!scene.getObject(op.toolId))
+                            errs << where + (op.toolId == -1 ? ": no tool selected" : ": the tool no longer exists");
+                        else if (kin::chainTo(scene, op.toolId).empty())
+                            errs << where + ": no actuated joint moves the tool";
+                        else if (pose && pose->isRelative() && op.toolId != pose->toolId) {
+                            const SceneObject* t = scene.getObject(pose->toolId);
+                            errs << where + QString(": pose %1 was taught with the tool %2; use that tool")
+                                                .arg(pose->name, t ? t->name : QString("(deleted)"));
+                        }
+                    }
+                    if (!pose) errs << where + ": no pose selected";
                     chk(where + " speed", op.velocity);
                     break;
+                }
+            }
+            // The part a pose taught on a part is applied to
+            if (const Pose* pose = scene.getPose(op.poseId);
+                pose && pose->isRelative() &&
+                (op.type == OperationType::MoveL || op.type == OperationType::MoveToPose)) {
+                if (op.sensorId != -1) {
+                    auto it = scene.allSignals().find(op.sensorId);
+                    if (it == scene.allSignals().end() || it->second.kind != SignalKind::Sensor)
+                        errs << where + ": the sensor that finds the part no longer exists";
+                } else if (op.partId != -1 && !scene.getObject(op.partId)) {
+                    errs << where + ": the part no longer exists";
+                }
             }
             chk(where + " start condition", op.startCondition);
             chkA(where + " on start", op.onStart);
@@ -226,6 +295,38 @@ QStringList AutomationEngine::validateAll(const SceneGraph& scene) {
             for (int p : op.predecessors)
                 if (!opIds.contains(p)) errs << where + ": predecessor no longer exists";
         }
+    }
+
+    // Poses taught on a part
+    for (auto& [pid, p] : scene.allPoses()) {
+        if (!p.isRelative()) continue;
+        if (!scene.getObject(p.frameId)) errs << "Pose " + p.name + ": the part it was taught on no longer exists";
+        if (!scene.getObject(p.toolId)) errs << "Pose " + p.name + ": its tool no longer exists";
+        else if (kin::chainTo(scene, p.toolId).empty()) errs << "Pose " + p.name + ": no actuated joint moves its tool";
+    }
+
+    // Part flow
+    for (auto& [id, src] : scene.allSources()) {
+        const QString where = "Source " + src.name;
+        const SceneObject* t = scene.getObject(src.templateId);
+        if (!t) errs << where + (src.templateId == -1 ? ": no object to copy selected" : ": the object it copies no longer exists");
+        else if (t->type == PrimitiveType::ImportedMesh && !t->mesh && t->childIds.empty())
+            errs << where + ": the object it copies has no geometry";
+        if (src.mode == SourceMode::Interval) {
+            if (src.interval.trimmed().isEmpty()) errs << where + ": no interval";
+            chk(where + " interval", src.interval);
+        } else {
+            if (src.trigger.trimmed().isEmpty()) errs << where + ": no trigger condition";
+            chk(where + " trigger", src.trigger);
+        }
+        chk(where + " enable", src.enable);
+    }
+    for (auto& [id, sink] : scene.allSinks()) {
+        const QString where = "Sink " + sink.name;
+        const QString p = sensors::problem(scene, sink.zone);
+        if (!p.isEmpty()) errs << where + ": " + p;
+        if (sink.sourceId != -1 && !scene.getSource(sink.sourceId)) errs << where + ": the source it takes from no longer exists";
+        chk(where + " enable", sink.enable);
     }
 
     errs << ModbusServer::validate(scene);
@@ -411,9 +512,29 @@ bool AutomationEngine::start(QStringList* errors) {
         m_sequences.push_back(std::move(s));
     }
 
+    // Part flow. A source's template is out of the run: its copies appear in its place.
+    for (auto& [id, src] : m_scene->allSources()) {
+        SourceRt r;
+        r.def = src;
+        r.interval.compile(src.interval, res.r());
+        r.trigger.compile(src.trigger, res.r());
+        r.enable.compile(src.enable, res.r());
+        r.slotBase = res.read.value(src.name + "." + kSourceFields[0].suffix);
+        m_sources.push_back(std::move(r));
+        m_scene->setParked(src.templateId, true);
+    }
+    for (auto& [id, sink] : m_scene->allSinks()) {
+        SinkRt r;
+        r.def = sink;
+        r.enable.compile(sink.enable, res.r());
+        r.slot = res.read.value(sink.name + ".count");
+        m_sinks.push_back(std::move(r));
+    }
+
     m_time = 0;
     m_scanCount = 0;
     m_warnings.clear();
+    m_structureChanged = false;
     m_scene->applyCouplings();
     publishStatus();
     m_prev = m_cur;
@@ -435,6 +556,11 @@ void AutomationEngine::stop() {
     m_actuators.clear();
     m_sequences.clear();
     m_actIndexByMotor.clear();
+    m_sources.clear();
+    m_sinks.clear();
+    m_structureChanged = false;
+    // Copies go, parked templates and parts come back
+    m_scene->clearRuntimeObjects();
     m_pendingWrites.clear();
     m_inputQueue.clear();
     m_time = 0;
@@ -497,6 +623,9 @@ void AutomationEngine::scan(double dt) {
     integrate(dt);
     applyHolds();
 
+    // 6. Part flow
+    updateFlow();
+
     m_time += dt;
     ++m_scanCount;
     emit scanned();
@@ -505,9 +634,17 @@ void AutomationEngine::scan(double dt) {
 void AutomationEngine::publishStatus() {
     for (auto& sn : m_sensors) {
         const sensors::Reading r = sensors::read(*m_scene, sn.cfg);
-        m_cur[size_t(sn.slot)] = r.active ? 1 : 0;
+        m_cur[size_t(sn.slot)] = r.value(sn.cfg);
         sn.detected = r.objectId;
+        if (sn.cfg.type == SensorType::Position)
+            sensors::partPose(*m_scene, sn.cfg, r.objectId, m_cur.data() + sn.slot + 1);
     }
+    for (auto& src : m_sources) {
+        double* v = m_cur.data() + src.slotBase;
+        v[SrcF_Count]   = src.count;
+        v[SrcF_Blocked] = src.blocked ? 1 : 0;
+    }
+    for (auto& sink : m_sinks) m_cur[size_t(sink.slot)] = sink.count;
     for (auto& a : m_actuators) {
         double* v = m_cur.data() + a.slotBase;
         v[AF_Pos]    = a.st.pos;
@@ -662,38 +799,12 @@ void AutomationEngine::startOperation(SeqRt& seq, OpRt& op) {
         case OperationType::MoveToPose: {
             op.poseTargets.clear();
             op.poseFrom.clear();
+            op.planned = false;
+            op.part    = -1;
             const Pose* pose = m_scene->getPose(op.def.poseId);
             if (!pose) break;
-            double pct = op.velocity.isEmpty() ? 100.0 : std::max(0.1, op.velocity.eval(c));
-            // Synchronized point-to-point: every axis uses the slowest axis's
-            // profile scaled by its own distance, so all arrive together.
-            double leaderT = 0, leaderV = 0, leaderA = 0, leaderD = 0;
-            for (auto& [jid, val] : pose->jointValues) {
-                const Motor* m = m_scene->motorForJoint(jid);
-                if (!m) continue;
-                auto it = m_actIndexByMotor.find(m->id);
-                if (it == m_actIndexByMotor.end()) continue;
-                ActuatorRt& ax = m_actuators[size_t(it->second)];
-                double tgt = clampToLimits(ax, val);
-                double d   = std::fabs(tgt - ax.st.pos);
-                double v   = std::fabs(ax.defVelocity) * pct / 100.0;
-                double acc = ax.defAccel * pct / 100.0;
-                double T   = motion::moveTime(d, v, acc);
-                if (T > leaderT) { leaderT = T; leaderV = v; leaderA = acc; leaderD = d; }
-                op.poseTargets.emplace_back(it->second, tgt);
-                op.poseFrom.push_back(ax.st.pos);
-            }
-            for (auto& [idx, tgt] : op.poseTargets) {
-                ActuatorRt& ax = m_actuators[size_t(idx)];
-                double d = std::fabs(tgt - ax.st.pos);
-                double k = leaderD > 0 ? d / leaderD : 0.0;
-                ax.mode     = ActuatorMode::Position;
-                ax.target   = tgt;
-                ax.velocity = std::max(1e-6, leaderV * k);
-                ax.accel    = leaderA * k;
-                ax.active   = true;
-            }
             op.status.detail = QString("→ %1").arg(pose->name);
+            planPoseMove(op);
             break;
         }
         case OperationType::Run:
@@ -722,24 +833,14 @@ void AutomationEngine::startOperation(SeqRt& seq, OpRt& op) {
             op.status.detail = "waiting for a part";
             break;
         case OperationType::MoveL: {
+            op.planned = false;
+            op.part    = -1;
             const Pose* pose = m_scene->getPose(op.def.poseId);
-            op.chain = kin::chainTo(*m_scene, op.def.toolId);
+            op.tool  = op.def.toolId != -1 ? op.def.toolId : pose ? pose->toolId : -1;
+            op.chain = kin::chainTo(*m_scene, op.tool);
             if (!pose || op.chain.empty()) break;
-            op.pathFrom = kin::toolFrame(*m_scene, op.def.toolId);
-            std::map<int, float> values(pose->jointValues.begin(), pose->jointValues.end());
-            op.pathTo = kin::toolFrameAt(*m_scene, op.def.toolId, values);
-            op.pathOrient = kin::canOrient(op.chain);
-            const double speed = op.velocity.isEmpty() ? 0.25 : std::max(1e-4, std::fabs(op.velocity.eval(c)));
-            const double dist = (op.pathTo.column(3) - op.pathFrom.column(3)).toVector3D().length();
-            double angle = 0;
-            if (op.pathOrient) {
-                const QQuaternion a = kin::targetFrom(op.pathFrom).orientation, b = kin::targetFrom(op.pathTo).orientation;
-                angle = 2.0 * std::acos(std::min(1.0, std::fabs(double(QQuaternion::dotProduct(a, b)))));
-            }
-            // A radian of tool rotation takes as long as 0.3 m of travel
-            op.pathDuration = std::max(dist, 0.3 * angle) / speed;
-            op.pathWarned = false;
             op.status.detail = QString("→ %1 (linear)").arg(pose->name);
+            planLinearMove(op);
             break;
         }
         case OperationType::Release:
@@ -761,6 +862,7 @@ bool AutomationEngine::operationFinished(OpRt& op) {
             return inPosition(*a, op.moveTarget);
         }
         case OperationType::MoveToPose: {
+            if (!op.planned && !planPoseMove(op)) return false;
             double worst = 1.0;
             bool all = true;
             for (size_t i = 0; i < op.poseTargets.size(); ++i) {
@@ -813,13 +915,124 @@ bool AutomationEngine::operationFinished(OpRt& op) {
     return true;
 }
 
+int AutomationEngine::partFor(OpRt& op, const Pose& pose) {
+    if (op.part != -1) return op.part;   // found once per run of the operation
+    if (op.def.sensorId != -1) {
+        const int seen = sensorDetection(op.def.sensorId);
+        if (seen == -1) {
+            const Signal* sg = m_scene->getSignal(op.def.sensorId);
+            op.status.detail = QString("waiting for %1 to find a part").arg(sg ? sg->name : QString("the sensor"));
+            return -1;
+        }
+        // The pose was taught on a part's frame: use the object (or its
+        // ancestor) that is that part or a copy of it, not a piece of it
+        op.part = seen;
+        for (const SceneObject* o = m_scene->getObject(seen); o; o = m_scene->getObject(o->parentId))
+            if (o->id == pose.frameId || o->copyOf == pose.frameId) { op.part = o->id; break; }
+    } else {
+        op.part = op.def.partId != -1 ? op.def.partId : pose.frameId;
+    }
+    return op.part;
+}
+
+void AutomationEngine::commandJoints(OpRt& op, const std::map<int, float>& values, double pct) {
+    // Synchronized point-to-point: every axis uses the slowest axis's
+    // profile scaled by its own distance, so all arrive together.
+    double leaderV = 0, leaderA = 0, leaderD = 0, leaderT = 0;
+    for (auto& [jid, val] : values) {
+        const Motor* m = m_scene->motorForJoint(jid);
+        if (!m) continue;
+        auto it = m_actIndexByMotor.find(m->id);
+        if (it == m_actIndexByMotor.end()) continue;
+        ActuatorRt& ax = m_actuators[size_t(it->second)];
+        double tgt = clampToLimits(ax, val);
+        double d   = std::fabs(tgt - ax.st.pos);
+        double v   = std::fabs(ax.defVelocity) * pct / 100.0;
+        double acc = ax.defAccel * pct / 100.0;
+        double T   = motion::moveTime(d, v, acc);
+        if (T > leaderT) { leaderT = T; leaderV = v; leaderA = acc; leaderD = d; }
+        op.poseTargets.emplace_back(it->second, tgt);
+        op.poseFrom.push_back(ax.st.pos);
+    }
+    for (auto& [idx, tgt] : op.poseTargets) {
+        ActuatorRt& ax = m_actuators[size_t(idx)];
+        double d = std::fabs(tgt - ax.st.pos);
+        double k = leaderD > 0 ? d / leaderD : 0.0;
+        ax.mode     = ActuatorMode::Position;
+        ax.target   = tgt;
+        ax.velocity = std::max(1e-6, leaderV * k);
+        ax.accel    = leaderA * k;
+        ax.active   = true;
+    }
+}
+
+bool AutomationEngine::planPoseMove(OpRt& op) {
+    const Pose* pose = m_scene->getPose(op.def.poseId);
+    if (!pose) { op.planned = true; return true; }
+    std::map<int, float> values;
+    if (pose->isRelative()) {
+        const int part = partFor(op, *pose);
+        if (part == -1) return false;
+        const kin::Result r = kin::solveFor(*m_scene, *pose, pose->toolId,
+                                            kin::poseTarget(*m_scene, *pose, part), &values);
+        if (!r.reached && r.positionError > 1e-3f)
+            m_warnings << QString("%1: %2 is out of reach on %3 (%4 mm off)")
+                              .arg(op.def.name.isEmpty() ? QString("MoveToPose") : op.def.name, pose->name)
+                              .arg(m_scene->getObject(part) ? m_scene->getObject(part)->name : QString("the part"))
+                              .arg(double(r.positionError) * 1000, 0, 'f', 1);
+        const SceneObject* p = m_scene->getObject(part);
+        op.status.detail = QString("→ %1 on %2").arg(pose->name, p ? p->name : QString("?"));
+    } else {
+        values = pose->jointValues;
+    }
+    const double pct = op.velocity.isEmpty() ? 100.0 : std::max(0.1, op.velocity.eval(ctx()));
+    commandJoints(op, values, pct);
+    op.planned = true;
+    return true;
+}
+
+bool AutomationEngine::planLinearMove(OpRt& op) {
+    const Pose* pose = m_scene->getPose(op.def.poseId);
+    if (!pose || op.chain.empty()) { op.planned = true; return true; }
+    if (pose->isRelative()) {
+        const int part = partFor(op, *pose);
+        if (part == -1) return false;
+        op.pathTo = kin::poseTarget(*m_scene, *pose, part);
+        const SceneObject* p = m_scene->getObject(part);
+        op.status.detail = QString("→ %1 on %2 (linear)").arg(pose->name, p ? p->name : QString("?"));
+    } else {
+        std::map<int, float> values(pose->jointValues.begin(), pose->jointValues.end());
+        op.pathTo = kin::toolFrameAt(*m_scene, op.tool, values);
+    }
+    op.pathFrom = kin::toolFrame(*m_scene, op.tool);
+    op.pathOrient = kin::canOrient(op.chain);
+    const double speed = op.velocity.isEmpty() ? 0.25 : std::max(1e-4, std::fabs(op.velocity.eval(ctx())));
+    const double dist = (op.pathTo.column(3) - op.pathFrom.column(3)).toVector3D().length();
+    double angle = 0;
+    if (op.pathOrient) {
+        const QQuaternion qa = kin::targetFrom(op.pathFrom).orientation, qb = kin::targetFrom(op.pathTo).orientation;
+        angle = 2.0 * std::acos(std::min(1.0, std::fabs(double(QQuaternion::dotProduct(qa, qb)))));
+    }
+    // A radian of tool rotation takes as long as 0.3 m of travel
+    op.pathDuration = std::max(dist, 0.3 * angle) / speed;
+    op.pathStart = m_time;
+    op.pathWarned = false;
+    op.planned = true;
+    return true;
+}
+
 // One scan of a straight-line tool move: the next point on the path (eased
 // in and out), inverse kinematics from the current joint values, and the
-// chain's actuators set straight to the solution
+// chain's actuators set straight to the solution. To a pose on a part, the
+// end of the path follows the part, so the tool meets it where it is.
 bool AutomationEngine::stepLinearMove(OpRt& op) {
     if (op.chain.empty()) return true;
+    if (!op.planned && !planLinearMove(op)) return false;
+    if (const Pose* pose = m_scene->getPose(op.def.poseId);
+        pose && pose->isRelative() && m_scene->getObject(op.part) && !m_scene->isParked(op.part))
+        op.pathTo = kin::poseTarget(*m_scene, *pose, op.part);
     const double T = op.pathDuration;
-    const double s = T > 1e-9 ? std::clamp((m_time + m_dt - op.status.startTime) / T, 0.0, 1.0) : 1.0;
+    const double s = T > 1e-9 ? std::clamp((m_time + m_dt - op.pathStart) / T, 0.0, 1.0) : 1.0;
     const double k = s * s * (3 - 2 * s);
     op.status.progress = s;
 
@@ -828,7 +1041,7 @@ bool AutomationEngine::stepLinearMove(OpRt& op) {
     t.position = a.position + (b.position - a.position) * float(k);
     t.orientation = QQuaternion::slerp(a.orientation, b.orientation, float(k));
     t.useOrientation = op.pathOrient;
-    const kin::Result r = kin::solve(*m_scene, op.def.toolId, op.chain, t, 30);
+    const kin::Result r = kin::solve(*m_scene, op.tool, op.chain, t, 30);
     if (!r.reached && !op.pathWarned && r.positionError > 1e-3f) {
         op.pathWarned = true;
         m_warnings << QString("%1: tool path out of reach (%2 mm off)")
@@ -876,6 +1089,106 @@ void AutomationEngine::applyHolds() {
         m_scene->setWorldTransform(h.partId,
                                    scenequery::stripScale(m_scene->worldTransform(h.gripperId)) * h.relative);
     }
+}
+
+// ── Part flow ────────────────────────────────────────────────────────────────
+
+// Whether any surface in the part's subtree overlaps `box`
+bool AutomationEngine::partTouches(int rootId, const scenequery::Obb& box) const {
+    const SceneObject* o = m_scene->getObject(rootId);
+    if (!o) return false;
+    if (surfaceOf(*o) && scenequery::overlap(box, scenequery::worldBox(*m_scene, rootId))) return true;
+    for (int c : o->childIds)
+        if (partTouches(c, box)) return true;
+    return false;
+}
+
+// A source's spot is taken while any part (a copy, or a free rigid body)
+// overlaps the template's surfaces. They are shrunk a little, so a part that
+// only touches the spot (e.g. the previous copy, one length further on)
+// doesn't block it.
+bool AutomationEngine::spotTaken(const SourceRt& src) const {
+    std::vector<scenequery::Obb> spot;
+    std::function<void(int)> collect = [&](int id) {
+        const SceneObject* o = m_scene->getObject(id);
+        if (!o) return;
+        if (surfaceOf(*o)) {
+            scenequery::Obb b = scenequery::worldBox(*m_scene, id);
+            for (int i = 0; i < 3; ++i) b.half[i] = std::max(0.0f, b.half[i] - 1e-4f);
+            spot.push_back(b);
+        }
+        for (int c : o->childIds) collect(c);
+    };
+    collect(src.def.templateId);
+    for (int r : m_scene->rootObjects()) {
+        const SceneObject* o = m_scene->getObject(r);
+        if (!o || o->parked) continue;
+        if (o->copyOf == -1 && !m_scene->allRigidBodies().count(r)) continue;
+        for (const auto& b : spot)
+            if (partTouches(r, b)) return true;
+    }
+    return false;
+}
+
+void AutomationEngine::updateFlow() {
+    if (m_sources.empty() && m_sinks.empty()) return;
+    const auto c = ctx();
+
+    // Sinks first, so a part that has just left a source's spot into a sink
+    // frees the spot this scan
+    for (auto& sink : m_sinks) {
+        if (!sink.enable.isEmpty() && !sink.enable.test(c)) continue;
+        if (!sensors::problem(*m_scene, sink.def.zone).isEmpty()) continue;
+        const scenequery::Obb box = sensors::zone(*m_scene, sink.def.zone);
+        const int mount = sink.def.zone.objectId;
+        for (int r : std::vector<int>(m_scene->rootObjects())) {
+            const SceneObject* o = m_scene->getObject(r);
+            if (!o || o->parked) continue;
+            const bool copy = o->copyOf != -1;
+            if (!copy && !m_scene->allRigidBodies().count(r)) continue;   // only free parts
+            if (sink.def.sourceId != -1 && o->sourceId != sink.def.sourceId) continue;
+            if (mount != -1 && (scenequery::inSubtree(*m_scene, mount, r) || scenequery::inSubtree(*m_scene, r, mount)))
+                continue;
+            if (std::any_of(m_holds.begin(), m_holds.end(),
+                            [&](const Hold& h) { return scenequery::inSubtree(*m_scene, h.partId, r); }))
+                continue;   // still being handled
+            if (!partTouches(r, box)) continue;
+            m_scene->setParked(r, true);
+            ++sink.count;
+            m_structureChanged = true;
+        }
+    }
+
+    for (auto& src : m_sources) {
+        const bool enabled = src.enable.isEmpty() || src.enable.test(c);
+        if (src.def.mode == SourceMode::Trigger) {
+            const bool t = src.trigger.test(c);
+            if (t && !src.prevTrigger && enabled) src.pending = std::min(src.pending + 1, 1000);
+            src.prevTrigger = t;
+        }
+        src.blocked = false;
+        const bool room = src.def.maxCount <= 0 || src.count < src.def.maxCount;
+        const bool due = src.def.mode == SourceMode::Interval ? m_time + 1e-9 >= src.nextAt : src.pending > 0;
+        if (!enabled || !room || !due) continue;
+        const SceneObject* t = m_scene->getObject(src.def.templateId);
+        if (!t) continue;
+        if (src.def.whenClear && spotTaken(src)) { src.blocked = true; continue; }
+        m_scene->spawnCopy(src.def.templateId, src.def.id, QString("%1 #%2").arg(t->name).arg(src.count + 1));
+        ++src.count;
+        if (src.def.mode == SourceMode::Interval) src.nextAt = m_time + std::max(0.0, src.interval.eval(c));
+        else --src.pending;
+        m_structureChanged = true;
+    }
+}
+
+int AutomationEngine::sourceCount(int sourceId) const {
+    for (const auto& s : m_sources) if (s.def.id == sourceId) return s.count;
+    return 0;
+}
+
+int AutomationEngine::sinkCount(int sinkId) const {
+    for (const auto& s : m_sinks) if (s.def.id == sinkId) return s.count;
+    return 0;
 }
 
 void AutomationEngine::finishOperation(OpRt& op) {

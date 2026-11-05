@@ -116,6 +116,7 @@ set(SOURCES
     src/ui/automation/ExpressionEdit.cpp
     src/ui/automation/SignalsPage.cpp
     src/ui/automation/SensorDialog.cpp
+    src/ui/automation/PartFlowPage.cpp
     src/ui/automation/ActuatorsPage.cpp
     src/ui/automation/SequencesPage.cpp
     src/ui/automation/RuntimePage.cpp

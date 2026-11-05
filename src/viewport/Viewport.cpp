@@ -1059,15 +1059,24 @@ void Viewport::drawSectionOutline() {
 }
 
 // Beams and zones of sensor signals, read live from the current pose:
-// green while clear, orange while something is detected
+// green while clear, orange while something is detected. Part flow: a
+// source's template outlined where its copies appear, a sink's zone in red.
 void Viewport::drawSensors() {
     const QVector3D clear(0.20f, 0.85f, 0.45f), detected(1.0f, 0.42f, 0.10f);
     QMatrix4x4 ident;
+    auto obbMatrix = [](const scenequery::Obb& z) {
+        QMatrix4x4 m;
+        m.setColumn(0, QVector4D(z.axis[0], 0));
+        m.setColumn(1, QVector4D(z.axis[1], 0));
+        m.setColumn(2, QVector4D(z.axis[2], 0));
+        m.setColumn(3, QVector4D(z.center, 1));
+        return m;
+    };
     for (auto& [id, sg] : m_scene->allSignals()) {
         if (sg.kind != SignalKind::Sensor || !sensors::problem(*m_scene, sg.sensor).isEmpty()) continue;
         const sensors::Reading r = sensors::read(*m_scene, sg.sensor);
         const QVector3D col = r.active ? detected : clear;
-        if (sg.sensor.type == SensorType::Beam) {
+        if (sensorIsRay(sg.sensor.type)) {
             QVector3D from, dir;
             sensors::beam(*m_scene, sg.sensor, &from, &dir);
             const QVector3D to = from + dir * r.distance;
@@ -1087,13 +1096,39 @@ void Viewport::drawSensors() {
             glLineWidth(1.5f);
         } else {
             const scenequery::Obb z = sensors::zone(*m_scene, sg.sensor);
-            QMatrix4x4 m;
-            m.setColumn(0, QVector4D(z.axis[0], 0));
-            m.setColumn(1, QVector4D(z.axis[1], 0));
-            m.setColumn(2, QVector4D(z.axis[2], 0));
-            m.setColumn(3, QVector4D(z.center, 1));
-            drawWireLines(wireBox(z.half.x() * 1.01f, z.half.y() * 1.01f, z.half.z() * 1.01f), col, m);
+            drawWireLines(wireBox(z.half.x() * 1.01f, z.half.y() * 1.01f, z.half.z() * 1.01f), col, obbMatrix(z));
+            // A position sensor marks the frame of the part it finds
+            if (sg.sensor.type == SensorType::Position && r.active) {
+                const QMatrix4x4 f = scenequery::stripScale(m_scene->worldTransform(r.objectId));
+                const float k = std::max(0.02f, std::min({z.half.x(), z.half.y(), z.half.z()}) * 0.6f);
+                const std::vector<float> axes = {0, 0, 0, k, 0, 0,  0, 0, 0, 0, k, 0,  0, 0, 0, 0, 0, k};
+                glLineWidth(2.5f);
+                drawWireLines(axes, col, f);
+                glLineWidth(1.5f);
+            }
         }
+    }
+
+    const Theme::Colors& c = Theme::colors();
+    auto rgb = [](const QColor& q) { return QVector3D(q.redF(), q.greenF(), q.blueF()); };
+    for (auto& [id, src] : m_scene->allSources()) {
+        std::function<void(int)> outline = [&](int oid) {
+            const SceneObject* o = m_scene->getObject(oid);
+            if (!o) return;
+            if (surfaceOf(*o)) {
+                const scenequery::Obb b = scenequery::worldBox(*m_scene, oid);
+                drawWireLines(wireBox(b.half.x() * 1.02f, b.half.y() * 1.02f, b.half.z() * 1.02f), rgb(c.info), obbMatrix(b), 0.9f);
+            }
+            for (int ch : o->childIds) outline(ch);
+        };
+        outline(src.templateId);
+    }
+    for (auto& [id, sink] : m_scene->allSinks()) {
+        if (!sensors::problem(*m_scene, sink.zone).isEmpty()) continue;
+        const scenequery::Obb z = sensors::zone(*m_scene, sink.zone);
+        glLineWidth(2.0f);
+        drawWireLines(wireBox(z.half.x() * 1.01f, z.half.y() * 1.01f, z.half.z() * 1.01f), rgb(c.danger), obbMatrix(z));
+        glLineWidth(1.5f);
     }
 }
 
@@ -1101,13 +1136,29 @@ void Viewport::drawSensorLabels(QPainter& p) {
     const Theme::Colors& c = Theme::colors();
     for (auto& [id, sg] : m_scene->allSignals()) {
         if (sg.kind != SignalKind::Sensor || !sensors::problem(*m_scene, sg.sensor).isEmpty()) continue;
-        const QVector3D at = sg.sensor.type == SensorType::Beam
+        const QVector3D at = sensorIsRay(sg.sensor.type)
                                  ? sensors::frame(*m_scene, sg.sensor).column(3).toVector3D()
                                  : sensors::zone(*m_scene, sg.sensor).center;
         QPointF pt;
         if (!toScreen(at, &pt)) continue;
-        const bool on = sensors::read(*m_scene, sg.sensor).active;
-        drawPill(p, pt + QPointF(8, -24), sg.name + (on ? "  ●" : "  ○"), on ? c.warning : QColor());
+        const sensors::Reading r = sensors::read(*m_scene, sg.sensor);
+        QString text = sg.name + (r.active ? "  ●" : "  ○");
+        if (sg.sensor.type == SensorType::Distance)
+            text = QString("%1  %2 mm").arg(sg.name).arg(double(r.distance) * 1000, 0, 'f', 1);
+        drawPill(p, pt + QPointF(8, -24), text, r.active ? c.warning : QColor());
+    }
+    // Part flow: a source over where its copies appear, a sink over its zone
+    for (auto& [id, src] : m_scene->allSources()) {
+        if (!m_scene->getObject(src.templateId)) continue;
+        QPointF pt;
+        if (!toScreen(scenequery::worldBox(*m_scene, src.templateId).center, &pt)) continue;
+        drawPill(p, pt + QPointF(8, -24), src.name, c.info);
+    }
+    for (auto& [id, sink] : m_scene->allSinks()) {
+        if (!sensors::problem(*m_scene, sink.zone).isEmpty()) continue;
+        QPointF pt;
+        if (!toScreen(sensors::zone(*m_scene, sink.zone).center, &pt)) continue;
+        drawPill(p, pt + QPointF(8, -24), sink.name, c.danger);
     }
 }
 

@@ -108,6 +108,7 @@ void SimulationEngine::reset() {
     m_viewFrame = -1;
     m_liveTransforms.clear();
     m_liveJoints.clear();
+    m_liveParked.clear();
 
     bool wasActive = m_active;
     m_active = false;
@@ -155,6 +156,8 @@ void SimulationEngine::runScan() {
     m_auto->scan(kDt);
 
 #ifdef MUJOCO_ENABLED
+    // A source made a part or a sink took one
+    if (m_auto->takeStructureChanged() && m_mjModel) rebuildMuJoCoModel();
     if (m_mjModel && m_mjData) {
         for (auto& [jid, fromTo] : m_prescribed) {
             double pos, vel;
@@ -177,6 +180,9 @@ void SimulationEngine::runScan() {
         syncFromMuJoCo();
     }
 #endif
+#ifndef MUJOCO_ENABLED
+    m_auto->takeStructureChanged();
+#endif
     m_elapsed += kDt;
     capture();
     if (m_interference.active() && (++m_scans % 2 == 0)) m_interference.check(*m_scene, m_elapsed);
@@ -193,7 +199,11 @@ void SimulationEngine::seek(int frame) {
         // no longer ends at it)
         m_liveTransforms.clear();
         m_liveJoints.clear();
-        for (auto& [id, o] : m_scene->allObjects()) m_liveTransforms[id] = o.transform;
+        m_liveParked.clear();
+        for (auto& [id, o] : m_scene->allObjects()) {
+            m_liveTransforms[id] = o.transform;
+            m_liveParked[id] = o.parked;
+        }
         for (auto& [id, j] : m_scene->allJoints()) m_liveJoints[id] = j.currentValue;
     }
     m_rec.apply(*m_scene, frame);
@@ -209,8 +219,11 @@ void SimulationEngine::seekLive() {
         if (SceneObject* o = m_scene->getObject(id)) o->transform = t;
     for (auto& [id, v] : m_liveJoints)
         if (Joint* j = m_scene->getJoint(id)) j->currentValue = v;
+    for (auto& [id, p] : m_liveParked)
+        if (SceneObject* o = m_scene->getObject(id)) o->parked = p;
     m_liveTransforms.clear();
     m_liveJoints.clear();
+    m_liveParked.clear();
     m_viewFrame = -1;
     emit timeUpdated(m_elapsed);
     emit scrubbed(-1);
@@ -363,7 +376,7 @@ void SimulationEngine::writeGeomXML(QString& xml, const SceneObject* obj,
 
 void SimulationEngine::writeBodyXML(QString& xml, int oid, int indent) const {
     const SceneObject* obj = m_scene->getObject(oid);
-    if (!obj) return;
+    if (!obj || obj->parked) return;   // out of the run (a source's template, a part a sink took)
 
     const RigidBody* rb   = m_scene->getRigidBody(oid);
     const Joint*     jnt  = m_scene->jointForChild(oid);
@@ -491,6 +504,42 @@ bool SimulationEngine::buildMuJoCoModel() {
 
     mj_forward(m_mjModel, m_mjData);
     return true;
+}
+
+void SimulationEngine::rebuildMuJoCoModel() {
+    // Keep the state by scene id: free bodies' 7 qpos + 6 qvel, joints' 1 + 1
+    struct Free { mjtNum q[7], v[6]; };
+    std::unordered_map<int, Free> free;
+    std::unordered_map<int, std::pair<mjtNum, mjtNum>> joints;
+    for (auto& [oid, qa] : m_freeJointQposAddr) {
+        Free f;
+        std::copy(m_mjData->qpos + qa, m_mjData->qpos + qa + 7, f.q);
+        std::copy(m_mjData->qvel + m_freeJointDofAddr[oid], m_mjData->qvel + m_freeJointDofAddr[oid] + 6, f.v);
+        free[oid] = f;
+    }
+    for (auto& [jid, qa] : m_jointQposAddr)
+        joints[jid] = {m_mjData->qpos[qa], m_mjData->qvel[m_jointDofAddr[jid]]};
+    const auto prescribed = m_prescribed;
+
+    if (!buildMuJoCoModel()) {
+        qWarning() << "MuJoCo: rebuilding the model after a part was added or removed failed; physics stops";
+        teardownMuJoCo();
+        return;
+    }
+    for (auto& [oid, qa] : m_freeJointQposAddr) {
+        auto it = free.find(oid);
+        if (it == free.end()) continue;   // new: starts at rest where it was placed
+        std::copy(it->second.q, it->second.q + 7, m_mjData->qpos + qa);
+        std::copy(it->second.v, it->second.v + 6, m_mjData->qvel + m_freeJointDofAddr[oid]);
+    }
+    for (auto& [jid, qa] : m_jointQposAddr) {
+        auto it = joints.find(jid);
+        if (it == joints.end()) continue;
+        m_mjData->qpos[qa] = it->second.first;
+        m_mjData->qvel[m_jointDofAddr[jid]] = it->second.second;
+    }
+    m_prescribed = prescribed;
+    mj_forward(m_mjModel, m_mjData);
 }
 
 void SimulationEngine::buildIdMappings() {

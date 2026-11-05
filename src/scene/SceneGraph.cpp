@@ -324,7 +324,7 @@ int SceneGraph::addSignal(Signal sig) {
     sig.id = m_nextId++;
     if (!expr::isValidName(sig.name) || isSymbolNameTaken(sig.name, sig.id))
         sig.name = makeSymbolName(sig.name.isEmpty() ? QString("Signal") : sig.name, sig.id);
-    if (sig.kind == SignalKind::Sensor) sig.type = SignalType::Bool;
+    if (sig.kind == SignalKind::Sensor) sig.type = sensorSignalType(sig.sensor.type);
     sig.initialValue = coerceSignal(sig.type, sig.initialValue);
     m_signals[sig.id] = sig;
     emit automationChanged();
@@ -380,6 +380,126 @@ void SceneGraph::removePose(int id) {
     emit automationChanged();
 }
 
+int SceneGraph::addSource(PartSource src) {
+    src.id = m_nextId++;
+    if (!expr::isValidName(src.name) || isSymbolNameTaken(src.name, src.id))
+        src.name = makeSymbolName(src.name.isEmpty() ? QString("Source") : src.name, src.id);
+    m_sources[src.id] = src;
+    emit automationChanged();
+    return src.id;
+}
+
+void SceneGraph::removeSource(int id) {
+    if (!m_sources.erase(id)) return;
+    for (auto& [sid, sink] : m_sinks)
+        if (sink.sourceId == id) sink.sourceId = -1;
+    emit automationChanged();
+}
+
+PartSource* SceneGraph::getSource(int id) {
+    auto it = m_sources.find(id);
+    return it != m_sources.end() ? &it->second : nullptr;
+}
+
+const PartSource* SceneGraph::getSource(int id) const {
+    auto it = m_sources.find(id);
+    return it != m_sources.end() ? &it->second : nullptr;
+}
+
+int SceneGraph::addSink(PartSink sink) {
+    sink.id = m_nextId++;
+    if (!expr::isValidName(sink.name) || isSymbolNameTaken(sink.name, sink.id))
+        sink.name = makeSymbolName(sink.name.isEmpty() ? QString("Sink") : sink.name, sink.id);
+    sink.zone.type = SensorType::Zone;
+    m_sinks[sink.id] = sink;
+    emit automationChanged();
+    return sink.id;
+}
+
+void SceneGraph::removeSink(int id) {
+    if (!m_sinks.erase(id)) return;
+    emit automationChanged();
+}
+
+PartSink* SceneGraph::getSink(int id) {
+    auto it = m_sinks.find(id);
+    return it != m_sinks.end() ? &it->second : nullptr;
+}
+
+const PartSink* SceneGraph::getSink(int id) const {
+    auto it = m_sinks.find(id);
+    return it != m_sinks.end() ? &it->second : nullptr;
+}
+
+// ── Simulation-time objects ──────────────────────────────────────────────────
+
+int SceneGraph::spawnCopy(int templateId, int sourceId, const QString& name) {
+    if (!getObject(templateId)) return -1;
+    // Parents first; world transforms are taken from the originals, so joint
+    // motion inside the template is baked into the copy's local transforms
+    std::vector<std::pair<int, int>> made;   // (original, copy)
+    auto copySubtree = [&](auto& self, int originalId, int parentId) -> void {
+        const SceneObject original = m_objects.at(originalId);   // by value: the map may rehash
+        SceneObject copy;
+        copy.id       = m_nextId++;
+        copy.name     = originalId == templateId ? name : original.name;
+        copy.type     = original.type;
+        copy.parentId = parentId;
+        copy.color    = original.color;
+        copy.opacity  = original.opacity;
+        copy.mesh     = original.mesh;
+        copy.copyOf   = originalId;
+        copy.sourceId = sourceId;
+        m_objects[copy.id] = copy;
+        if (parentId == -1) m_roots.push_back(copy.id);
+        else m_objects.at(parentId).childIds.push_back(copy.id);
+        made.push_back({originalId, copy.id});
+        if (auto rb = m_rigidBodies.find(originalId); rb != m_rigidBodies.end()) {
+            RigidBody r = rb->second;
+            r.objectId = copy.id;
+            m_rigidBodies[copy.id] = r;
+        }
+        for (int child : original.childIds) self(self, child, copy.id);
+    };
+    copySubtree(copySubtree, templateId, -1);
+    for (auto& [original, copy] : made) setWorldTransform(copy, worldTransform(original));
+    return made.front().second;
+}
+
+void SceneGraph::setParked(int id, bool parked) {
+    SceneObject* o = getObject(id);
+    if (!o) return;
+    o->parked = parked;
+    if (parked && m_selectedId == id) selectObject(-1);
+    for (int c : std::vector<int>(o->childIds)) setParked(c, parked);
+}
+
+bool SceneGraph::hasRuntimeObjects() const {
+    for (auto& [id, o] : m_objects)
+        if (o.copyOf != -1 || o.parked) return true;
+    return false;
+}
+
+int SceneGraph::copyRoot(int id) const {
+    int root = -1;
+    for (const SceneObject* o = getObject(id); o && o->copyOf != -1; o = getObject(o->parentId)) root = o->id;
+    return root;
+}
+
+void SceneGraph::clearRuntimeObjects() {
+    bool deselect = false;
+    for (auto it = m_objects.begin(); it != m_objects.end();) {
+        if (it->second.copyOf == -1) { it->second.parked = false; ++it; continue; }
+        if (it->first == m_selectedId) deselect = true;
+        m_rigidBodies.erase(it->first);
+        it = m_objects.erase(it);
+    }
+    // Copies only hang from copies or the top of the tree
+    m_roots.erase(std::remove_if(m_roots.begin(), m_roots.end(), [this](int r) { return !m_objects.count(r); }),
+                  m_roots.end());
+    if (deselect) selectObject(-1);
+}
+
 int SceneGraph::addMate(Mate mate) {
     mate.id = m_nextId++;
     m_mates[mate.id] = mate;
@@ -416,6 +536,8 @@ bool SceneGraph::isSymbolNameTaken(const QString& name, int exceptId) const {
     for (auto& [id, s] : m_signals)   if (id != exceptId && s.name == name) return true;
     for (auto& [id, m] : m_motors)    if (id != exceptId && m.name == name) return true;
     for (auto& [id, q] : m_sequences) if (id != exceptId && q.name == name) return true;
+    for (auto& [id, q] : m_sources)   if (id != exceptId && q.name == name) return true;
+    for (auto& [id, q] : m_sinks)     if (id != exceptId && q.name == name) return true;
     return false;
 }
 
@@ -444,6 +566,8 @@ void SceneGraph::renameSymbolReferences(const QString& oldName, const QString& n
             fix(op.startCondition); fix(op.onStart); fix(op.onFinish);
         }
     }
+    for (auto& [id, src] : m_sources) { fix(src.interval); fix(src.trigger); fix(src.enable); }
+    for (auto& [id, sink] : m_sinks) fix(sink.enable);
     emit automationChanged();
 }
 
@@ -507,7 +631,10 @@ QColor SceneGraph::colorOf(int id) const {
 
 float SceneGraph::opacityOf(int id) const {
     float a = 1.0f;
-    for (const SceneObject* o = getObject(id); o; o = getObject(o->parentId)) a *= o->opacity;
+    for (const SceneObject* o = getObject(id); o; o = getObject(o->parentId)) {
+        if (o->parked) return 0.0f;
+        a *= o->opacity;
+    }
     return a;
 }
 
@@ -748,6 +875,8 @@ void SceneGraph::clear() {
     m_sequences.clear();
     m_poses.clear();
     m_mates.clear();
+    m_sources.clear();
+    m_sinks.clear();
     m_roots.clear();
     m_selectedId = -1;
     m_nextId     = 1;

@@ -27,6 +27,7 @@
 #include <mujoco/mujoco.h>
 #endif
 #include <QDir>
+#include <QFile>
 #include <QElapsedTimer>
 #include <QTcpSocket>
 #include <cstring>
@@ -569,6 +570,357 @@ TEST(moveLFollowsAStraightLine) {
     g.getSequence(sid)->operations[0].toolId = g.rootObjects().front();
     CHECK(!AutomationEngine::validateAll(g).isEmpty());
     (void)pa;   // pose A documents the start; the joints are set to it directly
+}
+
+// A pose taught on a part: the robot goes where the tool was relative to
+// the part, wherever the part is now (MoveToPose by IK, MoveL in a line)
+TEST(poseTaughtOnPartFollowsThePart) {
+    SceneGraph g;
+    std::vector<int> joints;
+    int tool = makeSixAxis(g, &joints);
+    setJoints(g, joints, {10, 30, 60, 0, 40, 0});
+    const QVector3D at = kin::toolFrame(g, tool).column(3).toVector3D();
+    int part = addBox(g, "Part", at + QVector3D(0, -0.03f, 0), {0.05f, 0.05f, 0.05f});
+    g.getObject(part)->transform.rotation = {0, 20, 0};
+    Pose p;
+    p.name = "Pick";
+    kin::teachOnPart(g, &p, tool, part);
+    CHECK(p.isRelative() && p.toolId == tool && p.jointValues.size() == 6);
+    const int pid = g.addPose(p);
+    // The part goes somewhere else; the robot starts elsewhere too
+    g.getObject(part)->transform.position += QVector3D(0.04f, -0.03f, 0.05f);
+    g.getObject(part)->transform.rotation = {0, 35, 0};
+    setJoints(g, joints, {0, 10, 50, 0, 30, 0});
+    const QMatrix4x4 goal = kin::poseTarget(g, *g.getPose(pid), part);
+
+    Sequence q;
+    q.name = "Go";
+    Operation op = makeOp(g, OperationType::MoveToPose);
+    op.poseId = pid;
+    q.operations = {op};
+    int sid = g.addSequence(q);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+    AutomationEngine e(&g);
+    CHECK(e.start(nullptr));
+    for (int i = 0; i < 400 && e.seqStatus(sid).state != AutomationEngine::SeqState::Finished; ++i) e.scan(0.016);
+    CHECK(e.seqStatus(sid).state == AutomationEngine::SeqState::Finished);
+    const QMatrix4x4 got = kin::toolFrame(g, tool);
+    CHECK_NEAR((got.column(3) - goal.column(3)).toVector3D().length(), 0, 2e-4);
+    CHECK(std::fabs(QQuaternion::dotProduct(kin::targetFrom(got).orientation, kin::targetFrom(goal).orientation)) > 0.9999f);
+    e.stop();
+
+    // MoveL to the same pose after the part moved again: a straight line onto it
+    g.getObject(part)->transform.position += QVector3D(-0.03f, 0.02f, -0.04f);
+    const QMatrix4x4 goal2 = kin::poseTarget(g, *g.getPose(pid), part);
+    g.getSequence(sid)->operations[0].type = OperationType::MoveL;
+    g.getSequence(sid)->operations[0].velocity = "0.2";
+    CHECK(AutomationEngine::validateAll(g).isEmpty());            // the tool is left to the pose
+    CHECK(e.start(nullptr));
+    for (int i = 0; i < 400 && e.seqStatus(sid).state != AutomationEngine::SeqState::Finished; ++i) e.scan(0.016);
+    CHECK_NEAR((kin::toolFrame(g, tool).column(3) - goal2.column(3)).toVector3D().length(), 0, 2e-4);
+    e.stop();
+
+    // A MoveL tool other than the pose's is reported; so is a deleted part
+    g.getSequence(sid)->operations[0].toolId = joints.empty() ? -1 : g.getJoint(joints[4])->childBodyId;
+    CHECK(!AutomationEngine::validateAll(g).isEmpty());
+    g.getSequence(sid)->operations[0].toolId = tool;
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+    SceneGraph h;
+    roundTrip(g, h);
+    CHECK(AutomationEngine::validateAll(h).isEmpty());
+    const Pose& hp = h.allPoses().begin()->second;
+    CHECK(hp.isRelative() && h.getObject(hp.frameId) && h.getObject(hp.frameId)->name == "Part");
+    CHECK_NEAR((hp.relPosition - g.getPose(pid)->relPosition).length(), 0, 1e-6);
+    g.removeObject(part);
+    CHECK(!AutomationEngine::validateAll(g).isEmpty());
+}
+
+// A position sensor finds a copy made by a source; the robot goes to the
+// copy (not the template it was taught on), and the sensor publishes where it is
+TEST(robotPicksCopyFoundByPositionSensor) {
+    SceneGraph g;
+    std::vector<int> joints;
+    int tool = makeSixAxis(g, &joints);
+    setJoints(g, joints, {10, 30, 60, 0, 40, 0});
+    const QVector3D at = kin::toolFrame(g, tool).column(3).toVector3D();
+    int part = addBox(g, "Part", at + QVector3D(0, -0.03f, 0), {0.05f, 0.05f, 0.05f});
+    Pose p;
+    p.name = "Pick";
+    kin::teachOnPart(g, &p, tool, part);
+    const int pid = g.addPose(p);
+    setJoints(g, joints, {0, 10, 50, 0, 30, 0});
+
+    PartSource src;
+    src.name = "Feeder";
+    src.templateId = part;
+    src.interval = "100";
+    const int srcId = g.addSource(src);
+    Signal cam;
+    cam.name = "Cam";
+    cam.kind = SignalKind::Sensor;
+    cam.sensor.type = SensorType::Position;
+    cam.sensor.offset = at;                      // a world-fixed zone around the spot
+    cam.sensor.size = {0.4f, 0.4f, 0.4f};
+    cam.sensor.target = SensorTarget::Object;    // the template matches its copies
+    cam.sensor.targetId = part;
+    const int camId = g.addSignal(cam);
+    Sequence q;
+    q.name = "Pick";
+    Operation op = makeOp(g, OperationType::MoveL);
+    op.poseId = pid;
+    op.sensorId = camId;
+    op.velocity = "0.3";
+    q.operations = {op};
+    int sid = g.addSequence(q);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+
+    AutomationEngine e(&g);
+    CHECK(e.start(nullptr));
+    CHECK(g.isParked(part));
+    e.scan(0.016);                               // the copy appears at the end of the scan
+    CHECK(e.sourceCount(srcId) == 1);
+    int copy = -1;
+    for (auto& [id, o] : g.allObjects()) if (o.copyOf == part) copy = id;
+    CHECK(copy != -1 && g.getObject(copy)->parentId == -1 && g.getObject(copy)->sourceId == srcId);
+    CHECK_NEAR((worldPos(g, copy) - worldPos(g, part)).length(), 0, 1e-6);
+    // It lands a little off the template's spot, turned
+    g.getObject(copy)->transform.position += QVector3D(0.05f, 0, -0.04f);
+    g.getObject(copy)->transform.rotation = {0, 25, 0};
+    const QMatrix4x4 goal = kin::poseTarget(g, *g.getPose(pid), copy);
+    for (int i = 0; i < 400 && e.seqStatus(sid).state != AutomationEngine::SeqState::Finished; ++i) e.scan(0.016);
+    CHECK(e.seqStatus(sid).state == AutomationEngine::SeqState::Finished);
+    CHECK_NEAR((kin::toolFrame(g, tool).column(3) - goal.column(3)).toVector3D().length(), 0, 2e-4);
+    CHECK(e.sensorDetection(camId) == copy);
+    CHECK(e.value("Cam") == 1.0);
+    const QVector3D rel = worldPos(g, copy) - at;
+    CHECK_NEAR(e.value("Cam.x"), rel.x(), 1e-5);
+    CHECK_NEAR(e.value("Cam.y"), rel.y(), 1e-5);
+    CHECK_NEAR(e.value("Cam.z"), rel.z(), 1e-5);
+    CHECK_NEAR(e.value("Cam.ry"), 25, 1e-3);
+    // Stopping removes the copy and brings the template back
+    e.stop();
+    CHECK(g.getObject(copy) == nullptr);
+    CHECK(!g.isParked(part));
+}
+
+// ── Part flow ───────────────────────────────────────────────────────────────
+
+TEST(sourceMakesCopiesAndSinkTakesThem) {
+    SceneGraph g;
+    int part = addBox(g, "Box", {0, 0.5f, 0}, {0.1f, 0.1f, 0.1f});
+    g.getObject(part)->color = QColor(200, 30, 30);
+    g.addRigidBody(part);
+    int bin = addBox(g, "Bin", {2, 0.2f, 0}, {0.4f, 0.4f, 0.4f});
+    PartSource src;
+    src.name = "Feeder";
+    src.templateId = part;
+    src.interval = "0.5";
+    src.whenClear = false;
+    src.maxCount = 3;
+    const int srcId = g.addSource(src);
+    PartSink sink;
+    sink.name = "Out";
+    sink.zone.objectId = bin;
+    sink.zone.objectBounds = true;
+    sink.sourceId = srcId;
+    const int sinkId = g.addSink(sink);
+    Signal total;
+    total.name = "InSystem";
+    total.kind = SignalKind::Derived;
+    total.type = SignalType::Int;
+    total.expression = "Feeder.count - Out.count";
+    g.addSignal(total);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+    CHECK(g.isSymbolNameTaken("Feeder") && g.isSymbolNameTaken("Out"));
+
+    AutomationEngine e(&g);
+    CHECK(e.start(nullptr));
+    runFor(e, 1.2);                               // copies at 0, 0.5 and 1.0 s, then the limit
+    CHECK(e.sourceCount(srcId) == 3);
+    std::vector<int> copies;
+    for (auto& [id, o] : g.allObjects()) if (o.copyOf == part) copies.push_back(id);
+    std::sort(copies.begin(), copies.end());
+    CHECK(copies.size() == 3);
+    CHECK(g.getObject(copies[0])->name == "Box #1");
+    CHECK(g.getRigidBody(copies[0]) != nullptr);  // copies are parts too
+    CHECK(g.getObject(copies[0])->color == QColor(200, 30, 30));
+    // The template is out of the run: not sensed, not picked, not drawn
+    CHECK(g.isParked(part) && g.opacityOf(part) == 0.0f);
+    SensorConfig look;
+    look.objectId = -1;
+    look.offset = {-1, 0.5f, 0};
+    look.range = 2;
+    CHECK(sensors::read(g, look).objectId == copies[0] || sensors::read(g, look).objectId == copies[1] ||
+          sensors::read(g, look).objectId == copies[2]);
+    // Saving while simulating leaves the copies out
+    SceneGraph saved;
+    roundTrip(g, saved);
+    CHECK(saved.allObjects().size() == 2 && saved.allRigidBodies().size() == 1);
+    CHECK(saved.allSources().size() == 1 && saved.allSinks().size() == 1);
+    CHECK(saved.allSinks().begin()->second.sourceId == saved.allSources().begin()->first);
+
+    // A copy carried into the bin is taken; one held by a gripper is not
+    g.getObject(copies[0])->transform.position = {2, 0.3f, 0};
+    e.scan(0.016);
+    CHECK(e.sinkCount(sinkId) == 1 && g.isParked(copies[0]));
+    e.scan(0.016);
+    CHECK(e.value("Out.count") == 1 && e.value("Feeder.count") == 3 && e.value("InSystem") == 2);
+    e.stop();
+    CHECK(g.allObjects().size() == 2 && !g.isParked(part) && g.allRigidBodies().size() == 1);
+
+    // Wait until the spot is clear: one copy, then blocked until it moves
+    g.getSource(srcId)->whenClear = true;
+    g.getSource(srcId)->maxCount = 0;
+    CHECK(e.start(nullptr));
+    runFor(e, 1.2);
+    CHECK(e.sourceCount(srcId) == 1);
+    CHECK(e.value("Feeder.blocked") == 1.0);
+    int first = -1;
+    for (auto& [id, o] : g.allObjects()) if (o.copyOf == part) first = id;
+    g.getObject(first)->transform.position = {0.5f, 0.5f, 0};   // moved on
+    runFor(e, 0.05);
+    CHECK(e.sourceCount(srcId) == 2);
+    e.stop();
+
+    // Trigger mode: a copy per rising edge of an input
+    Signal feed;
+    feed.name = "Feed";
+    feed.kind = SignalKind::Input;
+    g.addSignal(feed);
+    g.getSource(srcId)->mode = SourceMode::Trigger;
+    g.getSource(srcId)->trigger = "Feed";
+    g.getSource(srcId)->whenClear = false;
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+    CHECK(e.start(nullptr));
+    runFor(e, 0.2);
+    CHECK(e.sourceCount(srcId) == 0);
+    for (int k = 0; k < 2; ++k) {
+        e.setInput("Feed", 1);
+        e.setInput("Feed", 0);
+    }
+    runFor(e, 0.2);
+    CHECK(e.sourceCount(srcId) == 2);
+    e.stop();
+
+    // Renames reach the source's expressions; a deleted template is reported
+    g.renameSymbolReferences("Feed", "Load");
+    CHECK(g.getSource(srcId)->trigger == "Load");
+    g.removeObject(part);
+    CHECK(!AutomationEngine::validateAll(g).isEmpty());
+}
+
+// Inserting a component remaps its sources, sinks and part poses, and
+// renames clashing source / sink names; undo restores them
+TEST(partFlowMergesAndUndoes) {
+    SceneGraph comp;
+    std::vector<int> joints;
+    int tool = makeSixAxis(comp, &joints);
+    setJoints(comp, joints, {10, 30, 60, 0, 40, 0});
+    int part = addBox(comp, "Part", kin::toolFrame(comp, tool).column(3).toVector3D(), {0.05f, 0.05f, 0.05f});
+    Pose p;
+    p.name = "Pick";
+    kin::teachOnPart(comp, &p, tool, part);
+    comp.addPose(p);
+    PartSource src;
+    src.name = "Feeder";
+    src.templateId = part;
+    int srcId = comp.addSource(src);
+    PartSink sink;
+    sink.name = "Out";
+    sink.zone.objectId = part;
+    sink.zone.objectBounds = true;
+    sink.sourceId = srcId;
+    comp.addSink(sink);
+
+    SceneGraph g;
+    PartSource mine;
+    mine.name = "Feeder";
+    mine.templateId = addBox(g, "Other", {}, {0.1f, 0.1f, 0.1f});
+    g.addSource(mine);
+    UndoManager undo(&g);
+    mergeScene(g, comp, -1);
+    CHECK(g.allSources().size() == 2 && g.allSinks().size() == 1);
+    const PartSink& gs = g.allSinks().begin()->second;
+    const PartSource* merged = g.getSource(gs.sourceId);
+    CHECK(merged && merged->name != "Feeder" && g.getObject(merged->templateId)->name == "Part");
+    CHECK(g.getObject(gs.zone.objectId) && g.getObject(gs.zone.objectId)->name == "Part");
+    const Pose& gp = g.allPoses().begin()->second;
+    CHECK(gp.isRelative() && g.getObject(gp.frameId)->name == "Part" && g.getObject(gp.toolId)->name == "Tool");
+    CHECK(gp.jointValues.size() == 6);
+    for (auto& [jid, v] : gp.jointValues) CHECK(g.getJoint(jid) != nullptr);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+    QCoreApplication::processEvents();
+    undo.undo();
+    CHECK(g.allSources().size() == 1 && g.allSinks().empty() && g.allPoses().empty());
+}
+
+TEST(distanceSensorMeasuresExactly) {
+    SceneGraph g;
+    // A sphere of radius 0.15 straight ahead, centre 1 m away
+    int ball = g.addObject("Ball", PrimitiveType::Sphere);
+    g.getObject(ball)->transform.position = {1, 0, 0};
+    g.getObject(ball)->transform.scale = {0.3f, 0.3f, 0.3f};
+    SensorConfig c;
+    c.type = SensorType::Distance;
+    c.direction = {1, 0, 0};
+    c.range = 2;
+    sensors::Reading r = sensors::read(g, c);
+    CHECK(r.active && r.objectId == ball);
+    CHECK_NEAR(r.value(c), 0.85, 1e-6);
+    // Off-centre the faceted mesh would be up to ~1 mm out; the true sphere is used
+    c.offset = {0, 0.1f, 0};
+    CHECK_NEAR(sensors::read(g, c).distance, 1 - std::sqrt(0.15 * 0.15 - 0.1 * 0.1), 1e-6);
+    // Nothing in range: the range
+    c.offset = {0, 0.5f, 0};
+    r = sensors::read(g, c);
+    CHECK(!r.active && r.value(c) == 2.0);
+
+    // A cylinder's curved side (radius 0.2, axis Y) and its flat cap
+    int can = g.addObject("Can", PrimitiveType::Cylinder);
+    g.getObject(can)->transform.position = {0, 0, 3};
+    g.getObject(can)->transform.scale = {0.4f, 0.4f, 0.4f};
+    SensorConfig d;
+    d.type = SensorType::Distance;
+    d.offset = {0.07f, 0, 0};
+    d.direction = {0, 0, 1};
+    d.range = 5;
+    CHECK_NEAR(sensors::read(g, d).distance, 3 - std::sqrt(0.2 * 0.2 - 0.07 * 0.07), 1e-6);
+    d.offset = {0.05f, 1, 3};
+    d.direction = {0, -1, 0};
+    CHECK_NEAR(sensors::read(g, d).distance, 0.8, 1e-6);     // top cap at y = 0.2
+
+    // A capsule's rounded end, turned on its side: radius 0.1, end centre 0.1 from its middle
+    int pill = g.addObject("Pill", PrimitiveType::Capsule);
+    g.getObject(pill)->transform.position = {0, 0, -2};
+    g.getObject(pill)->transform.scale = {0.4f, 0.4f, 0.4f};
+    g.getObject(pill)->transform.rotation = {0, 0, 90};       // its Y axis along −X
+    SensorConfig e;
+    e.type = SensorType::Distance;
+    e.offset = {-1, 0.03f, -2};
+    e.direction = {1, 0, 0};
+    e.range = 3;
+    CHECK_NEAR(sensors::read(g, e).distance, 1 - 0.1 - std::sqrt(0.01 - 0.0009), 1e-5);
+
+    // In the engine and the file: a Real signal holding metres
+    Signal s;
+    s.name = "Gap";
+    s.kind = SignalKind::Sensor;
+    s.sensor = c;
+    s.sensor.offset = {};
+    g.addSignal(s);
+    CHECK(signalNamed(g, "Gap")->type == SignalType::Real);
+    AutomationEngine eng(&g);
+    CHECK(eng.start(nullptr));
+    eng.scan(0.016);
+    CHECK_NEAR(eng.value("Gap"), 0.85, 1e-6);
+    g.getObject(ball)->transform.position = {1.25f, 0, 0};
+    eng.scan(0.016);
+    CHECK_NEAR(eng.value("Gap"), 1.1, 1e-6);
+    eng.stop();
+    SceneGraph h;
+    roundTrip(g, h);
+    const Signal* hs = signalNamed(h, "Gap");
+    CHECK(hs && hs->sensor.type == SensorType::Distance && hs->type == SignalType::Real);
 }
 
 // ── Couplings ───────────────────────────────────────────────────────────────
@@ -1197,6 +1549,46 @@ TEST(templateSensorCellPlacesAllParts) {
     sim.reset();
 }
 
+// Copies from the source ride the belt; the gantry finds each with the
+// position sensor, picks it where it stopped and the bin's sink takes it
+TEST(templatePartFlowCellPicksFedParts) {
+    SceneGraph g;
+    CHECK(ProjectSerializer::load(g, MS_SOURCE_DIR "/templates/part_flow_cell.mstudio"));
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+    // The help's examples for this cell compile against it
+    QFile flow(MS_SOURCE_DIR "/resources/help/flow.md");
+    CHECK(flow.open(QIODevice::ReadOnly));
+    const QStringList blocks = QString::fromUtf8(flow.readAll()).split("```");
+    QStringList examples;
+    for (int i = 1; i < blocks.size(); i += 2) examples << blocks[i].trimmed();
+    examples << "Height < 0.599 ? 0.6 - Height : 0" << "Height < 0.599 && abs(0.6 - Height - 0.12) > 0.002"
+             << "Locator && Locator.z > 0.05";
+    CHECK(examples.size() >= 6);
+    for (const QString& ex : examples) {
+        const QString err = AutomationEngine::validateExpression(g, ex);
+        if (!err.isEmpty()) std::printf("  help example '%s': %s\n", qPrintable(ex), qPrintable(err));
+        CHECK(err.isEmpty());
+    }
+    SimulationEngine sim(&g);
+    int binned = 0;
+    double height = 0;
+    for (int i = 0; i < 2500 && binned < 3; ++i) {      // up to 40 s
+        sim.step();
+        binned = int(sim.automation()->value("Binned.count"));
+        height = std::max(height, sim.automation()->value("PartHeight"));
+    }
+    std::printf("  %d parts binned in %.1f s, %g made; laser measured %.4f m high parts\n", binned,
+                sim.elapsedTime(), sim.automation()->value("Feeder.count"), height);
+    CHECK(binned == 3);
+    CHECK(sim.automation()->value("Placed") >= 3);
+    CHECK_NEAR(height, 0.12, 3e-3);                     // the boxes are 0.12 m; contact sinks them slightly
+    CHECK(sim.automation()->warnings().isEmpty());
+    if (!sim.automation()->warnings().isEmpty())
+        std::printf("  %s\n", qPrintable(sim.automation()->warnings().join("; ")));
+    sim.reset();
+    CHECK(g.allObjects().size() == 13);
+}
+
 TEST(sensorFollowsPhysics) {
     SceneGraph g;
     int belt = addBox(g, "Conveyor", {0, 0.1f, 0}, {2, 0.2f, 0.6f});
@@ -1224,6 +1616,94 @@ TEST(sensorFollowsPhysics) {
     CHECK(sim.automation()->value("PartAtSensor") == 0.0);
     sim.reset();
     CHECK_NEAR(g.getObject(part)->transform.position.x(), 0.5, 1e-6);
+}
+
+// Copies fall onto a belt, ride it into a sink and are taken; scrubbing back
+// shows only the copies that existed then; Reset removes them
+TEST(sourceBeltSinkWithPhysics) {
+    SceneGraph g;
+    int belt = addBox(g, "Conveyor", {0, 0.1f, 0}, {3, 0.2f, 0.6f});
+    g.addConveyorBelt(belt);
+    g.getConveyorBelt(belt)->velocity = 1.0f;
+    g.getConveyorBelt(belt)->direction = {1, 0, 0};
+    int box = addBox(g, "Box", {-1.2f, 0.35f, 0}, {0.15f, 0.15f, 0.15f});
+    g.addRigidBody(box);
+    int end = addBox(g, "End", {1.3f, 0.35f, 0}, {0.2f, 0.3f, 0.6f});
+    g.getObject(end)->opacity = 0.3f;
+    PartSource src;
+    src.name = "Feeder";
+    src.templateId = box;
+    src.interval = "0.6";
+    g.addSource(src);
+    PartSink sink;
+    sink.name = "Out";
+    sink.zone.objectId = end;
+    sink.zone.objectBounds = true;
+    g.addSink(sink);
+    Signal laser;
+    laser.name = "Gap";
+    laser.kind = SignalKind::Sensor;
+    laser.sensor.type = SensorType::Distance;
+    laser.sensor.offset = {0, 1, 0};
+    laser.sensor.direction = {0, -1, 0};
+    laser.sensor.range = 2;
+    g.addSignal(laser);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+
+    SimulationEngine sim(&g);
+    sim.step();
+    const int laserId = signalNamed(g, "Gap")->id;
+    double nearest = 2, worstErr = 0;
+    int measured = 0;
+    for (int i = 0; i < 400; ++i) {                 // 6.4 s
+        sim.step();
+        nearest = std::min(nearest, sim.automation()->value("Gap"));
+        // What the engine reads at the start of the next scan, on the pose now
+        const SensorConfig& cfg = g.getSignal(laserId)->sensor;
+        const sensors::Reading r = sensors::read(g, cfg);
+        const double gap = r.value(cfg);
+        const int hit = r.objectId;
+        const SceneObject* o = g.getObject(hit);
+        if (!o || o->copyOf == -1) continue;
+        // The exact top face under the beam (x = z = 0) of the box as simulated
+        const QMatrix4x4 w = g.worldTransform(hit);
+        const QVector3D n = w.mapVector({0, 1, 0}).normalized(), top = w.map({0, 0.5f, 0});
+        if (n.y() < 0.999f) continue;               // tipped: the beam may meet another face
+        const QVector3D from(0, 1, 0);
+        const double t = QVector3D::dotProduct(top - from, n) / QVector3D::dotProduct(QVector3D(0, -1, 0), n);
+        worstErr = std::max(worstErr, std::fabs(gap - t));
+        ++measured;
+    }
+    const double made = sim.automation()->value("Feeder.count");
+    const double taken = sim.automation()->value("Out.count");
+    std::printf("  %g copies made, %g taken by the sink; laser: nearest %.4f m, %d readings within %.2g m of the true top face\n",
+                made, taken, nearest, measured, worstErr);
+    CHECK(made >= 8);
+    CHECK(taken >= made - 4 && taken >= 4);
+    // The laser looks down at the belt (top 0.2) from 1 m: a box's top is about 0.65 below it
+    CHECK_NEAR(nearest, 1 - (0.2 + 0.15), 5e-3);
+    CHECK(measured > 10);
+    CHECK(worstErr < 1e-5);
+    int live = 0;
+    for (auto& [id, o] : g.allObjects()) if (o.copyOf != -1 && !o.parked) ++live;
+    CHECK(live == int(made - taken));
+    // Copies ride the belt: an unparked one has moved along +X from the spot
+    bool moved = false;
+    for (auto& [id, o] : g.allObjects())
+        if (o.copyOf != -1 && !o.parked && o.transform.position.x() > -0.8f) moved = true;
+    CHECK(moved);
+
+    sim.seek(0);                                    // only the first copy existed then
+    int shown = 0;
+    for (auto& [id, o] : g.allObjects()) if (o.copyOf != -1 && !o.parked) ++shown;
+    CHECK(shown == 0 || shown == 1);
+    sim.seekLive();
+    int back = 0;
+    for (auto& [id, o] : g.allObjects()) if (o.copyOf != -1 && !o.parked) ++back;
+    CHECK(back == live);
+    sim.reset();
+    CHECK(g.allObjects().size() == 3 && !g.isParked(box));
+    CHECK_NEAR(g.getObject(box)->transform.position.x(), -1.2, 1e-6);
 }
 #endif
 

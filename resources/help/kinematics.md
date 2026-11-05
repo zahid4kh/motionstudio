@@ -41,6 +41,36 @@ Use **MoveToPose** to get somewhere quickly, and **MoveL** where the path matter
 | 3 | Grip | Gripper `Gripper`, Part *Detected by AtGripper* |
 | 4 | MoveL | Tool `Gripper`, Pose `AbovePick`, Speed `0.1` |
 
+## Poses taught on a part
+
+A normal pose is a set of joint values, so the robot always goes to the same place. When parts don't arrive in exactly the same place (a conveyor, a feeder, a sloppy fixture), teach the pose **on the part** instead. It then stores where the tool is *relative to the part*, and the robot goes there relative to wherever the part is at run time.
+
+1. Place the part (or the template of a [source](help:flow)) where you can reach it.
+2. Under **Cartesian jog**, choose the **Tool** and jog it to the grip position on the part.
+3. In the Poses list, set **On part** to the part, then press **Capture**. The pose shows a crosshair icon; its tooltip says which part and tool.
+
+**Update** re-teaches it on the same part with the same tool. **Go to** solves the joints for where the part is now.
+
+In a **MoveL** or **MoveToPose** to such a pose, the **On part** field picks the part this time:
+
+| On part | The robot goes to |
+|---|---|
+| *(the part), where it was taught* | That object, wherever it is now |
+| **Detected by** a sensor | Whatever the sensor sees when the operation starts. It waits until the sensor finds something. A copy of the taught part counts, and so does a piece of one (the copy's own frame is used) |
+| A fixed object | That object |
+
+**MoveL** follows the part: the end of its straight line is recomputed every scan, so the tool meets a part that is still moving. **MoveToPose** solves the joints once, when it starts (from the pose's taught joint values, so the robot keeps its configuration), then moves all joints together. A MoveL to a pose taught on a part can leave *Tool* empty: it uses the pose's tool.
+
+A typical vision pick: a **Position** sensor (see [Sensors & Gripping](help:sensors)) watches where parts stop, and
+
+| # | Operation | Settings |
+|---|---|---|
+| 1 | WaitFor | `Locator` |
+| 2 | MoveL | Pose `Pick` (taught on `Box`), On part *Detected by Locator* |
+| 3 | Grip | Gripper `Gripper`, Part *Detected by AtGripper* |
+
+The template **Part Flow Cell** runs exactly this on parts a source feeds onto a belt.
+
 ## Good to know
 
 - IK starts from the joints' current values and moves them as little as it can, so the robot keeps its elbow and wrist configuration.

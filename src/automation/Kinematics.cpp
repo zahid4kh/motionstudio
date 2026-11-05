@@ -201,4 +201,38 @@ Result solve(SceneGraph& scene, int toolId, const std::vector<int>& chain, const
     return res;
 }
 
+void teachOnPart(const SceneGraph& scene, Pose* pose, int toolId, int partId) {
+    const QMatrix4x4 rel = toolFrame(scene, partId).inverted() * toolFrame(scene, toolId);
+    pose->toolId = toolId;
+    pose->frameId = partId;
+    pose->relPosition = rel.column(3).toVector3D();
+    pose->relRotation = QQuaternion::fromRotationMatrix(rel.toGenericMatrix<3, 3>()).normalized();
+    pose->jointValues.clear();
+    for (int jid : chainTo(scene, toolId))
+        if (const Joint* j = scene.getJoint(jid)) pose->jointValues[jid] = j->currentValue;
+}
+
+QMatrix4x4 poseTarget(const SceneGraph& scene, const Pose& pose, int partId) {
+    return toolFrame(scene, partId) * pose.relative();
+}
+
+Result solveFor(SceneGraph& scene, const Pose& pose, int toolId, const QMatrix4x4& target,
+                std::map<int, float>* values) {
+    std::map<int, float> saved;   // every joint: couplings move followers too
+    for (auto& [jid, j] : scene.allJoints()) saved[jid] = j.currentValue;
+    const std::vector<int> chain = chainTo(scene, toolId);
+    for (int jid : chain) {
+        auto it = pose.jointValues.find(jid);
+        if (it != pose.jointValues.end()) scene.getJoint(jid)->currentValue = it->second;
+    }
+    Target t = targetFrom(target);
+    t.useOrientation = canOrient(chain);
+    const Result r = solve(scene, toolId, chain, t, 200);
+    values->clear();
+    for (int jid : chain) (*values)[jid] = scene.getJoint(jid)->currentValue;
+    for (auto& [jid, v] : saved) scene.getJoint(jid)->currentValue = v;
+    scene.applyCouplings();
+    return r;
+}
+
 } // namespace kin

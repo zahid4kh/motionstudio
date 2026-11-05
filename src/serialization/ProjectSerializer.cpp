@@ -169,6 +169,7 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene, MeshPool* pool) {
 
     for (int oid : sortedKeys(scene.allObjects())) {
         const SceneObject& obj = scene.allObjects().at(oid);
+        if (obj.copyOf != -1) continue;   // made by a source while simulating
         QJsonObject o;
         o["id"]        = obj.id;
         o["name"]      = obj.name;
@@ -245,7 +246,7 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene, MeshPool* pool) {
         if (sg.kind == SignalKind::Sensor) {
             const SensorConfig& c = sg.sensor;
             QJsonObject so;
-            so["type"]         = c.type == SensorType::Zone ? "Zone" : "Beam";
+            so["type"]         = sensorTypeName(c.type);
             so["objectId"]     = c.objectId;
             so["offset"]       = vec3ToJson(c.offset);
             so["direction"]    = vec3ToJson(c.direction);
@@ -301,6 +302,14 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene, MeshPool* pool) {
         for (auto& [jid, v] : pose.jointValues)
             vals.append(QJsonObject{{"jointId", jid}, {"value", double(v)}});
         o["values"] = vals;
+        if (pose.isRelative()) {
+            o["toolId"]      = pose.toolId;
+            o["frameId"]     = pose.frameId;
+            o["relPosition"] = vec3ToJson(pose.relPosition);
+            const QQuaternion& q = pose.relRotation;
+            o["relRotation"] = QJsonObject{{"w", double(q.scalar())}, {"x", double(q.x())},
+                                           {"y", double(q.y())}, {"z", double(q.z())}};
+        }
         poses.append(o);
     }
 
@@ -325,7 +334,36 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene, MeshPool* pool) {
         mates.append(o);
     }
 
+    auto zoneToJson = [](const SensorConfig& c) {
+        return QJsonObject{{"objectId", c.objectId}, {"offset", vec3ToJson(c.offset)},
+                           {"size", vec3ToJson(c.size)}, {"objectBounds", c.objectBounds}};
+    };
+    QJsonArray sources, sinks;
+    for (auto& [id, src] : scene.allSources()) {
+        QJsonObject o;
+        o["id"]         = src.id;
+        o["name"]       = src.name;
+        o["templateId"] = src.templateId;
+        o["mode"]       = src.mode == SourceMode::Trigger ? "Trigger" : "Interval";
+        o["interval"]   = src.interval;
+        o["trigger"]    = src.trigger;
+        o["enable"]     = src.enable;
+        o["maxCount"]   = src.maxCount;
+        o["whenClear"]  = src.whenClear;
+        sources.append(o);
+    }
+    for (auto& [id, sink] : scene.allSinks()) {
+        QJsonObject o;
+        o["id"]       = sink.id;
+        o["name"]     = sink.name;
+        o["zone"]     = zoneToJson(sink.zone);
+        o["sourceId"] = sink.sourceId;
+        o["enable"]   = sink.enable;
+        sinks.append(o);
+    }
+
     for (int objectId : sortedKeys(scene.allRigidBodies())) {
+        if (const SceneObject* obj = scene.getObject(objectId); obj && obj->copyOf != -1) continue;
         const RigidBody& rb = scene.allRigidBodies().at(objectId);
         QJsonObject o;
         o["objectId"]       = objectId;
@@ -369,6 +407,8 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene, MeshPool* pool) {
     root["sequences"]     = sequences;
     root["poses"]         = poses;
     if (!mates.isEmpty()) root["mates"] = mates;
+    if (!sources.isEmpty()) root["sources"] = sources;
+    if (!sinks.isEmpty()) root["sinks"] = sinks;
     return root;
 }
 
@@ -495,7 +535,7 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root, con
             // An object reference that doesn't resolve stays broken (-2)
             // rather than silently becoming the world
             auto object = [&](const QJsonValue& v) { int id = v.toInt(-1); return id == -1 ? -1 : idMap.value(id, -2); };
-            c.type         = so["type"].toString() == "Zone" ? SensorType::Zone : SensorType::Beam;
+            c.type         = sensorTypeFromName(so["type"].toString());
             c.objectId     = object(so["objectId"]);
             c.offset       = vec3FromJson(so["offset"].toObject());
             c.direction    = vec3FromJson(so["direction"].toObject());
@@ -506,7 +546,7 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root, con
             c.target       = t == "RigidBodies" ? SensorTarget::RigidBodies
                            : t == "Object" ? SensorTarget::Object : SensorTarget::Any;
             c.targetId     = object(so["targetId"]);
-            sg.type        = SignalType::Bool;
+            sg.type        = sensorSignalType(c.type);
         }
         signalIdMap[o["id"].toInt(-1)] = scene.addSignal(sg);
     }
@@ -521,6 +561,16 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root, con
             auto po = pv.toObject();
             int jid = jointIdMap.value(po["jointId"].toInt(-1), -1);
             if (jid != -1) p.jointValues[jid] = float(po["value"].toDouble());
+        }
+        if (o.contains("frameId")) {
+            // References that don't resolve stay broken (-2) so validation reports them
+            auto object = [&](const QJsonValue& v) { int id = v.toInt(-1); return id == -1 ? -1 : idMap.value(id, -2); };
+            p.toolId      = object(o["toolId"]);
+            p.frameId     = object(o["frameId"]);
+            p.relPosition = vec3FromJson(o["relPosition"].toObject());
+            const QJsonObject q = o["relRotation"].toObject();
+            p.relRotation = QQuaternion(float(q["w"].toDouble(1)), float(q["x"].toDouble()),
+                                        float(q["y"].toDouble()), float(q["z"].toDouble())).normalized();
         }
         poseIdMap[o["id"].toInt(-1)] = scene.addPose(p);
     }
@@ -544,6 +594,40 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root, con
         m.enabled = o["enabled"].toBool(true);
         if (feature(o["moving"].toObject(), &m.moving) && feature(o["fixed"].toObject(), &m.fixed))
             scene.addMate(m);
+    }
+
+    // Sources, then sinks (which may name a source)
+    QHash<int, int> sourceIdMap;
+    auto ref = [](const QHash<int, int>& map, const QJsonValue& v) {
+        const int id = v.toInt(-1);
+        return id == -1 ? -1 : map.value(id, -2);
+    };
+    for (auto v : root["sources"].toArray()) {
+        auto o = v.toObject();
+        PartSource src;
+        src.name       = o["name"].toString();
+        src.templateId = ref(idMap, o["templateId"]);
+        src.mode       = o["mode"].toString() == "Trigger" ? SourceMode::Trigger : SourceMode::Interval;
+        src.interval   = o["interval"].toString();
+        src.trigger    = o["trigger"].toString();
+        src.enable     = o["enable"].toString();
+        src.maxCount   = std::max(0, o["maxCount"].toInt());
+        src.whenClear  = o["whenClear"].toBool(true);
+        sourceIdMap[o["id"].toInt(-1)] = scene.addSource(src);
+    }
+    for (auto v : root["sinks"].toArray()) {
+        auto o = v.toObject();
+        PartSink sink;
+        sink.name = o["name"].toString();
+        const QJsonObject z = o["zone"].toObject();
+        sink.zone.type         = SensorType::Zone;
+        sink.zone.objectId     = ref(idMap, z["objectId"]);
+        sink.zone.offset       = vec3FromJson(z["offset"].toObject());
+        sink.zone.size         = vec3FromJson(z["size"].toObject());
+        sink.zone.objectBounds = z["objectBounds"].toBool(false);
+        sink.sourceId          = ref(sourceIdMap, o["sourceId"]);
+        sink.enable            = o["enable"].toString();
+        scene.addSink(sink);
     }
 
     // Sequences

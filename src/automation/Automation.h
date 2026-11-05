@@ -1,6 +1,8 @@
 #pragma once
+#include <QQuaternion>
 #include <QString>
 #include <QVector3D>
+#include <QMatrix4x4>
 #include <map>
 #include <vector>
 
@@ -14,16 +16,37 @@ enum class SignalKind {
     Input,     // set by the user from the Runtime panel, or by operation actions
     Internal,  // state/flag written by operation actions
     Derived,   // recomputed every scan from `expression`
-    Sensor,    // Bool read from the scene every scan (see SensorConfig)
+    Sensor,    // read from the scene every scan (see SensorConfig)
 };
 
 // What a sensor signal looks at. A sensor is mounted on an object (or the
 // world) and moves with it; offsets and sizes are in metres in the mount's
 // frame, ignoring the mount's scale.
 enum class SensorType {
-    Beam,   // a ray from `offset` along `direction`, up to `range`: light barrier, part present
-    Zone,   // a box of `size` at `offset` (or the mount's own bounds): contact, presence
+    Beam,      // a ray from `offset` along `direction`, up to `range`: light barrier, part present
+    Zone,      // a box of `size` at `offset` (or the mount's own bounds): contact, presence
+    Distance,  // a beam whose value (Real) is the distance in m to the first surface, `range` when clear
+    Position,  // a zone that also publishes where the part it sees is: <name>.x .y .z (m) and
+               // .rx .ry .rz (degrees, Euler XYZ) of the part's frame in the sensor's frame
 };
+inline bool sensorIsRay(SensorType t) { return t == SensorType::Beam || t == SensorType::Distance; }
+// A sensor signal's type: a distance sensor is Real, every other one Bool
+inline SignalType sensorSignalType(SensorType t) { return t == SensorType::Distance ? SignalType::Real : SignalType::Bool; }
+inline QString sensorTypeName(SensorType t) {
+    switch (t) {
+        case SensorType::Beam:     return "Beam";
+        case SensorType::Zone:     return "Zone";
+        case SensorType::Distance: return "Distance";
+        case SensorType::Position: return "Position";
+    }
+    return "Beam";
+}
+inline SensorType sensorTypeFromName(const QString& s) {
+    if (s == "Zone")     return SensorType::Zone;
+    if (s == "Distance") return SensorType::Distance;
+    if (s == "Position") return SensorType::Position;
+    return SensorType::Beam;
+}
 enum class SensorTarget {
     Any,          // any object with geometry
     RigidBodies,  // only objects with a rigid body (or inside a rigid-body group)
@@ -50,7 +73,7 @@ struct Signal {
     double     initialValue = 0.0;
     QString    expression;          // Derived only
     QString    description;
-    SensorConfig sensor;            // Sensor only (type is always Bool)
+    SensorConfig sensor;            // Sensor only (type follows it: see sensorSignalType)
     int        ioAddress    = -1;   // Modbus TCP address (see io/ModbusServer.h); -1 = not exposed
 };
 
@@ -77,6 +100,8 @@ struct Operation {
     int           gripperId  = -1;   // Grip / Release: object that holds parts
     int           partId     = -1;   // Grip: the object to pick up, or
     int           sensorId   = -1;   // Grip: a sensor signal: pick up what it detects
+                                     // MoveL / MoveToPose to a pose taught on a part: the part
+                                     // (partId, or what sensorId detects; neither = the pose's own)
     int           toolId     = -1;   // MoveL: object whose frame is the tool centre point
 
     // All numeric/boolean fields are expressions (a constant is a valid expression)
@@ -104,6 +129,52 @@ struct Pose {
     int                  id = -1;
     QString              name;
     std::map<int, float> jointValues;   // joint id → value (deg or m)
+
+    // A pose taught on a part: where the tool's frame is relative to the
+    // part's frame (both unscaled). MoveL / MoveToPose then go there relative
+    // to wherever the part is at run time (or a copy of it a sensor sees);
+    // `jointValues` hold the robot's taught configuration (IK starts there).
+    int         toolId  = -1;            // object whose frame is the tool centre point
+    int         frameId = -1;            // the part; -1 = a plain joint pose
+    QVector3D   relPosition;             // tool origin in the part's frame, m
+    QQuaternion relRotation;             // tool orientation in the part's frame
+    bool isRelative() const { return frameId != -1; }
+    QMatrix4x4 relative() const {
+        QMatrix4x4 m;
+        m.translate(relPosition);
+        m.rotate(relRotation);
+        return m;
+    }
+};
+
+// Object source: makes copies of a template object while simulating. The
+// template itself is out of the run (hidden, not sensed, no physics); each
+// copy appears where it is, as a free part at the top of the tree.
+enum class SourceMode {
+    Interval,   // a copy every `interval` seconds, the first at the start
+    Trigger,    // a copy each time `trigger` becomes true
+};
+struct PartSource {
+    int        id = -1;
+    QString    name;                     // symbol: <name>.count, <name>.blocked
+    int        templateId = -1;
+    SourceMode mode       = SourceMode::Interval;
+    QString    interval   = "2";         // expression, read as each copy is made
+    QString    trigger;                  // Trigger mode
+    QString    enable;                   // empty = always
+    int        maxCount   = 0;           // 0 = no limit
+    bool       whenClear  = true;        // wait until no part overlaps the spot
+};
+
+// Object sink: removes parts that touch its zone while simulating (a copy
+// made by a source, or a free part: a top-level rigid body). Parts held by a
+// gripper are left alone. Removed parts come back on Reset.
+struct PartSink {
+    int          id = -1;
+    QString      name;                   // symbol: <name>.count
+    SensorConfig zone;                   // type Zone: mount, offset and size, or the mount's bounds
+    int          sourceId = -1;          // only copies from this source; -1 = any part
+    QString      enable;                 // empty = always
 };
 
 inline QString signalTypeName(SignalType t) {

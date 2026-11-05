@@ -250,10 +250,20 @@ ActuatorsPage::ActuatorsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     m_poses->setToolTip("Double-click to rename. A pose is a stored position: a sequence's MoveToPose "
                         "operations move the machine between poses, so you need at least two to see motion.");
     pv->addWidget(m_poses, 1);
+    auto* onRow = new QHBoxLayout;
+    auto* onLabel = new QLabel("On part");
+    m_poseOn = new QComboBox;
+    m_poseOn->setToolTip("Capture where the Cartesian jog's tool is relative to this part. On Play, MoveL and "
+                         "MoveToPose go there relative to wherever the part is (or a copy of it a sensor finds), "
+                         "so the robot picks parts that aren't in a fixed place.");
+    onRow->addWidget(onLabel);
+    onRow->addWidget(m_poseOn, 1);
+    pv->addLayout(onRow);
     auto* pb1 = new QHBoxLayout;
     m_poseCapture = new QPushButton(Theme::icon("camera"),     "Capture");
     m_poseUpdate  = new QPushButton(Theme::icon("refresh-cw"), "Update");
-    m_poseCapture->setToolTip("Save the current joint values as a new pose");
+    m_poseCapture->setToolTip("Save the current joint values as a new pose, or with a part chosen above, "
+                              "where the tool is on that part");
     m_poseUpdate->setToolTip("Overwrite the selected pose with the current joint values");
     pb1->addWidget(m_poseCapture);
     pb1->addWidget(m_poseUpdate);
@@ -553,11 +563,24 @@ void ActuatorsPage::cartesianJog(const QVector3D& direction) {
 void ActuatorsPage::rebuildPoses() {
     m_loading = true;
     int keep = currentPoseId();
+    autoui::fillObjectCombo(m_poseOn, *m_scene, m_poseOn->count() ? m_poseOn->currentData().toInt() : -1,
+                            "(none: joint pose)");
+    m_poseOn->setEnabled(!m_locked);
     m_poses->clear();
     for (auto& [pid, p] : m_scene->allPoses()) {
         auto* it = new QListWidgetItem(p.name);
         it->setData(Qt::UserRole, pid);
         QStringList tip;
+        if (p.isRelative()) {
+            const SceneObject* part = m_scene->getObject(p.frameId);
+            const SceneObject* tool = m_scene->getObject(p.toolId);
+            it->setIcon(Theme::icon("crosshair"));
+            it->setData(Qt::UserRole + 1, part ? part->name : QString("(deleted)"));
+            tip << QString("Taught on %1 with the tool %2: MoveL / MoveToPose go there relative to wherever "
+                           "the part is (or a copy a sensor finds).")
+                       .arg(part ? part->name : "(deleted part)", tool ? tool->name : "(deleted tool)");
+            tip << "Taught configuration:";
+        }
         for (auto& [jid, v] : p.jointValues) {
             const Joint* j = m_scene->getJoint(jid);
             if (!j) continue;
@@ -751,7 +774,21 @@ void ActuatorsPage::capturePose() {
     Pose p;
     int n = int(m_scene->allPoses().size()) + 1;
     p.name = QString("Pose%1").arg(n);
-    for (auto& [jid, j] : m_scene->allJoints()) p.jointValues[jid] = j.currentValue;
+    const int part = m_poseOn->currentData().toInt();
+    if (m_scene->getObject(part)) {
+        const int tool = m_cartTool->currentData().toInt();
+        if (m_cartTool->count() == 0 || !m_scene->getObject(tool)) {
+            emit statusMessage("Choose a robot tool under Cartesian jog first: a pose on a part is where that tool is", false);
+            return;
+        }
+        if (scenequery::inSubtree(*m_scene, tool, part)) {
+            emit statusMessage("The part can't be the tool or carry it", false);
+            return;
+        }
+        kin::teachOnPart(*m_scene, &p, tool, part);
+    } else {
+        for (auto& [jid, j] : m_scene->allJoints()) p.jointValues[jid] = j.currentValue;
+    }
     int id = 0;
     edit([&]{ id = m_scene->addPose(p); });
     rebuildPoses();
@@ -766,9 +803,17 @@ void ActuatorsPage::capturePose() {
 void ActuatorsPage::updatePose() {
     Pose* p = m_scene->getPose(currentPoseId());
     if (!p) return;
+    if (p->isRelative() && (!m_scene->getObject(p->toolId) || !m_scene->getObject(p->frameId))) {
+        emit statusMessage("Its tool or part no longer exists: capture it again", false);
+        return;
+    }
     edit([&]{
-        p->jointValues.clear();
-        for (auto& [jid, j] : m_scene->allJoints()) p->jointValues[jid] = j.currentValue;
+        if (p->isRelative()) {
+            kin::teachOnPart(*m_scene, p, p->toolId, p->frameId);   // same tool and part, taught again
+        } else {
+            p->jointValues.clear();
+            for (auto& [jid, j] : m_scene->allJoints()) p->jointValues[jid] = j.currentValue;
+        }
         m_scene->notifyAutomationChanged();
     });
     rebuildPoses();
@@ -778,7 +823,15 @@ void ActuatorsPage::updatePose() {
 void ActuatorsPage::goToPose() {
     const Pose* p = m_scene->getPose(currentPoseId());
     if (!p) return;
-    for (auto& [jid, v] : p->jointValues)
+    std::map<int, float> values = p->jointValues;
+    if (p->isRelative() && m_scene->getObject(p->toolId) && m_scene->getObject(p->frameId)) {
+        // Where the tool belongs on the part as it is placed now
+        const kin::Result r = kin::solveFor(*m_scene, *p, p->toolId, kin::poseTarget(*m_scene, *p, p->frameId), &values);
+        if (!r.reached && r.positionError > 1e-4f)
+            emit statusMessage(QString("Out of reach on the part where it is now (%1 mm short)")
+                                   .arg(double(r.positionError) * 1000, 0, 'f', 1), false);
+    }
+    for (auto& [jid, v] : values)
         if (Joint* j = m_scene->getJoint(jid)) j->currentValue = v;
     m_scene->notifyJointsMoved();
     rebuildJog();

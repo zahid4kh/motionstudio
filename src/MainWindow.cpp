@@ -525,6 +525,18 @@ void MainWindow::buildDocks() {
         m_automationDock->raise();
         m_automation->addSensorOn(objectId);
     });
+    connect(m_hierarchy, &HierarchyPanel::addSourceRequested, this, [this](int objectId){
+        if (m_sim->isActive()) { showStatus("Reset the simulation to add a source", false); return; }
+        m_automationDock->show();
+        m_automationDock->raise();
+        m_automation->addSourceFor(objectId);
+    });
+    connect(m_hierarchy, &HierarchyPanel::addSinkRequested, this, [this](int objectId){
+        if (m_sim->isActive()) { showStatus("Reset the simulation to add a sink", false); return; }
+        m_automationDock->show();
+        m_automationDock->raise();
+        m_automation->addSinkOn(objectId);
+    });
     connect(m_properties, &PropertiesPanel::openActuatorRequested, this, [this](int jointId){
         m_automationDock->show();
         m_automationDock->raise();
@@ -989,6 +1001,12 @@ void MainWindow::updateSimulationOverlay() {
         if (j) addRigid(j->childBodyId);
     }
     QStringList lines = ae->activeOperationLabels();
+    QStringList flow;
+    for (auto& [id, src] : m_scene->allSources())
+        flow << QString("%1 %2 made").arg(src.name).arg(ae->sourceCount(id));
+    for (auto& [id, sink] : m_scene->allSinks())
+        flow << QString("%1 %2 taken").arg(sink.name).arg(ae->sinkCount(id));
+    if (!flow.isEmpty()) lines << flow.join("  ·  ");
     QSet<int> interfering;
     for (int id : m_sim->interference().interfering()) interfering.insert(id);
     for (const auto& e : m_sim->interference().events()) {

@@ -29,6 +29,7 @@ void Recording::clear() {
     m_times.clear();
     m_joints.clear();
     m_objects.clear();
+    m_parked.clear();
     m_slots.clear();
 }
 
@@ -47,7 +48,14 @@ void Recording::capture(const SceneGraph& scene, double time, const std::vector<
     const int f = frames();
     m_times.push_back(time);
     for (auto& [id, j] : scene.allJoints()) record(m_joints[id], f, j.currentValue);
-    for (auto& [id, o] : scene.allObjects()) record(m_objects[id], f, o.transform);
+    for (auto& [id, o] : scene.allObjects()) {
+        if (o.parked && !m_parked.count(id)) {   // parked from the start: a template
+            record(m_parked[id], f, 1.0f);
+            continue;
+        }
+        record(m_objects[id], f, o.transform);
+        record(m_parked[id], f, o.parked ? 1.0f : 0.0f);
+    }
     if (m_slots.size() < slotValues.size()) m_slots.resize(slotValues.size());
     for (size_t i = 0; i < slotValues.size(); ++i) record(m_slots[i], f, slotValues[i]);
 }
@@ -59,6 +67,11 @@ void Recording::apply(SceneGraph& scene, int frame) const {
     for (auto& [id, track] : m_objects)
         if (SceneObject* o = scene.getObject(id))
             if (const Transform* t = track.at(frame)) o->transform = *t;
+    for (auto& [id, track] : m_parked)
+        if (SceneObject* o = scene.getObject(id)) {
+            const float* p = track.at(frame);
+            o->parked = p ? *p != 0.0f : true;   // not made yet
+        }
 }
 
 double Recording::value(int slot, int frame) const {

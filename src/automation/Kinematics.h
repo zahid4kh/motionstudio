@@ -5,6 +5,7 @@
 #include <QVector3D>
 #include <map>
 #include <vector>
+#include "Automation.h"
 
 class SceneGraph;
 
@@ -46,5 +47,18 @@ Result solve(SceneGraph& scene, int toolId, const std::vector<int>& chain, const
 
 // Whether `chain` can hold an orientation (6 or more joints)
 inline bool canOrient(const std::vector<int>& chain) { return chain.size() >= 6; }
+
+// ── Poses taught on a part (Pose::isRelative) ───────────────────────────────
+// Records the tool's frame relative to `partId`'s frame into `pose`
+// (toolId, frameId, relPosition/relRotation) and the chain's joint values as
+// its taught configuration
+void teachOnPart(const SceneGraph& scene, Pose* pose, int toolId, int partId);
+// Where the pose puts the tool (world frame, unscaled) with the part at `partId`
+QMatrix4x4 poseTarget(const SceneGraph& scene, const Pose& pose, int partId);
+// Joint values for the chain above `toolId` that put the tool at `target`,
+// solved from the pose's taught values (so the robot keeps that
+// configuration); the scene is left unchanged
+Result solveFor(SceneGraph& scene, const Pose& pose, int toolId, const QMatrix4x4& target,
+                std::map<int, float>* values);
 
 } // namespace kin

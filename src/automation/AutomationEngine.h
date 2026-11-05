@@ -10,6 +10,7 @@
 #include "Expression.h"
 #include "MotionProfile.h"
 #include "../scene/Motor.h"
+#include "../scene/SceneQuery.h"
 
 class SceneGraph;
 
@@ -23,6 +24,7 @@ class SceneGraph;
 //   4. evaluate actuator expression bindings
 //   5. integrate actuator motion profiles, write Joint::currentValue, then
 //      move gripped parts with their grippers
+//   6. part flow: sinks take the parts in their zones, sources make copies
 //
 // Joints without an actuator are never touched (in MuJoCo mode they stay
 // physics-driven). Definitions are compiled once by start(); editing them
@@ -30,7 +32,7 @@ class SceneGraph;
 class AutomationEngine : public QObject {
     Q_OBJECT
 public:
-    enum class SymbolKind { Signal, Actuator, Sequence };
+    enum class SymbolKind { Signal, Actuator, Sequence, Flow };
     struct Symbol {
         QString    name;
         SymbolKind kind      = SymbolKind::Signal;
@@ -118,6 +120,12 @@ public:
     QStringList activeOperationLabels() const;
     // Runtime warnings collected during scans (e.g. move to an unreachable target)
     const QStringList& warnings() const { return m_warnings; }
+    // True once after a scan in which a source made a copy or a sink took a
+    // part (the physics model needs rebuilding); clears the flag
+    bool takeStructureChanged() { const bool c = m_structureChanged; m_structureChanged = false; return c; }
+    // Copies made / parts taken so far
+    int  sourceCount(int sourceId) const;
+    int  sinkCount(int sinkId) const;
 
 signals:
     void scanned();
@@ -153,7 +161,14 @@ private:
         double moveFrom   = 0;
         std::vector<std::pair<int, double>> poseTargets;   // (actIdx, target)
         std::vector<double>                  poseFrom;
-        // MoveL: tool path from → to over `duration` seconds
+        // MoveL / MoveToPose to a pose taught on a part: the part this run
+        // (-1 while a sensor has not seen one) and whether the move is planned
+        int              part = -1;
+        bool             planned = false;
+        // MoveL: tool path from → to over `duration` seconds from pathStart;
+        // to a part, `pathTo` follows the part every scan
+        int              tool = -1;
+        double           pathStart = 0;
         std::vector<int> chain;
         QMatrix4x4       pathFrom, pathTo;
         bool             pathOrient = false;
@@ -173,9 +188,27 @@ private:
 
     struct SensorRt {
         int          signalId = -1;
-        int          slot     = -1;
+        int          slot     = -1;      // the signal; a Position sensor's fields follow it
         SensorConfig cfg;
         int          detected = -1;
+    };
+
+    struct SourceRt {
+        PartSource       def;
+        expr::Expression interval, trigger, enable;
+        int    count = 0;
+        double nextAt = 0;
+        bool   prevTrigger = false;
+        int    pending = 0;               // trigger edges not yet served
+        bool   blocked = false;           // a copy is due but the spot is taken
+        int    slotBase = -1;             // count, blocked
+    };
+
+    struct SinkRt {
+        PartSink         def;
+        expr::Expression enable;
+        int    count = 0;
+        int    slot = -1;                 // count
     };
 
     // A part attached to a gripper: its pose relative to the gripper's
@@ -210,6 +243,17 @@ private:
     void attach(int gripperId, int partId);
     bool stepLinearMove(OpRt& op);
     void applyHolds();
+    void updateFlow();
+    bool partTouches(int rootId, const scenequery::Obb& box) const;
+    bool spotTaken(const SourceRt& src) const;
+    // The object a part-relative pose is applied to for `op` (see
+    // Operation::sensorId), or -1 while its sensor sees nothing
+    int  partFor(OpRt& op, const Pose& pose);
+    // MoveToPose: commands the synchronized joint move; false while waiting for a part
+    bool planPoseMove(OpRt& op);
+    // MoveL: starts the tool path; false while waiting for a part
+    bool planLinearMove(OpRt& op);
+    void commandJoints(OpRt& op, const std::map<int, float>& values, double percent);
     double clampToLimits(const ActuatorRt& a, double v) const;
     bool inPosition(const ActuatorRt& a, double target) const;
 
@@ -229,6 +273,9 @@ private:
     std::vector<BeltRt>     m_belts;
     std::vector<ActuatorRt> m_actuators;
     std::vector<SeqRt>      m_sequences;
+    std::vector<SourceRt>   m_sources;
+    std::vector<SinkRt>     m_sinks;
+    bool                    m_structureChanged = false;
     std::map<int, int>      m_actIndexByMotor;
 
     std::vector<std::pair<int, double>>   m_pendingWrites;

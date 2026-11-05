@@ -24,7 +24,8 @@ public:
 
     // Appends a frame with the scene's current state and the slot values
     void   capture(const SceneGraph& scene, double time, const std::vector<double>& slotValues);
-    // Puts every recorded joint and object back to its state at `frame`
+    // Puts every recorded joint and object back to its state at `frame`; an
+    // object made after `frame` (by a source) is parked
     void   apply(SceneGraph& scene, int frame) const;
     double value(int slot, int frame) const;
 
@@ -39,5 +40,6 @@ private:
     std::vector<double>                       m_times;
     std::unordered_map<int, Track<float>>     m_joints;
     std::unordered_map<int, Track<Transform>> m_objects;
+    std::unordered_map<int, Track<float>>     m_parked;     // 1 = parked
     std::vector<Track<double>>                m_slots;
 };

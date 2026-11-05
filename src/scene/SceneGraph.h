@@ -65,6 +65,34 @@ public:
     Sequence* getSequence(int id);
     const std::map<int, Sequence>& allSequences() const { return m_sequences; }
 
+    // Object sources and sinks (part flow); their names are symbols too
+    int         addSource(PartSource s);
+    void        removeSource(int id);
+    PartSource* getSource(int id);
+    const PartSource* getSource(int id) const;
+    const std::map<int, PartSource>& allSources() const { return m_sources; }
+    int         addSink(PartSink s);
+    void        removeSink(int id);
+    PartSink*   getSink(int id);
+    const PartSink* getSink(int id) const;
+    const std::map<int, PartSink>& allSinks() const { return m_sinks; }
+
+    // ── Simulation-time objects (see SceneObject::copyOf / parked) ──────────
+    // These change the scene without the usual signals: they are never
+    // saved, never undone and never shown in the hierarchy.
+    // Copies `templateId` and its subtree as a new top-level part placed
+    // where the template is now (joint motion baked in), with its rigid
+    // bodies; returns the copy's id
+    int   spawnCopy(int templateId, int sourceId, const QString& name);
+    // Takes the object and its subtree out of the run, or back in
+    void  setParked(int id, bool parked);
+    bool  isParked(int id) const { const SceneObject* o = getObject(id); return o && o->parked; }
+    // Removes every copy and brings every parked object back
+    void  clearRuntimeObjects();
+    bool  hasRuntimeObjects() const;
+    // The top of the copy `id` belongs to, or -1 when it is not a copy
+    int   copyRoot(int id) const;
+
     int    addPose(Pose p);
     void   removePose(int id);
     Pose*  getPose(int id);
@@ -192,6 +220,8 @@ private:
     std::map<int, Sequence>                m_sequences;
     std::map<int, Pose>                    m_poses;
     std::map<int, Mate>                    m_mates;
+    std::map<int, PartSource>              m_sources;
+    std::map<int, PartSink>                m_sinks;
     std::vector<int>                       m_roots;
     int  m_nextId      = 1;
     int  m_selectedId  = -1;

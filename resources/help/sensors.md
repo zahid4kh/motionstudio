@@ -1,16 +1,18 @@
 # Sensors & Gripping
 
-A **sensor** is a Bool signal that the scene sets for you: it is true while something is in its beam or zone. Use sensors so that your logic reacts to what is happening in the scene. For example, stop the conveyor when a part reaches the end, or start the pick when a part is present.
+A **sensor** is a signal that the scene sets for you: true while something is in its beam or zone, or the exact distance a laser measures. Use sensors so that your logic reacts to what is happening in the scene. For example, stop the conveyor when a part reaches the end, start the pick when a part is present, or check a part's height.
 
 Create one with **New Sensor** in the Signals tab, or right-click an object in the Hierarchy and choose **Add Sensor Here…**. **Configure…** opens its settings. The dialog shows what the sensor sees in the current pose.
 
-## Beam and zone
+## Sensor types
 
-| Type | Tests | Use it as |
-|---|---|---|
-| **Beam** | A ray from the sensor along a direction, up to its range | Light barrier, part-present switch, distance check |
-| **Zone** | A box of a given size | Presence check, area guard |
-| **Zone** with *Use the mounted object's bounding box* | The object's own bounds | Contact sensor ("the gripper touches the part") |
+| Type | Tests | Value | Use it as |
+|---|---|---|---|
+| **Beam** | A ray from the sensor along a direction, up to its range | Bool | Light barrier, part-present switch |
+| **Zone** | A box of a given size | Bool | Presence check, area guard |
+| **Zone** with *Use the mounted object's bounding box* | The object's own bounds | Bool | Contact sensor ("the gripper touches the part") |
+| **Distance** | A ray like a beam | Real: metres to the first surface, the range when clear | Laser distance sensor: height, gap, position checks |
+| **Position** | A zone | Bool, plus where the part is | Vision / locating sensor: where to pick |
 
 A sensor is **mounted** on an object and moves and turns with it. *Offset* and *Size* are in metres in that object's frame, and the object's scale is ignored. Mounted on *World*, the sensor stays fixed. A sensor never detects the object it is mounted on, that object's children, or the objects it hangs from.
 
@@ -18,9 +20,44 @@ A sensor is **mounted** on an object and moves and turns with it. *Offset* and *
 
 - **Anything**: any object that has geometry.
 - **Rigid bodies (parts)**: only objects with a rigid body, or objects inside a rigid-body group. This is usually what you want for parts on a conveyor.
-- **A specific object**: only that object and its children.
+- **A specific object**: only that object and its children, and the copies a [source](help:flow) makes of it.
 
-In the viewport, a beam is drawn green while it is clear and orange while something blocks it. A zone is drawn as a wire box in the same colours. The label shows ● while the sensor is detecting something and ○ while it is not.
+In the viewport, a beam is drawn green while it is clear and orange while something blocks it. A zone is drawn as a wire box in the same colours. The label shows ● while the sensor is detecting something and ○ while it is not; a distance sensor's label shows the distance in mm.
+
+## Distance sensor
+
+A **Distance** sensor is a laser rangefinder: a Real signal holding the distance in metres from the sensor to the first surface along its beam, or its *Range* when nothing is in range. The distance is computed exactly, not sampled: spheres, cylinders and capsules are intersected as true curved surfaces, boxes and baskets on their faces, and imported parts on their own triangles (the CAD tessellation). In a physics test with boxes riding a conveyor, every reading matched the true top face of the simulated box to within a micrometre.
+
+Part height under a laser 0.6 m above the belt (a *Derived* Real signal):
+
+```
+Height < 0.599 ? 0.6 - Height : 0
+```
+
+Reject parts that are too short or too tall (a *Derived* Bool):
+
+```
+Height < 0.599 && abs(0.6 - Height - 0.12) > 0.002
+```
+
+## Position sensor
+
+A **Position** sensor is a zone that also reports **where** the part it sees is, like a vision system. Besides its Bool value it publishes six Real values for the detected part's frame, in the sensor's own frame (its mount's frame moved by *Offset*; world coordinates when mounted on the world):
+
+| Name | Meaning |
+|---|---|
+| `Locator.x` `Locator.y` `Locator.z` | position, m |
+| `Locator.rx` `Locator.ry` `Locator.rz` | rotation, degrees (Euler XYZ, like Properties) |
+
+They are 0 while nothing is detected. The viewport marks the found part's frame with small axes.
+
+Use the values in logic, for example to sort by where the part lies:
+
+```
+Locator && Locator.z > 0.05
+```
+
+To have a robot go **to** the part, teach a pose on it and choose the sensor as the operation's *On part*: see [Robot Tools & IK](help:kinematics). Any sensor works for that; a Position sensor also tells your logic where the part is.
 
 ## Using a sensor
 
@@ -79,5 +116,5 @@ The template **Sensor & Gripper Cell** (File › Open Template…) is this cell,
 ## Tips
 
 - Scenes with rigid bodies need MuJoCo for parts to fall and ride conveyors. Without MuJoCo, sensors still see actuated mechanisms move.
-- Zones and contact sensors test bounding boxes, so a zone around a round or hollow part triggers at its box. Beams test the actual triangles.
+- Zones and contact sensors test bounding boxes, so a zone around a round or hollow part triggers at its box. Beams and distance sensors test the actual surface.
 - To sense a part on a moving carrier, mount the sensor on the carrier.

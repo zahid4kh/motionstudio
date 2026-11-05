@@ -90,6 +90,7 @@ private:
 
     // Poses
     QListWidget*    m_poses = nullptr;
+    QComboBox*      m_poseOn = nullptr;   // capture on a part: the part, or -1 for a joint pose
     QPushButton*    m_poseCapture = nullptr, *m_poseUpdate = nullptr, *m_poseGo = nullptr, *m_poseDelete = nullptr;
     QPushButton*    m_poseSequence = nullptr;
 

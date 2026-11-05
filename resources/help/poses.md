@@ -10,6 +10,8 @@ A pose stores the value of **every joint** under a name. It is the robot-program
 
 **Update** overwrites the selected pose with the current joint values. **Go to** jogs the machine to a pose so you can check it. Hover over a pose to see its stored values.
 
+For parts that don't arrive in the same place every time, set **On part** before pressing Capture: the pose then stores where the tool is on that part, and the robot goes there relative to the part at run time. See [Robot Tools & IK](help:kinematics).
+
 > **You need at least two poses to see motion.** A pose is only a stored position; nothing moves to it until a sequence says so. On Play the machine starts from wherever the jog sliders are, and a pose captured from there *is* that position, so moving to it is a move of zero. Capture a second one, such as `Home`, and let the sequence move between them.
 
 ## Sequence from Poses

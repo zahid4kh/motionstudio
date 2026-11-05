@@ -75,6 +75,9 @@ private:
     // ── MuJoCo backend ───────────────────────────────────────────────────────
 #ifdef MUJOCO_ENABLED
     bool    buildMuJoCoModel();
+    // Rebuilds the model after parts were added or taken out, keeping every
+    // body's and joint's position and velocity
+    void    rebuildMuJoCoModel();
     void    teardownMuJoCo();
     void    syncFromMuJoCo();
     void    prescribeActuatedJoints(double alpha);
@@ -119,6 +122,7 @@ private:
     // The live state, kept while a recorded frame is on display
     std::unordered_map<int, Transform> m_liveTransforms;
     std::unordered_map<int, float>     m_liveJoints;
+    std::unordered_map<int, bool>      m_liveParked;
     std::unordered_map<int, Transform> m_savedTransforms;
     std::unordered_map<int, float>     m_savedJointAngles;
 };

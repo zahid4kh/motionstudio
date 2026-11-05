@@ -7,6 +7,7 @@
         <file>templates/crank_arm.mstudio</file>
         <file>templates/indexing_table.mstudio</file>
         <file>templates/sensor_cell.mstudio</file>
+        <file>templates/part_flow_cell.mstudio</file>
         <file>library/bin.mstudio</file>
         <file>library/conveyor_end_sensor.mstudio</file>
         <file>library/gantry.mstudio</file>
@@ -126,6 +127,7 @@
         <file alias="help/poses.md">resources/help/poses.md</file>
 
         <file alias="help/kinematics.md">resources/help/kinematics.md</file>
+        <file alias="help/flow.md">resources/help/flow.md</file>
         <file alias="help/sequences.md">resources/help/sequences.md</file>
         <file alias="help/signals.md">resources/help/signals.md</file>
 

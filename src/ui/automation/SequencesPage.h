@@ -49,6 +49,8 @@ private:
     void commitOpForm();
 
     QString describe(const Operation& op) const;
+    // " on <part>" for a move to a pose taught on a part, else empty
+    QString partText(const Operation& op) const;
     QString predecessorText(const Sequence& seq, const Operation& op) const;
 
     // Sequence list + props
@@ -76,6 +78,7 @@ private:
     QComboBox*      m_opPose = nullptr;
     QComboBox*      m_opGripper = nullptr;
     QComboBox*      m_opPart = nullptr;
+    QComboBox*      m_opOnPart = nullptr;   // MoveL / MoveToPose to a pose taught on a part
     ExpressionEdit* m_opTarget = nullptr;
     ExpressionEdit* m_opVelocity = nullptr;
     ExpressionEdit* m_opDuration = nullptr;

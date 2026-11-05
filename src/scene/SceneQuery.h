@@ -4,6 +4,7 @@
 #include <functional>
 #include <limits>
 #include <vector>
+#include "SceneObject.h"
 
 class SceneGraph;
 
@@ -21,16 +22,23 @@ bool rayMeetsBox(const QVector3D& o, const QVector3D& d, const QVector3D& mn, co
 bool rayHitsSoup(const std::vector<float>& soup, const QVector3D& o, const QVector3D& d,
                  float maxT, float* tOut);
 
+// Nearest hit (0 < t < maxT, either side) of a ray on a built-in curved
+// primitive in its unit local space, solved exactly: Sphere (r 0.5),
+// Cylinder (r 0.5, y ±0.5) and Capsule (r 0.25, cylinder y ±0.25 with
+// hemispherical ends). False for other types (their triangles are exact).
+bool rayHitsPrimitive(PrimitiveType type, const QVector3D& o, const QVector3D& d, float maxT, float* tOut);
+
 struct RayHit {
     int   objectId = -1;
     float t        = std::numeric_limits<float>::max();
     bool  hit() const { return objectId != -1; }
 };
 
-// The object whose drawn surface the ray meets first, among those `accept`
-// lets through (all objects with geometry when null). Bounding boxes only
-// prefilter: the triangles decide, so overlapping boxes don't hide what is
-// actually in front. `t` is in units of `dir`.
+// The object whose surface the ray meets first, among those `accept` lets
+// through (all objects with geometry when null; parked objects never).
+// Bounding boxes only prefilter: the surface decides, so overlapping boxes
+// don't hide what is actually in front. Spheres, cylinders and capsules are
+// hit exactly, everything else on its triangles. `t` is in units of `dir`.
 RayHit rayCast(const SceneGraph& scene, const QVector3D& orig, const QVector3D& dir,
                float maxT = std::numeric_limits<float>::max(),
                const std::function<bool(int)>& accept = {});

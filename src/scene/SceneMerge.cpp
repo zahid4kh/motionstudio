@@ -32,10 +32,16 @@ std::vector<int> mergeScene(SceneGraph& target, SceneGraph& source, int parentId
         if (target.isSymbolNameTaken(m.name)) renames.push_back({m.name, freeName(target, source, m.name)});
     for (auto& [id, q] : source.allSequences())
         if (target.isSymbolNameTaken(q.name)) renames.push_back({q.name, freeName(target, source, q.name)});
+    for (auto& [id, q] : source.allSources())
+        if (target.isSymbolNameTaken(q.name)) renames.push_back({q.name, freeName(target, source, q.name)});
+    for (auto& [id, q] : source.allSinks())
+        if (target.isSymbolNameTaken(q.name)) renames.push_back({q.name, freeName(target, source, q.name)});
     for (const auto& [from, to] : renames) {
         if (Signal* s = source.findSignal(from)) s->name = to;
         for (auto& [id, m] : source.allMotors()) if (m.name == from) source.getMotor(id)->name = to;
         for (auto& [id, q] : source.allSequences()) if (q.name == from) source.getSequence(id)->name = to;
+        for (auto& [id, q] : source.allSources()) if (q.name == from) source.getSource(id)->name = to;
+        for (auto& [id, q] : source.allSinks()) if (q.name == from) source.getSink(id)->name = to;
         source.renameSymbolReferences(from, to);
     }
 
@@ -107,13 +113,27 @@ std::vector<int> mergeScene(SceneGraph& target, SceneGraph& source, int parentId
         signalIds[id] = target.addSignal(copy);
     }
     for (auto& [id, p] : source.allPoses()) {
-        Pose copy;
-        copy.name = p.name;
+        Pose copy = p;
+        copy.jointValues.clear();
+        copy.toolId = remap(objects, p.toolId);
+        copy.frameId = remap(objects, p.frameId);
         for (auto& [jid, v] : p.jointValues) {
             const int to = remap(joints, jid);
             if (to >= 0) copy.jointValues[to] = v;
         }
         poses[id] = target.addPose(copy);
+    }
+    std::unordered_map<int, int> sources;
+    for (auto& [id, src] : source.allSources()) {
+        PartSource copy = src;
+        copy.templateId = remap(objects, src.templateId);
+        sources[id] = target.addSource(copy);
+    }
+    for (auto& [id, sink] : source.allSinks()) {
+        PartSink copy = sink;
+        copy.zone.objectId = remap(objects, sink.zone.objectId);
+        copy.sourceId = remap(sources, sink.sourceId);
+        target.addSink(copy);
     }
     for (auto& [id, q] : source.allSequences()) {
         Sequence copy = q;

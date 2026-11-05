@@ -37,6 +37,8 @@ Listed from lowest to highest precedence:
 - Any signal: `Start`, `SpeedPct`
 - Actuator values: `J1.pos`, `J1.vel`, `J1.target`, `J1.inPosition`, `J1.moving`, `J1.atMin`, `J1.atMax`, `J1.active`
 - Sequence values: `Cycle.running`, `Cycle.done`, `Cycle.cycles`
+- Position sensor values: `Locator.x`, `Locator.y`, `Locator.z`, `Locator.rx`, `Locator.ry`, `Locator.rz` ([Sensors & Gripping](help:sensors))
+- Source and sink counts: `Feeder.count`, `Feeder.blocked`, `Binned.count` ([Part Sources & Sinks](help:flow))
 - `true` and `false`
 
 Typing in an expression field suggests names. A red field means the expression has an error; hover over it to see the problem.

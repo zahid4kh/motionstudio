@@ -18,6 +18,14 @@ int rigidOwner(const SceneGraph& scene, int id) {
     return -1;
 }
 
+// The object, or its nearest ancestor, that is `targetId` or a copy of it
+// (made by an object source), else -1
+int matchTarget(const SceneGraph& scene, int id, int targetId) {
+    for (const SceneObject* o = scene.getObject(id); o; o = scene.getObject(o->parentId))
+        if (o->id == targetId || o->copyOf == targetId) return o->id;
+    return -1;
+}
+
 // Whether object `id` can trigger the sensor. A sensor never sees its own
 // mount, the mount's children or the parts the mount hangs from.
 bool accepts(const SceneGraph& scene, const SensorConfig& cfg, int id) {
@@ -27,7 +35,7 @@ bool accepts(const SceneGraph& scene, const SensorConfig& cfg, int id) {
     switch (cfg.target) {
         case SensorTarget::Any:         return true;
         case SensorTarget::RigidBodies: return rigidOwner(scene, id) != -1;
-        case SensorTarget::Object:      return cfg.targetId != -1 && scenequery::inSubtree(scene, id, cfg.targetId);
+        case SensorTarget::Object:      return cfg.targetId != -1 && matchTarget(scene, id, cfg.targetId) != -1;
     }
     return true;
 }
@@ -36,7 +44,7 @@ int detectedObject(const SceneGraph& scene, const SensorConfig& cfg, int hitId) 
     switch (cfg.target) {
         case SensorTarget::Any:         return hitId;
         case SensorTarget::RigidBodies: return rigidOwner(scene, hitId);
-        case SensorTarget::Object:      return cfg.targetId;
+        case SensorTarget::Object:      return matchTarget(scene, hitId, cfg.targetId);
     }
     return hitId;
 }
@@ -47,6 +55,16 @@ QString objectName(const SceneGraph& scene, int id) {
 }
 
 } // namespace
+
+const char* const kPositionFields[kPositionFieldCount] = {"x", "y", "z", "rx", "ry", "rz"};
+
+void partPose(const SceneGraph& scene, const SensorConfig& cfg, int objectId, double out[kPositionFieldCount]) {
+    for (int i = 0; i < kPositionFieldCount; ++i) out[i] = 0;
+    if (!scene.getObject(objectId)) return;
+    const QMatrix4x4 rel = frame(scene, cfg).inverted() * scenequery::stripScale(scene.worldTransform(objectId));
+    const Transform t = SceneGraph::toTransform(rel);
+    for (int i = 0; i < 3; ++i) { out[i] = t.position[i]; out[3 + i] = t.rotation[i]; }
+}
 
 QMatrix4x4 frame(const SceneGraph& scene, const SensorConfig& cfg) {
     QMatrix4x4 m;
@@ -71,7 +89,7 @@ Reading read(const SceneGraph& scene, const SensorConfig& cfg) {
     if (cfg.objectId != -1 && !mountOf(scene, cfg)) return r;
     auto accept = [&](int id) { return accepts(scene, cfg, id); };
 
-    if (cfg.type == SensorType::Beam) {
+    if (sensorIsRay(cfg.type)) {
         QVector3D from, dir;
         beam(scene, cfg, &from, &dir);
         r.distance = cfg.range;
@@ -88,7 +106,7 @@ Reading read(const SceneGraph& scene, const SensorConfig& cfg) {
     const scenequery::Obb box = zone(scene, cfg);
     float best = std::numeric_limits<float>::max();
     for (auto& [id, obj] : scene.allObjects()) {
-        if (!surfaceOf(obj) || !accept(id)) continue;
+        if (!surfaceOf(obj) || obj.parked || !accept(id)) continue;
         const scenequery::Obb other = scenequery::worldBox(scene, id);
         if (!scenequery::overlap(box, other)) continue;
         const float d = (other.center - box.center).lengthSquared();
@@ -105,7 +123,7 @@ QString problem(const SceneGraph& scene, const SensorConfig& cfg) {
     if (cfg.objectId != -1 && !mountOf(scene, cfg)) return "the object it is mounted on no longer exists";
     if (cfg.target == SensorTarget::Object && !scene.getObject(cfg.targetId))
         return cfg.targetId == -1 ? "no object to detect selected" : "the object it detects no longer exists";
-    if (cfg.type == SensorType::Beam) {
+    if (sensorIsRay(cfg.type)) {
         if (cfg.range <= 0) return "beam range must be greater than 0";
         if (cfg.direction.isNull()) return "beam has no direction";
     } else if (!(cfg.objectBounds && cfg.objectId != -1)) {
@@ -122,11 +140,13 @@ QString summary(const SceneGraph& scene, const SensorConfig& cfg) {
         case SensorTarget::RigidBodies: what = "rigid bodies"; break;
         case SensorTarget::Object:      what = cfg.targetId == -1 ? QString("(no object)") : objectName(scene, cfg.targetId); break;
     }
-    if (cfg.type == SensorType::Beam)
-        return QString("Beam on %1, %2 m → %3").arg(where).arg(double(cfg.range), 0, 'f', 2).arg(what);
+    if (sensorIsRay(cfg.type))
+        return QString("%1 on %2, %3 m → %4").arg(cfg.type == SensorType::Distance ? "Distance" : "Beam", where)
+            .arg(double(cfg.range), 0, 'f', 2).arg(what);
+    const QString kind = cfg.type == SensorType::Position ? "Position zone" : "Zone";
     if (cfg.objectBounds && cfg.objectId != -1)
-        return QString("Touching %1 → %2").arg(where, what);
-    return QString("Zone on %1, %2×%3×%4 m → %5").arg(where)
+        return QString("%1 %2 → %3").arg(cfg.type == SensorType::Position ? "Position, touching" : "Touching", where, what);
+    return QString("%1 on %2, %3×%4×%5 m → %6").arg(kind, where)
         .arg(double(cfg.size.x()), 0, 'g', 3).arg(double(cfg.size.y()), 0, 'g', 3)
         .arg(double(cfg.size.z()), 0, 'g', 3).arg(what);
 }
