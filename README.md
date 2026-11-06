@@ -30,7 +30,7 @@ Born out of an interest in robotics, automation, and digital twins — a place t
 - **STEP import** — bring in CAD assemblies (`.step`/`.stp`) via OpenCASCADE, preserving the part hierarchy for rigid-body grouping
 - **Undo/redo** — full history across every kind of scene edit
 - **Hierarchy & Properties panels** — Unity-style tree view and inspector
-- **Templates** — working automation examples (pick & place arm, indexing table with press, pendulum, solar system, spinning top, crank arm)
+- **Templates** — working automation examples (pick & place arm, 6-axis robot cell, indexing table with press, pendulum, solar system, spinning top, crank arm)
 - **Save/Load** — JSON-based `.mstudio` project files
 
 MotionStudio runs fully kinematically out of the box. Installing [MuJoCo](https://mujoco.org/) unlocks real rigid-body physics (gravity, collisions, forces); installing [OpenCASCADE](https://dev.opencascade.org/) unlocks STEP import. Both are optional, detected at build time.

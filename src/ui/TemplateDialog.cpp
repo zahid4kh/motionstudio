@@ -32,6 +32,15 @@ const QList<TemplateDialog::TemplateInfo> TemplateDialog::s_templates = {
         "boxes"
     },
     {
+        "6-Axis Robot Cell",
+        "A six-axis robot inside a guarded cell: a source feeds parts on the infeed belt,\n"
+        "the robot finds each one, picks it from above with straight-line moves and sets\n"
+        "it on the outfeed. Opening the door (OpenDoor) holds the robot. Needs MuJoCo for\n"
+        "the parts to ride the belts. Press Play, then switch Start ON.",
+        ":/templates/robot_cell.mstudio",
+        "bot"
+    },
+    {
         "Indexing Table",
         "A turntable indexes 90° (target = Table.target + 90), then a press stamps\n"
         "the part and retracts. A derived Safe signal interlocks the table; a counter\n"

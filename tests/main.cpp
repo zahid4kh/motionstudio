@@ -1589,6 +1589,64 @@ TEST(templatePartFlowCellPicksFedParts) {
     CHECK(g.allObjects().size() == 13);
 }
 
+// The 6-axis robot finds each fed part, picks it from above and sets it on
+// the outfeed, whose sink takes it; opening the door holds the robot
+TEST(templateRobotCellPicksAndPlaces) {
+    SceneGraph g;
+    CHECK(ProjectSerializer::load(g, MS_SOURCE_DIR "/templates/robot_cell.mstudio"));
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+    int tcp = -1;
+    for (auto& [id, o] : g.allObjects()) if (o.name == "TCP") tcp = id;
+    CHECK(kin::chainTo(g, tcp).size() == 6);
+    // Every pose points the tool straight down and is reachable as taught
+    for (auto& [id, p] : g.allPoses()) {
+        if (p.name == "Home") continue;
+        const QMatrix4x4 f = kin::toolFrameAt(g, tcp, p.jointValues);
+        CHECK(f.mapVector({0, -1, 0}).y() < -0.9999f);
+    }
+    SimulationEngine sim(&g);
+    sim.step();
+    sim.automation()->setInput("Start", 1);
+    int shipped = 0;
+    float worstGrip = 0, worstTilt = 0;
+    for (int i = 0; i < 2500 && shipped < 3; ++i) {     // up to 40 s
+        sim.step();
+        shipped = int(sim.automation()->value("Shipped.count"));
+        // A held part sits centred between the fingertips; parts on the outfeed stay flat
+        const QVector3D at = kin::toolFrame(g, tcp).column(3).toVector3D();
+        for (auto& [id, o] : g.allObjects()) {
+            if (o.copyOf == -1 || o.parked) continue;
+            const QMatrix4x4 w = g.worldTransform(id);
+            const QVector3D p = w.column(3).toVector3D();
+            if (sim.automation()->holderOf(id) != -1) worstGrip = std::max(worstGrip, (p - at).length());
+            else if (p.z() > 0.5f) worstTilt = std::max(worstTilt, 1 - w.mapVector({0, 1, 0}).normalized().y());
+        }
+    }
+    std::printf("  %d parts shipped in %.1f s, %g placed; held %.1f mm off the TCP at worst\n", shipped,
+                sim.elapsedTime(), sim.automation()->value("Cycles"), worstGrip * 1000);
+    CHECK(worstGrip < 0.002f);
+    CHECK(worstTilt < 1e-3f);
+    CHECK(shipped == 3);
+    CHECK(sim.automation()->warnings().isEmpty());
+    if (!sim.automation()->warnings().isEmpty())
+        std::printf("  %s\n", qPrintable(sim.automation()->warnings().join("; ")));
+
+    // Door open: the robot finishes its move, then holds
+    sim.automation()->setInput("OpenDoor", 1);
+    for (int i = 0; i < 150; ++i) sim.step();
+    CHECK(sim.automation()->value("DoorClosed") == 0.0);
+    std::map<int, float> held;
+    for (int jid : kin::chainTo(g, tcp)) held[jid] = g.getJoint(jid)->currentValue;
+    for (int i = 0; i < 300; ++i) sim.step();
+    for (auto& [jid, v] : held) CHECK_NEAR(g.getJoint(jid)->currentValue, v, 1e-4);
+    sim.automation()->setInput("OpenDoor", 0);
+    const double cycles = sim.automation()->value("Cycles");
+    for (int i = 0; i < 600; ++i) sim.step();
+    CHECK(sim.automation()->value("DoorClosed") == 1.0);
+    CHECK(sim.automation()->value("Cycles") > cycles);
+    sim.reset();
+}
+
 TEST(sensorFollowsPhysics) {
     SceneGraph g;
     int belt = addBox(g, "Conveyor", {0, 0.1f, 0}, {2, 0.2f, 0.6f});

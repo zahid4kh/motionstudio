@@ -8,6 +8,7 @@
         <file>templates/indexing_table.mstudio</file>
         <file>templates/sensor_cell.mstudio</file>
         <file>templates/part_flow_cell.mstudio</file>
+        <file>templates/robot_cell.mstudio</file>
         <file>library/bin.mstudio</file>
         <file>library/conveyor_end_sensor.mstudio</file>
         <file>library/gantry.mstudio</file>

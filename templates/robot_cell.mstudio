@@ -1,0 +1,2523 @@
+{
+    "version": 3,
+    "objects": [
+        {
+            "id": 1,
+            "name": "Robot Cell",
+            "type": "ImportedMesh",
+            "parentId": -1,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            }
+        },
+        {
+            "id": 2,
+            "name": "Enclosure",
+            "type": "ImportedMesh",
+            "parentId": 1,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            }
+        },
+        {
+            "id": 3,
+            "name": "Floor Plate",
+            "type": "Cube",
+            "parentId": 2,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 0.01,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 3.0,
+                    "y": 0.02,
+                    "z": 3.0
+                }
+            },
+            "color": "#4a5059"
+        },
+        {
+            "id": 4,
+            "name": "Post Back L",
+            "type": "Cube",
+            "parentId": 2,
+            "transform": {
+                "position": {
+                    "x": -1.5,
+                    "y": 1.1,
+                    "z": -1.5
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.06,
+                    "y": 2.2,
+                    "z": 0.06
+                }
+            },
+            "color": "#e3b23c"
+        },
+        {
+            "id": 5,
+            "name": "Post Front L",
+            "type": "Cube",
+            "parentId": 2,
+            "transform": {
+                "position": {
+                    "x": -1.5,
+                    "y": 1.1,
+                    "z": 1.5
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.06,
+                    "y": 2.2,
+                    "z": 0.06
+                }
+            },
+            "color": "#e3b23c"
+        },
+        {
+            "id": 6,
+            "name": "Post Back R",
+            "type": "Cube",
+            "parentId": 2,
+            "transform": {
+                "position": {
+                    "x": 1.5,
+                    "y": 1.1,
+                    "z": -1.5
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.06,
+                    "y": 2.2,
+                    "z": 0.06
+                }
+            },
+            "color": "#e3b23c"
+        },
+        {
+            "id": 7,
+            "name": "Post Front R",
+            "type": "Cube",
+            "parentId": 2,
+            "transform": {
+                "position": {
+                    "x": 1.5,
+                    "y": 1.1,
+                    "z": 1.5
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.06,
+                    "y": 2.2,
+                    "z": 0.06
+                }
+            },
+            "color": "#e3b23c"
+        },
+        {
+            "id": 8,
+            "name": "Post Door",
+            "type": "Cube",
+            "parentId": 2,
+            "transform": {
+                "position": {
+                    "x": -0.35,
+                    "y": 1.1,
+                    "z": 1.5
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.06,
+                    "y": 2.2,
+                    "z": 0.06
+                }
+            },
+            "color": "#e3b23c"
+        },
+        {
+            "id": 9,
+            "name": "Rail Back",
+            "type": "Cube",
+            "parentId": 2,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 2.2,
+                    "z": -1.5
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 3.0,
+                    "y": 0.06,
+                    "z": 0.06
+                }
+            },
+            "color": "#e3b23c"
+        },
+        {
+            "id": 10,
+            "name": "Rail Front",
+            "type": "Cube",
+            "parentId": 2,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 2.2,
+                    "z": 1.5
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 3.0,
+                    "y": 0.06,
+                    "z": 0.06
+                }
+            },
+            "color": "#e3b23c"
+        },
+        {
+            "id": 11,
+            "name": "Rail Left",
+            "type": "Cube",
+            "parentId": 2,
+            "transform": {
+                "position": {
+                    "x": -1.5,
+                    "y": 2.2,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.06,
+                    "y": 0.06,
+                    "z": 3.0
+                }
+            },
+            "color": "#e3b23c"
+        },
+        {
+            "id": 12,
+            "name": "Rail Right",
+            "type": "Cube",
+            "parentId": 2,
+            "transform": {
+                "position": {
+                    "x": 1.5,
+                    "y": 2.2,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.06,
+                    "y": 0.06,
+                    "z": 3.0
+                }
+            },
+            "color": "#e3b23c"
+        },
+        {
+            "id": 13,
+            "name": "Panel Back",
+            "type": "Cube",
+            "parentId": 2,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 1.1,
+                    "z": -1.5
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 2.94,
+                    "y": 2.0,
+                    "z": 0.01
+                }
+            },
+            "color": "#9cc3d5",
+            "opacity": 0.18
+        },
+        {
+            "id": 14,
+            "name": "Panel Left",
+            "type": "Cube",
+            "parentId": 2,
+            "transform": {
+                "position": {
+                    "x": -1.5,
+                    "y": 1.1,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.01,
+                    "y": 2.0,
+                    "z": 2.94
+                }
+            },
+            "color": "#9cc3d5",
+            "opacity": 0.18
+        },
+        {
+            "id": 15,
+            "name": "Panel Right",
+            "type": "Cube",
+            "parentId": 2,
+            "transform": {
+                "position": {
+                    "x": 1.5,
+                    "y": 1.1,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.01,
+                    "y": 2.0,
+                    "z": 2.94
+                }
+            },
+            "color": "#9cc3d5",
+            "opacity": 0.18
+        },
+        {
+            "id": 16,
+            "name": "Panel Front",
+            "type": "Cube",
+            "parentId": 2,
+            "transform": {
+                "position": {
+                    "x": 0.575,
+                    "y": 1.1,
+                    "z": 1.5
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.79,
+                    "y": 2.0,
+                    "z": 0.01
+                }
+            },
+            "color": "#9cc3d5",
+            "opacity": 0.18
+        },
+        {
+            "id": 17,
+            "name": "Roof",
+            "type": "Cube",
+            "parentId": 2,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 2.2350000000000003,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 3.0,
+                    "y": 0.01,
+                    "z": 3.0
+                }
+            },
+            "color": "#9cc3d5",
+            "opacity": 0.1
+        },
+        {
+            "id": 18,
+            "name": "Door",
+            "type": "ImportedMesh",
+            "parentId": 2,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            }
+        },
+        {
+            "id": 19,
+            "name": "Door Panel",
+            "type": "Cube",
+            "parentId": 18,
+            "transform": {
+                "position": {
+                    "x": -0.925,
+                    "y": 1.1,
+                    "z": 1.54
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.17,
+                    "y": 2.0,
+                    "z": 0.01
+                }
+            },
+            "color": "#9cc3d5",
+            "opacity": 0.25
+        },
+        {
+            "id": 20,
+            "name": "Door Frame Top",
+            "type": "Cube",
+            "parentId": 18,
+            "transform": {
+                "position": {
+                    "x": -0.925,
+                    "y": 2.1,
+                    "z": 1.54
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.19,
+                    "y": 0.04,
+                    "z": 0.03
+                }
+            },
+            "color": "#e3b23c"
+        },
+        {
+            "id": 21,
+            "name": "Door Frame Bottom",
+            "type": "Cube",
+            "parentId": 18,
+            "transform": {
+                "position": {
+                    "x": -0.925,
+                    "y": 0.10000000000000009,
+                    "z": 1.54
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.19,
+                    "y": 0.04,
+                    "z": 0.03
+                }
+            },
+            "color": "#e3b23c"
+        },
+        {
+            "id": 22,
+            "name": "Door Handle",
+            "type": "Cube",
+            "parentId": 18,
+            "transform": {
+                "position": {
+                    "x": -0.5,
+                    "y": 1.05,
+                    "z": 1.57
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.03,
+                    "y": 0.3,
+                    "z": 0.03
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 24,
+            "name": "Infeed",
+            "type": "ImportedMesh",
+            "parentId": 1,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -0.85
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            }
+        },
+        {
+            "id": 25,
+            "name": "Infeed Belt",
+            "type": "Cube",
+            "parentId": 24,
+            "transform": {
+                "position": {
+                    "x": -0.3,
+                    "y": 0.5499999999999999,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.9,
+                    "y": 0.1,
+                    "z": 0.4
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 26,
+            "name": "Infeed Leg 1",
+            "type": "Cube",
+            "parentId": 24,
+            "transform": {
+                "position": {
+                    "x": -1.15,
+                    "y": 0.25,
+                    "z": -0.15
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.05,
+                    "y": 0.5,
+                    "z": 0.05
+                }
+            },
+            "color": "#9ea8b8"
+        },
+        {
+            "id": 27,
+            "name": "Infeed Leg 2",
+            "type": "Cube",
+            "parentId": 24,
+            "transform": {
+                "position": {
+                    "x": -1.15,
+                    "y": 0.25,
+                    "z": 0.15
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.05,
+                    "y": 0.5,
+                    "z": 0.05
+                }
+            },
+            "color": "#9ea8b8"
+        },
+        {
+            "id": 28,
+            "name": "Infeed Leg 3",
+            "type": "Cube",
+            "parentId": 24,
+            "transform": {
+                "position": {
+                    "x": 0.5499999999999999,
+                    "y": 0.25,
+                    "z": -0.15
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.05,
+                    "y": 0.5,
+                    "z": 0.05
+                }
+            },
+            "color": "#9ea8b8"
+        },
+        {
+            "id": 29,
+            "name": "Infeed Leg 4",
+            "type": "Cube",
+            "parentId": 24,
+            "transform": {
+                "position": {
+                    "x": 0.5499999999999999,
+                    "y": 0.25,
+                    "z": 0.15
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.05,
+                    "y": 0.5,
+                    "z": 0.05
+                }
+            },
+            "color": "#9ea8b8"
+        },
+        {
+            "id": 30,
+            "name": "Outfeed",
+            "type": "ImportedMesh",
+            "parentId": 1,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.85
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            }
+        },
+        {
+            "id": 31,
+            "name": "Outfeed Belt",
+            "type": "Cube",
+            "parentId": 30,
+            "transform": {
+                "position": {
+                    "x": 0.3,
+                    "y": 0.5499999999999999,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.9,
+                    "y": 0.1,
+                    "z": 0.4
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 32,
+            "name": "Outfeed Leg 1",
+            "type": "Cube",
+            "parentId": 30,
+            "transform": {
+                "position": {
+                    "x": -0.5499999999999999,
+                    "y": 0.25,
+                    "z": -0.15
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.05,
+                    "y": 0.5,
+                    "z": 0.05
+                }
+            },
+            "color": "#9ea8b8"
+        },
+        {
+            "id": 33,
+            "name": "Outfeed Leg 2",
+            "type": "Cube",
+            "parentId": 30,
+            "transform": {
+                "position": {
+                    "x": -0.5499999999999999,
+                    "y": 0.25,
+                    "z": 0.15
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.05,
+                    "y": 0.5,
+                    "z": 0.05
+                }
+            },
+            "color": "#9ea8b8"
+        },
+        {
+            "id": 34,
+            "name": "Outfeed Leg 3",
+            "type": "Cube",
+            "parentId": 30,
+            "transform": {
+                "position": {
+                    "x": 1.15,
+                    "y": 0.25,
+                    "z": -0.15
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.05,
+                    "y": 0.5,
+                    "z": 0.05
+                }
+            },
+            "color": "#9ea8b8"
+        },
+        {
+            "id": 35,
+            "name": "Outfeed Leg 4",
+            "type": "Cube",
+            "parentId": 30,
+            "transform": {
+                "position": {
+                    "x": 1.15,
+                    "y": 0.25,
+                    "z": 0.15
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.05,
+                    "y": 0.5,
+                    "z": 0.05
+                }
+            },
+            "color": "#9ea8b8"
+        },
+        {
+            "id": 36,
+            "name": "Part",
+            "type": "Cube",
+            "parentId": -1,
+            "transform": {
+                "position": {
+                    "x": -1.1,
+                    "y": 0.645,
+                    "z": -0.85
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.14,
+                    "y": 0.08,
+                    "z": 0.1
+                }
+            },
+            "color": "#4f8fd6"
+        },
+        {
+            "id": 37,
+            "name": "Beam Post",
+            "type": "Cube",
+            "parentId": 24,
+            "transform": {
+                "position": {
+                    "x": 0.5,
+                    "y": 0.7,
+                    "z": 0.3
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.04,
+                    "y": 0.2,
+                    "z": 0.04
+                }
+            },
+            "color": "#e3b23c"
+        },
+        {
+            "id": 38,
+            "name": "Beam Reflector",
+            "type": "Cube",
+            "parentId": 24,
+            "transform": {
+                "position": {
+                    "x": 0.5,
+                    "y": 0.7,
+                    "z": -0.3
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.04,
+                    "y": 0.2,
+                    "z": 0.04
+                }
+            },
+            "color": "#e3b23c"
+        },
+        {
+            "id": 39,
+            "name": "Chute",
+            "type": "Cube",
+            "parentId": 30,
+            "transform": {
+                "position": {
+                    "x": 1.32,
+                    "y": 0.4,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -35.0
+                },
+                "scale": {
+                    "x": 0.1,
+                    "y": 0.02,
+                    "z": 0.4
+                }
+            },
+            "color": "#9ea8b8"
+        },
+        {
+            "id": 40,
+            "name": "Robot",
+            "type": "ImportedMesh",
+            "parentId": 1,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            }
+        },
+        {
+            "id": 41,
+            "name": "Base",
+            "type": "Cylinder",
+            "parentId": 40,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 0.075,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.36,
+                    "y": 0.15,
+                    "z": 0.36
+                }
+            },
+            "color": "#3a3f47"
+        },
+        {
+            "id": 42,
+            "name": "A1 Turret",
+            "type": "ImportedMesh",
+            "parentId": 40,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 0.15,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            }
+        },
+        {
+            "id": 43,
+            "name": "Turret Body",
+            "type": "Cylinder",
+            "parentId": 42,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 0.1,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.3,
+                    "y": 0.2,
+                    "z": 0.3
+                }
+            },
+            "color": "#d9dde3"
+        },
+        {
+            "id": 44,
+            "name": "Shoulder Housing",
+            "type": "Cube",
+            "parentId": 42,
+            "transform": {
+                "position": {
+                    "x": 0.06,
+                    "y": 0.3,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.24,
+                    "y": 0.2,
+                    "z": 0.3
+                }
+            },
+            "color": "#d9dde3"
+        },
+        {
+            "id": 45,
+            "name": "A2 Lower Arm",
+            "type": "ImportedMesh",
+            "parentId": 42,
+            "transform": {
+                "position": {
+                    "x": 0.1,
+                    "y": 0.35,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            }
+        },
+        {
+            "id": 46,
+            "name": "Shoulder Hub",
+            "type": "Cylinder",
+            "parentId": 45,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 90.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.22,
+                    "y": 0.36,
+                    "z": 0.22
+                }
+            },
+            "color": "#3a3f47"
+        },
+        {
+            "id": 47,
+            "name": "Lower Arm Link",
+            "type": "Cube",
+            "parentId": 45,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 0.3,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.14,
+                    "y": 0.6,
+                    "z": 0.16
+                }
+            },
+            "color": "#d9dde3"
+        },
+        {
+            "id": 48,
+            "name": "A3 Elbow",
+            "type": "ImportedMesh",
+            "parentId": 45,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 0.6,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            }
+        },
+        {
+            "id": 49,
+            "name": "Elbow Hub",
+            "type": "Cylinder",
+            "parentId": 48,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 90.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.18,
+                    "y": 0.3,
+                    "z": 0.18
+                }
+            },
+            "color": "#3a3f47"
+        },
+        {
+            "id": 50,
+            "name": "Elbow Housing",
+            "type": "Cube",
+            "parentId": 48,
+            "transform": {
+                "position": {
+                    "x": 0.03,
+                    "y": 0.08,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.2,
+                    "y": 0.2,
+                    "z": 0.2
+                }
+            },
+            "color": "#d9dde3"
+        },
+        {
+            "id": 51,
+            "name": "A4 Forearm",
+            "type": "ImportedMesh",
+            "parentId": 48,
+            "transform": {
+                "position": {
+                    "x": 0.13,
+                    "y": 0.12,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            }
+        },
+        {
+            "id": 52,
+            "name": "Forearm Link",
+            "type": "Cylinder",
+            "parentId": 51,
+            "transform": {
+                "position": {
+                    "x": 0.21,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 90.0
+                },
+                "scale": {
+                    "x": 0.12,
+                    "y": 0.42,
+                    "z": 0.12
+                }
+            },
+            "color": "#d9dde3"
+        },
+        {
+            "id": 53,
+            "name": "A5 Wrist",
+            "type": "ImportedMesh",
+            "parentId": 51,
+            "transform": {
+                "position": {
+                    "x": 0.42,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            }
+        },
+        {
+            "id": 54,
+            "name": "Wrist Hub",
+            "type": "Cylinder",
+            "parentId": 53,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 90.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.11,
+                    "y": 0.14,
+                    "z": 0.11
+                }
+            },
+            "color": "#3a3f47"
+        },
+        {
+            "id": 55,
+            "name": "Wrist Body",
+            "type": "Cube",
+            "parentId": 53,
+            "transform": {
+                "position": {
+                    "x": 0.04,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.08,
+                    "y": 0.09,
+                    "z": 0.1
+                }
+            },
+            "color": "#d9dde3"
+        },
+        {
+            "id": 56,
+            "name": "A6 Flange",
+            "type": "ImportedMesh",
+            "parentId": 53,
+            "transform": {
+                "position": {
+                    "x": 0.09,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            }
+        },
+        {
+            "id": 57,
+            "name": "Flange Plate",
+            "type": "Cylinder",
+            "parentId": 56,
+            "transform": {
+                "position": {
+                    "x": 0.015,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 90.0
+                },
+                "scale": {
+                    "x": 0.09,
+                    "y": 0.03,
+                    "z": 0.09
+                }
+            },
+            "color": "#3a3f47"
+        },
+        {
+            "id": 58,
+            "name": "Gripper",
+            "type": "ImportedMesh",
+            "parentId": 56,
+            "transform": {
+                "position": {
+                    "x": 0.03,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 90.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            }
+        },
+        {
+            "id": 59,
+            "name": "Gripper Body",
+            "type": "Cube",
+            "parentId": 58,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": -0.03,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.17,
+                    "y": 0.06,
+                    "z": 0.08
+                }
+            },
+            "color": "#3a3f47"
+        },
+        {
+            "id": 60,
+            "name": "Finger L Slide",
+            "type": "ImportedMesh",
+            "parentId": 58,
+            "transform": {
+                "position": {
+                    "x": -0.075,
+                    "y": -0.06,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            }
+        },
+        {
+            "id": 61,
+            "name": "Finger L",
+            "type": "Cube",
+            "parentId": 60,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": -0.04,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.015,
+                    "y": 0.08,
+                    "z": 0.05
+                }
+            },
+            "color": "#9ea8b8"
+        },
+        {
+            "id": 62,
+            "name": "Finger R Slide",
+            "type": "ImportedMesh",
+            "parentId": 58,
+            "transform": {
+                "position": {
+                    "x": 0.075,
+                    "y": -0.06,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            }
+        },
+        {
+            "id": 63,
+            "name": "Finger R",
+            "type": "Cube",
+            "parentId": 62,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": -0.04,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.015,
+                    "y": 0.08,
+                    "z": 0.05
+                }
+            },
+            "color": "#9ea8b8"
+        },
+        {
+            "id": 64,
+            "name": "TCP",
+            "type": "ImportedMesh",
+            "parentId": 58,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": -0.11,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            }
+        }
+    ],
+    "joints": [
+        {
+            "id": 23,
+            "name": "Door",
+            "type": "Prismatic",
+            "axis": {
+                "x": 1.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "pivot": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "limitMin": 0,
+            "limitMax": 1.05,
+            "initialAngle": 0,
+            "continuous": false,
+            "parentBodyId": 2,
+            "childBodyId": 18
+        },
+        {
+            "id": 65,
+            "name": "A1",
+            "type": "Revolute",
+            "axis": {
+                "x": 0.0,
+                "y": 1.0,
+                "z": 0.0
+            },
+            "pivot": {
+                "x": 0.0,
+                "y": 0.15,
+                "z": 0.0
+            },
+            "limitMin": -170,
+            "limitMax": 170,
+            "initialAngle": 0.0,
+            "continuous": false,
+            "parentBodyId": 40,
+            "childBodyId": 42
+        },
+        {
+            "id": 66,
+            "name": "A2",
+            "type": "Revolute",
+            "axis": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 1.0
+            },
+            "pivot": {
+                "x": 0.1,
+                "y": 0.35,
+                "z": 0.0
+            },
+            "limitMin": -135,
+            "limitMax": 90,
+            "initialAngle": 3.601,
+            "continuous": false,
+            "parentBodyId": 42,
+            "childBodyId": 45
+        },
+        {
+            "id": 67,
+            "name": "A3",
+            "type": "Revolute",
+            "axis": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 1.0
+            },
+            "pivot": {
+                "x": 0.0,
+                "y": 0.6,
+                "z": 0.0
+            },
+            "limitMin": -120,
+            "limitMax": 160,
+            "initialAngle": 14.058,
+            "continuous": false,
+            "parentBodyId": 45,
+            "childBodyId": 48
+        },
+        {
+            "id": 68,
+            "name": "A4",
+            "type": "Revolute",
+            "axis": {
+                "x": 1.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "pivot": {
+                "x": 0.13,
+                "y": 0.12,
+                "z": 0.0
+            },
+            "limitMin": -185,
+            "limitMax": 185,
+            "initialAngle": -0.0,
+            "continuous": false,
+            "parentBodyId": 48,
+            "childBodyId": 51
+        },
+        {
+            "id": 69,
+            "name": "A5",
+            "type": "Revolute",
+            "axis": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 1.0
+            },
+            "pivot": {
+                "x": 0.42,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "limitMin": -125,
+            "limitMax": 125,
+            "initialAngle": -107.659,
+            "continuous": false,
+            "parentBodyId": 51,
+            "childBodyId": 53
+        },
+        {
+            "id": 70,
+            "name": "A6",
+            "type": "Revolute",
+            "axis": {
+                "x": 1.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "pivot": {
+                "x": 0.09,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "limitMin": -270,
+            "limitMax": 270,
+            "initialAngle": 0.0,
+            "continuous": false,
+            "parentBodyId": 53,
+            "childBodyId": 56
+        },
+        {
+            "id": 71,
+            "name": "Finger L",
+            "type": "Prismatic",
+            "axis": {
+                "x": 1.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "pivot": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "limitMin": 0,
+            "limitMax": 0.02,
+            "initialAngle": 0,
+            "continuous": false,
+            "parentBodyId": 58,
+            "childBodyId": 60
+        },
+        {
+            "id": 72,
+            "name": "Finger R",
+            "type": "Prismatic",
+            "axis": {
+                "x": 1.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "pivot": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "limitMin": -0.02,
+            "limitMax": 0,
+            "initialAngle": 0,
+            "continuous": false,
+            "parentBodyId": 58,
+            "childBodyId": 62,
+            "coupledTo": 71,
+            "ratio": -1,
+            "offset": 0
+        }
+    ],
+    "motors": [
+        {
+            "id": 73,
+            "name": "A1",
+            "jointId": 65,
+            "mode": "Position",
+            "velocity": 120,
+            "acceleration": 360,
+            "enabled": true,
+            "targetExpr": "",
+            "velocityExpr": "",
+            "activeExpr": ""
+        },
+        {
+            "id": 74,
+            "name": "A2",
+            "jointId": 66,
+            "mode": "Position",
+            "velocity": 100,
+            "acceleration": 300,
+            "enabled": true,
+            "targetExpr": "",
+            "velocityExpr": "",
+            "activeExpr": ""
+        },
+        {
+            "id": 75,
+            "name": "A3",
+            "jointId": 67,
+            "mode": "Position",
+            "velocity": 120,
+            "acceleration": 360,
+            "enabled": true,
+            "targetExpr": "",
+            "velocityExpr": "",
+            "activeExpr": ""
+        },
+        {
+            "id": 76,
+            "name": "A4",
+            "jointId": 68,
+            "mode": "Position",
+            "velocity": 220,
+            "acceleration": 700,
+            "enabled": true,
+            "targetExpr": "",
+            "velocityExpr": "",
+            "activeExpr": ""
+        },
+        {
+            "id": 77,
+            "name": "A5",
+            "jointId": 69,
+            "mode": "Position",
+            "velocity": 220,
+            "acceleration": 700,
+            "enabled": true,
+            "targetExpr": "",
+            "velocityExpr": "",
+            "activeExpr": ""
+        },
+        {
+            "id": 78,
+            "name": "A6",
+            "jointId": 70,
+            "mode": "Position",
+            "velocity": 300,
+            "acceleration": 900,
+            "enabled": true,
+            "targetExpr": "",
+            "velocityExpr": "",
+            "activeExpr": ""
+        },
+        {
+            "id": 79,
+            "name": "Fingers",
+            "jointId": 71,
+            "mode": "Position",
+            "velocity": 0.1,
+            "acceleration": 1.0,
+            "enabled": true,
+            "targetExpr": "Gripper ? 0.0175 : 0",
+            "velocityExpr": "",
+            "activeExpr": ""
+        },
+        {
+            "id": 80,
+            "name": "Door",
+            "jointId": 23,
+            "mode": "Position",
+            "velocity": 0.6,
+            "acceleration": 1.2,
+            "enabled": true,
+            "targetExpr": "OpenDoor ? 1.05 : 0",
+            "velocityExpr": "",
+            "activeExpr": ""
+        }
+    ],
+    "rigidBodies": [
+        {
+            "objectId": 36,
+            "mass": 0.5,
+            "gravityEnabled": true,
+            "hasCollision": false
+        }
+    ],
+    "conveyorBelts": [
+        {
+            "objectId": 25,
+            "velocity": 0.3,
+            "direction": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "enabled": true,
+            "speedExpr": "PartAtPick ? 0 : 0.3"
+        },
+        {
+            "objectId": 31,
+            "velocity": 0.3,
+            "direction": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "enabled": true,
+            "speedExpr": "Start ? 0.3 : 0"
+        }
+    ],
+    "meshes": [],
+    "signals": [
+        {
+            "id": 81,
+            "name": "Start",
+            "type": "Bool",
+            "kind": "Input",
+            "initialValue": 0,
+            "expression": "",
+            "description": "Switch ON to feed parts and run the robot"
+        },
+        {
+            "id": 82,
+            "name": "Stop",
+            "type": "Bool",
+            "kind": "Input",
+            "initialValue": 0,
+            "expression": "",
+            "description": "Finish the current move and hold"
+        },
+        {
+            "id": 83,
+            "name": "OpenDoor",
+            "type": "Bool",
+            "kind": "Input",
+            "initialValue": 0,
+            "expression": "",
+            "description": "Slide the cell door open: the robot holds until it is closed again"
+        },
+        {
+            "id": 84,
+            "name": "SpeedPct",
+            "type": "Real",
+            "kind": "Input",
+            "initialValue": 100,
+            "expression": "",
+            "description": "Speed override for joint moves (%)"
+        },
+        {
+            "id": 85,
+            "name": "DoorClosed",
+            "type": "Bool",
+            "kind": "Sensor",
+            "initialValue": 0,
+            "expression": "",
+            "description": "Door switch: sees the door panel in its closed position",
+            "sensor": {
+                "type": "Zone",
+                "objectId": -1,
+                "offset": {
+                    "x": -1.4,
+                    "y": 1.1,
+                    "z": 1.54
+                },
+                "direction": {
+                    "x": 1.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "range": 0.5,
+                "size": {
+                    "x": 0.1,
+                    "y": 0.1,
+                    "z": 0.1
+                },
+                "objectBounds": false,
+                "target": "Object",
+                "targetId": 19
+            }
+        },
+        {
+            "id": 86,
+            "name": "PartAtPick",
+            "type": "Bool",
+            "kind": "Sensor",
+            "initialValue": 0,
+            "expression": "",
+            "description": "Beam across the end of the infeed belt",
+            "sensor": {
+                "type": "Beam",
+                "objectId": 37,
+                "offset": {
+                    "x": 0.0,
+                    "y": -0.05999999999999994,
+                    "z": -0.02
+                },
+                "direction": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": -1.0
+                },
+                "range": 0.56,
+                "size": {
+                    "x": 0.1,
+                    "y": 0.1,
+                    "z": 0.1
+                },
+                "objectBounds": false,
+                "target": "RigidBodies",
+                "targetId": -1
+            }
+        },
+        {
+            "id": 87,
+            "name": "PickLocator",
+            "type": "Bool",
+            "kind": "Sensor",
+            "initialValue": 0,
+            "expression": "",
+            "description": "Where the part waiting at the end of the infeed is",
+            "sensor": {
+                "type": "Position",
+                "objectId": -1,
+                "offset": {
+                    "x": 0.36,
+                    "y": 0.64,
+                    "z": -0.85
+                },
+                "direction": {
+                    "x": 1.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "range": 0.5,
+                "size": {
+                    "x": 0.3,
+                    "y": 0.12,
+                    "z": 0.36
+                },
+                "objectBounds": false,
+                "target": "RigidBodies",
+                "targetId": -1
+            }
+        },
+        {
+            "id": 88,
+            "name": "InGripper",
+            "type": "Bool",
+            "kind": "Sensor",
+            "initialValue": 0,
+            "expression": "",
+            "description": "Zone between the fingertips",
+            "sensor": {
+                "type": "Zone",
+                "objectId": 64,
+                "offset": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "direction": {
+                    "x": 1.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "range": 0.5,
+                "size": {
+                    "x": 0.06,
+                    "y": 0.06,
+                    "z": 0.06
+                },
+                "objectBounds": false,
+                "target": "RigidBodies",
+                "targetId": -1
+            }
+        },
+        {
+            "id": 89,
+            "name": "Gripper",
+            "type": "Bool",
+            "kind": "Internal",
+            "initialValue": 0,
+            "expression": "",
+            "description": "Gripper closed (drives the Fingers actuator)"
+        },
+        {
+            "id": 90,
+            "name": "Cycles",
+            "type": "Int",
+            "kind": "Internal",
+            "initialValue": 0,
+            "expression": "",
+            "description": "Parts placed on the outfeed"
+        },
+        {
+            "id": 91,
+            "name": "Safe",
+            "type": "Bool",
+            "kind": "Derived",
+            "initialValue": 0,
+            "expression": "DoorClosed && !Stop",
+            "description": "The robot may start its next move"
+        }
+    ],
+    "sequences": [
+        {
+            "id": 112,
+            "name": "PickPlace",
+            "enableCondition": "Safe",
+            "startCondition": "Start",
+            "loop": true,
+            "operations": [
+                {
+                    "id": 98,
+                    "name": "Home",
+                    "type": "MoveToPose",
+                    "actuatorId": -1,
+                    "poseId": 92,
+                    "target": "",
+                    "velocity": "SpeedPct",
+                    "duration": "",
+                    "condition": "",
+                    "startCondition": "",
+                    "onStart": "",
+                    "onFinish": "",
+                    "predecessors": []
+                },
+                {
+                    "id": 99,
+                    "name": "Wait for part",
+                    "type": "WaitFor",
+                    "actuatorId": -1,
+                    "poseId": -1,
+                    "target": "",
+                    "velocity": "",
+                    "duration": "",
+                    "condition": "PartAtPick",
+                    "startCondition": "",
+                    "onStart": "",
+                    "onFinish": "",
+                    "predecessors": [
+                        98
+                    ]
+                },
+                {
+                    "id": 100,
+                    "name": "Settle",
+                    "type": "Wait",
+                    "actuatorId": -1,
+                    "poseId": -1,
+                    "target": "",
+                    "velocity": "",
+                    "duration": "0.3",
+                    "condition": "",
+                    "startCondition": "",
+                    "onStart": "",
+                    "onFinish": "",
+                    "predecessors": [
+                        99
+                    ]
+                },
+                {
+                    "id": 101,
+                    "name": "Above part",
+                    "type": "MoveToPose",
+                    "actuatorId": -1,
+                    "poseId": 93,
+                    "target": "",
+                    "velocity": "SpeedPct",
+                    "duration": "",
+                    "condition": "",
+                    "startCondition": "",
+                    "onStart": "",
+                    "onFinish": "",
+                    "predecessors": [
+                        100
+                    ],
+                    "sensorId": 87
+                },
+                {
+                    "id": 102,
+                    "name": "Approach",
+                    "type": "MoveL",
+                    "actuatorId": -1,
+                    "poseId": 94,
+                    "target": "",
+                    "velocity": "0.3",
+                    "duration": "",
+                    "condition": "",
+                    "startCondition": "",
+                    "onStart": "",
+                    "onFinish": "",
+                    "predecessors": [
+                        101
+                    ],
+                    "sensorId": 87
+                },
+                {
+                    "id": 103,
+                    "name": "Close",
+                    "type": "Set",
+                    "actuatorId": -1,
+                    "poseId": -1,
+                    "target": "",
+                    "velocity": "",
+                    "duration": "",
+                    "condition": "",
+                    "startCondition": "",
+                    "onStart": "Gripper = true",
+                    "onFinish": "",
+                    "predecessors": [
+                        102
+                    ]
+                },
+                {
+                    "id": 104,
+                    "name": "Closed",
+                    "type": "WaitFor",
+                    "actuatorId": -1,
+                    "poseId": -1,
+                    "target": "",
+                    "velocity": "",
+                    "duration": "",
+                    "condition": "Fingers.pos > 0.017",
+                    "startCondition": "",
+                    "onStart": "",
+                    "onFinish": "",
+                    "predecessors": [
+                        103
+                    ]
+                },
+                {
+                    "id": 105,
+                    "name": "Grip",
+                    "type": "Grip",
+                    "actuatorId": -1,
+                    "poseId": -1,
+                    "target": "",
+                    "velocity": "",
+                    "duration": "",
+                    "condition": "",
+                    "startCondition": "",
+                    "onStart": "",
+                    "onFinish": "",
+                    "predecessors": [
+                        104
+                    ],
+                    "gripperId": 64,
+                    "sensorId": 88
+                },
+                {
+                    "id": 106,
+                    "name": "Lift",
+                    "type": "MoveL",
+                    "actuatorId": -1,
+                    "poseId": 95,
+                    "target": "",
+                    "velocity": "0.5",
+                    "duration": "",
+                    "condition": "",
+                    "startCondition": "",
+                    "onStart": "",
+                    "onFinish": "",
+                    "predecessors": [
+                        105
+                    ],
+                    "toolId": 64
+                },
+                {
+                    "id": 107,
+                    "name": "Above place",
+                    "type": "MoveToPose",
+                    "actuatorId": -1,
+                    "poseId": 96,
+                    "target": "",
+                    "velocity": "SpeedPct",
+                    "duration": "",
+                    "condition": "",
+                    "startCondition": "",
+                    "onStart": "",
+                    "onFinish": "",
+                    "predecessors": [
+                        106
+                    ]
+                },
+                {
+                    "id": 108,
+                    "name": "Lower",
+                    "type": "MoveL",
+                    "actuatorId": -1,
+                    "poseId": 97,
+                    "target": "",
+                    "velocity": "0.3",
+                    "duration": "",
+                    "condition": "",
+                    "startCondition": "",
+                    "onStart": "",
+                    "onFinish": "",
+                    "predecessors": [
+                        107
+                    ],
+                    "toolId": 64
+                },
+                {
+                    "id": 109,
+                    "name": "Release",
+                    "type": "Release",
+                    "actuatorId": -1,
+                    "poseId": -1,
+                    "target": "",
+                    "velocity": "",
+                    "duration": "",
+                    "condition": "",
+                    "startCondition": "",
+                    "onStart": "Gripper = false",
+                    "onFinish": "",
+                    "predecessors": [
+                        108
+                    ],
+                    "gripperId": 64
+                },
+                {
+                    "id": 110,
+                    "name": "Opened",
+                    "type": "WaitFor",
+                    "actuatorId": -1,
+                    "poseId": -1,
+                    "target": "",
+                    "velocity": "",
+                    "duration": "",
+                    "condition": "Fingers.pos < 0.0005",
+                    "startCondition": "",
+                    "onStart": "",
+                    "onFinish": "Cycles = Cycles + 1",
+                    "predecessors": [
+                        109
+                    ]
+                },
+                {
+                    "id": 111,
+                    "name": "Retreat",
+                    "type": "MoveL",
+                    "actuatorId": -1,
+                    "poseId": 96,
+                    "target": "",
+                    "velocity": "0.5",
+                    "duration": "",
+                    "condition": "",
+                    "startCondition": "",
+                    "onStart": "",
+                    "onFinish": "",
+                    "predecessors": [
+                        110
+                    ],
+                    "toolId": 64
+                }
+            ]
+        }
+    ],
+    "poses": [
+        {
+            "id": 92,
+            "name": "Home",
+            "values": [
+                {
+                    "jointId": 65,
+                    "value": 0.0
+                },
+                {
+                    "jointId": 66,
+                    "value": 3.601
+                },
+                {
+                    "jointId": 67,
+                    "value": 14.058
+                },
+                {
+                    "jointId": 68,
+                    "value": -0.0
+                },
+                {
+                    "jointId": 69,
+                    "value": -107.659
+                },
+                {
+                    "jointId": 70,
+                    "value": 0.0
+                }
+            ]
+        },
+        {
+            "id": 93,
+            "name": "AbovePick",
+            "values": [
+                {
+                    "jointId": 65,
+                    "value": 63.435
+                },
+                {
+                    "jointId": 66,
+                    "value": -28.623
+                },
+                {
+                    "jointId": 67,
+                    "value": 15.636
+                },
+                {
+                    "jointId": 68,
+                    "value": 0.0
+                },
+                {
+                    "jointId": 69,
+                    "value": -77.013
+                },
+                {
+                    "jointId": 70,
+                    "value": -26.565
+                }
+            ],
+            "toolId": 64,
+            "frameId": 36,
+            "relPosition": {
+                "x": 0.0,
+                "y": 0.15,
+                "z": 0.0
+            },
+            "relRotation": {
+                "w": 0.7071067811865476,
+                "x": 0,
+                "y": 0.7071067811865475,
+                "z": 0
+            }
+        },
+        {
+            "id": 94,
+            "name": "Pick",
+            "values": [
+                {
+                    "jointId": 65,
+                    "value": 63.435
+                },
+                {
+                    "jointId": 66,
+                    "value": -30.729
+                },
+                {
+                    "jointId": 67,
+                    "value": 3.415
+                },
+                {
+                    "jointId": 68,
+                    "value": 0.0
+                },
+                {
+                    "jointId": 69,
+                    "value": -62.686
+                },
+                {
+                    "jointId": 70,
+                    "value": -26.565
+                }
+            ],
+            "toolId": 64,
+            "frameId": 36,
+            "relPosition": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "relRotation": {
+                "w": 0.7071067811865476,
+                "x": 0,
+                "y": 0.7071067811865475,
+                "z": 0
+            }
+        },
+        {
+            "id": 95,
+            "name": "Clear",
+            "values": [
+                {
+                    "jointId": 65,
+                    "value": 63.435
+                },
+                {
+                    "jointId": 66,
+                    "value": -31.044
+                },
+                {
+                    "jointId": 67,
+                    "value": 34.818
+                },
+                {
+                    "jointId": 68,
+                    "value": 0.0
+                },
+                {
+                    "jointId": 69,
+                    "value": -93.774
+                },
+                {
+                    "jointId": 70,
+                    "value": -26.565
+                }
+            ]
+        },
+        {
+            "id": 96,
+            "name": "AbovePlace",
+            "values": [
+                {
+                    "jointId": 65,
+                    "value": -109.44
+                },
+                {
+                    "jointId": 66,
+                    "value": -23.468
+                },
+                {
+                    "jointId": 67,
+                    "value": 13.566
+                },
+                {
+                    "jointId": 68,
+                    "value": 0.0
+                },
+                {
+                    "jointId": 69,
+                    "value": -80.098
+                },
+                {
+                    "jointId": 70,
+                    "value": -199.44
+                }
+            ]
+        },
+        {
+            "id": 97,
+            "name": "Place",
+            "values": [
+                {
+                    "jointId": 65,
+                    "value": -109.44
+                },
+                {
+                    "jointId": 66,
+                    "value": -26.022
+                },
+                {
+                    "jointId": 67,
+                    "value": -3.349
+                },
+                {
+                    "jointId": 68,
+                    "value": 0.0
+                },
+                {
+                    "jointId": 69,
+                    "value": -60.629
+                },
+                {
+                    "jointId": 70,
+                    "value": -199.44
+                }
+            ]
+        }
+    ],
+    "sources": [
+        {
+            "id": 113,
+            "name": "Feeder",
+            "templateId": 36,
+            "mode": "Interval",
+            "interval": "3",
+            "trigger": "",
+            "enable": "Start",
+            "maxCount": 0,
+            "whenClear": true
+        }
+    ],
+    "sinks": [
+        {
+            "id": 114,
+            "name": "Shipped",
+            "zone": {
+                "objectId": -1,
+                "offset": {
+                    "x": 1.15,
+                    "y": 0.64,
+                    "z": 0.85
+                },
+                "size": {
+                    "x": 0.15,
+                    "y": 0.2,
+                    "z": 0.4
+                },
+                "objectBounds": false
+            },
+            "sourceId": 113,
+            "enable": ""
+        }
+    ]
+}

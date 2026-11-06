@@ -69,7 +69,7 @@ A typical vision pick: a **Position** sensor (see [Sensors & Gripping](help:sens
 | 2 | MoveL | Pose `Pick` (taught on `Box`), On part *Detected by Locator* |
 | 3 | Grip | Gripper `Gripper`, Part *Detected by AtGripper* |
 
-The template **Part Flow Cell** runs exactly this on parts a source feeds onto a belt.
+The template **Part Flow Cell** runs exactly this on parts a source feeds onto a belt. The template **6-Axis Robot Cell** does the same with a six-axis arm, which also keeps the tool pointing down along its straight lines.
 
 ## Good to know
 
