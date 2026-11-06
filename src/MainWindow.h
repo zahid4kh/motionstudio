@@ -73,6 +73,8 @@ private:
     void buildHelpMenu();
     void buildToolsMenu();
     void openExternalIo();
+    void openRobotBuilder();
+    void openRobotAnalyzer(int objectId);
     void updateModbusLabel();
     void buildStatusBar();
     QDockWidget* makeDock(const QString& title, const QString& icon, QWidget* content,
@@ -98,6 +100,7 @@ private:
     class TimelineBar* m_timeline  = nullptr;
     class ModbusServer* m_modbus   = nullptr;
     QLabel*  m_modbusLabel = nullptr;   // status bar: server state
+    class RobotAnalyzerDialog* m_robotAnalyzer = nullptr;   // Tools › Analyze Robot (non-modal, reused)
     QDockWidget*      m_hierarchyDock  = nullptr;
     QDockWidget*      m_propertiesDock = nullptr;
     QDockWidget*      m_automationDock = nullptr;

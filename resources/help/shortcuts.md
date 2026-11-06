@@ -25,6 +25,7 @@
 | New, Open, Save project | Ctrl+N, Ctrl+O, Ctrl+S |
 | Undo, Redo | Ctrl+Z, Ctrl+Shift+Z |
 | Show or hide the Automation panel | Ctrl+J |
+| Robot Builder | Ctrl+Shift+R |
 | Play / Pause | Space |
 | Step one scan | F10 |
 | Delete the selected part | Delete |

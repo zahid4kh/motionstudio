@@ -20,6 +20,7 @@ signals:
     void addSourceRequested(int id);   // the object becomes an object source's template
     void addSinkRequested(int id);     // a sink on the object's bounds
     void toggleHiddenRequested();      // Hide / Show on the selected items (Alt+V)
+    void analyzeRobotRequested(int id); // Tools › Analyze Robot for the robot the object belongs to
 
 private slots:
     void onObjectAdded(int id);

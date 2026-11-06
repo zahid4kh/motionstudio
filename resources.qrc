@@ -26,6 +26,18 @@
         <file alias="icons/arrow-down.svg">resources/icons/arrow-down.svg</file>
         <file alias="icons/arrow-up.svg">resources/icons/arrow-up.svg</file>
         <file alias="icons/bot.svg">resources/icons/bot.svg</file>
+        <file alias="icons/magnet.svg">resources/icons/magnet.svg</file>
+        <file alias="icons/grid-2x2.svg">resources/icons/grid-2x2.svg</file>
+        <file alias="icons/forklift.svg">resources/icons/forklift.svg</file>
+        <file alias="icons/drill.svg">resources/icons/drill.svg</file>
+        <file alias="icons/wrench.svg">resources/icons/wrench.svg</file>
+        <file alias="icons/flame.svg">resources/icons/flame.svg</file>
+        <file alias="icons/droplet.svg">resources/icons/droplet.svg</file>
+        <file alias="icons/spray-can.svg">resources/icons/spray-can.svg</file>
+        <file alias="icons/zap.svg">resources/icons/zap.svg</file>
+        <file alias="icons/circle-dot.svg">resources/icons/circle-dot.svg</file>
+        <file alias="icons/radar.svg">resources/icons/radar.svg</file>
+        <file alias="icons/drafting-compass.svg">resources/icons/drafting-compass.svg</file>
         <file alias="icons/box.svg">resources/icons/box.svg</file>
         <file alias="icons/boxes.svg">resources/icons/boxes.svg</file>
         <file alias="icons/camera.svg">resources/icons/camera.svg</file>
@@ -129,6 +141,7 @@
         <file alias="help/poses.md">resources/help/poses.md</file>
 
         <file alias="help/kinematics.md">resources/help/kinematics.md</file>
+        <file alias="help/robots.md">resources/help/robots.md</file>
         <file alias="help/flow.md">resources/help/flow.md</file>
         <file alias="help/sequences.md">resources/help/sequences.md</file>
         <file alias="help/signals.md">resources/help/signals.md</file>

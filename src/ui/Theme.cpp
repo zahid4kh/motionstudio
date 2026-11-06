@@ -1,4 +1,5 @@
 #include "Theme.h"
+#include <QAbstractButton>
 #include <QApplication>
 #include <QDir>
 #include <QFont>
@@ -226,6 +227,11 @@ QPushButton#primaryButton:hover, QDialogButtonBox QPushButton:default:hover {
 QPushButton#primaryButton:disabled, QDialogButtonBox QPushButton:default:disabled {
     background: @hover@; color: @muted@; border-color: @border@; }
 QPushButton#iconButton { padding: 4px; min-width: 22px; }
+QPushButton#segment { background: @hover@; border: 1px solid @border@; border-radius: 8px; padding: 6px 10px; font-weight: 600; }
+QPushButton#segment:hover { background: @hoverstrong@; border-color: @handle@; }
+QPushButton#segment:checked { background: @accent@; color: @onaccent@; border-color: @accent@; }
+QLabel#statValue { font-size: 14px; font-weight: 700; }
+QLabel#dimSymbol { font-family: monospace; font-weight: 700; color: @info@; }
 QPushButton#viewButton { background: @overlay@; color: @fg@; border: 1px solid @border@; border-radius: 8px;
     padding: 2px 8px; font-size: 11px; font-weight: 600; }
 QPushButton#viewButton:hover { background: @hoverstrong@; border-color: @handle@; }
@@ -332,6 +338,7 @@ QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
         {"@warning@",      hex(c.warning)},
         {"@dangersoft@",   rgba(c.danger, 0.14)},
         {"@danger@",       hex(c.danger)},
+        {"@info@",         hex(c.info)},
         {"@axisx@",        hex(c.axisX)},
         {"@axisy@",        hex(c.axisY)},
         {"@axisz@",        hex(c.axisZ)},
@@ -511,4 +518,10 @@ void Theme::repolish(QWidget* w) {
     w->style()->unpolish(w);
     w->style()->polish(w);
     w->update();
+}
+
+void Theme::segmentIcon(QAbstractButton* button, const QString& name) {
+    auto apply = [button, name](bool checked) { button->setIcon(Theme::icon(name, checked ? Tint::OnAccent : Tint::Text)); };
+    apply(button->isChecked());
+    QObject::connect(button, &QAbstractButton::toggled, button, apply);
 }

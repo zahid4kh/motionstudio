@@ -101,6 +101,7 @@ Mates are saved in the project. Dragging or typing the position of a mated part 
 | `Add Joint` | Add revolute joint between selected object and its parent |
 | `Add Actuator` | Add an actuator (J1, J2…) to the selected object's joint |
 | `Delete` | Remove selected object (and its children) |
+| `Robot` | Open the Robot Builder (Ctrl+Shift+R) |
 | `▶ Play` | Run the automation logic (Space). Fails with a list of problems if any definition is invalid |
 | `⏸ Pause` | Pause (Space) |
 | `⏭ Step` | Run exactly one 16 ms scan, then pause (F10) |
@@ -278,7 +279,7 @@ A real PLC (or CODESYS, OpenPLC…) can drive the model over Modbus TCP. Give si
 - Selecting a part in the viewport selects it here too: collapsed assemblies open up to it and the tree scrolls it into view
 - Assemblies you collapse stay collapsed when the tree updates (after undo, adding or deleting parts)
 - **Double-click** to rename
-- **Right-click** → Rename, Duplicate, **Add Sensor Here…**, **Hide / Show** (Alt+V), Delete
+- **Right-click** → Rename, Duplicate, **Add Sensor Here…**, **Hide / Show** (Alt+V), **Analyze Robot…** (on a robot), Delete
 - Hidden parts are listed dimmed with a crossed-out eye icon
 
 ---
@@ -295,6 +296,48 @@ A real PLC (or CODESYS, OpenPLC…) can drive the model over Modbus TCP. Give si
 - **File › Import STEP…** — CAD assemblies (part tree, colours). You can also drop `.step`/`.stp` files on the window or pass one on the command line (`MotionStudio part.step`). The import runs in the background with a progress window: the three stages (**Read file**, **Build shapes**, **Mesh parts**), the percentage and time left above the bar, the part being meshed and the elapsed time. **Cancel** (or Esc) stops it; reading the file itself can't be interrupted, so a cancel then takes effect once the file is read. The time left is guessed from the file size at first and gets better with every import (MotionStudio remembers how fast the stages ran); while one very large part is meshing, it says **Working…** instead of guessing. Parts are meshed in parallel, the biggest first, and identical parts are meshed once.
 - **File › Import URDF / MJCF…** — robots from ROS (`.urdf`) or MuJoCo (`.xml`): links/bodies, visuals (boxes, cylinders, spheres, STL/OBJ meshes), revolute/continuous/prismatic (hinge/slide) joints with limits, mimic joints and joint equalities as couplings, colours, MJCF default classes. Movable joints get actuators. Z-up models are stood upright.
 - **File › Export › URDF / MJCF** — the mechanism at joint value 0, every part's geometry as STL in `meshes/`, limits, couplings, colours; MJCF adds actuators, free joints for rigid bodies and a floor, and loads straight into MuJoCo.
+
+## Robot Builder (Tools › Robot Builder…, Ctrl+Shift+R)
+
+Builds a complete robot: frames with exact pivots and axes, geometry, an actuator per axis, an end effector with its own actuators, signals and sensors, a TCP frame and a `<name> Home` pose. It is added at the centre of the view and selected. Full reference: **Help › Robot Builder & Analyzer**.
+
+1. **Robot type**:
+   - **SCARA** (J1, J2 about vertical axes, J3 Z stroke + down, J4 tool rotation).
+   - **Palletizer** (J1 base, J2 lower arm + forward, J3 upper arm + down from level, J4 tool rotation; parallel links keep the flange facing down).
+   - **Articulated** (A1–A6, spherical wrist, built with A5 = 90° so the tool points down).
+2. **Preset**: 28 robots, each with a typical tool. Examples: SCARA 400 with a suction cup, SCARA 700 PCB drilling, palletizer 3.1 m with a bag fork, 6-axis 1.4 m MIG welding, cobot camera inspection.
+3. **Dimensions** in mm:
+   - SCARA: H, L1, L2, S, Fz.
+   - Palletizer: h0, h1, a1, a2, a3, d5.
+   - Articulated: h0, h1, a1, a2, a3, d4, d6.
+
+   Point at a field to see the dimension on the drawing; click a value on the drawing to edit it.
+4. **End effector**:
+   - Grippers: suction cup, vacuum pad, magnet, parallel, three-finger and angular grippers, fork.
+   - Process tools: drill, screwdriver, deburring spindle, MIG torch, dispenser, spray gun, laser head, camera.
+
+   **Tool size** scales the tool.
+5. **Appearance**: Industrial, Cobot, Slim or Heavy-duty style, eight colour schemes and link thickness.
+6. **Axes tab**: min, max, home, speed and acceleration of each axis.
+
+The **Drawing** tab is a side or top view of the robot that will be built. It shows the dimension lines with their values, the kinematic chain (● turns in the view, ▭ turns about the dashed axis, ■ slides, ○ follows another joint) and the TCP. The **Analysis** tab shows its workspace and DH parameters (see below). Problems such as a SCARA flange going below the floor are listed under the form.
+
+Tool signals:
+- Grippers get an input `Grip` that their actuator follows (`Fingers` = `Grip ? 0.03 : 0`) and a zone sensor (`InGripper`, `AtCup`, `AtPad`, `AtMagnet`, `OnFork`) for **Grip** operations.
+- Spindles are Speed actuators switched by `SpindleOn` / `ScrewOn`.
+- Process tools get an input (`Weld`, `Dispense`, `Spray`, `Laser`).
+- The camera gets a distance sensor `Range`.
+
+Names already in use get a suffix (`A1_2`, `Grip_2`).
+
+## Robot Analyzer (Tools › Analyze Robot…)
+
+Select any robot (or right-click it in the Hierarchy › **Analyze Robot…**). The analyzer finds its TCP: the object named `TCP`, else the deepest part with the most actuated joints. It then shows:
+- **Workspace**: everywhere the TCP reaches with every axis in its range, in side and top views, with max/min reach, height range, volume and base sweep.
+- **Current pose**: the TCP position, the dexterity (0 % = singular) and warnings: wrist, shoulder and elbow (stretched-out) singularities, and axes at their limits. These follow the robot while you jog it or simulate.
+- **Axes**: range, value, speed, the time for a 90° (or 100 mm) move, and the DH parameters a, α, d measured from the joint axes. They match the entered dimensions.
+
+**Recompute** samples the workspace again after you edit the robot.
 
 ## Component library (File › Insert Component…, Ctrl+Shift+I)
 

@@ -3,6 +3,7 @@
 #include <QLabel>
 #include <QHeaderView>
 #include <QMenu>
+#include "robot/RobotAnalysis.h"
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QShortcut>
@@ -266,6 +267,10 @@ void HierarchyPanel::showContextMenu(const QPoint& pos) {
             emit addSinkRequested(only->data(0, Qt::UserRole).toInt());
         });
         addHideShow();
+        if(robot::findTool(*m_scene, only->data(0, Qt::UserRole).toInt()) != -1)
+            menu.addAction(Theme::icon("gauge"), "Analyze Robot…", [this, only](){
+                emit analyzeRobotRequested(only->data(0, Qt::UserRole).toInt());
+            });
         menu.addSeparator();
         menu.addAction(Theme::icon("trash-2", Theme::Tint::Danger), "Delete", [this, selected](){
             deleteSelectedItems(selected);

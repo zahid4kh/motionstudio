@@ -38,4 +38,5 @@ Nothing moves on Play unless something commands it. A **Position** actuator hold
 - [Assembling parts: flush faces, aligned axes, bolts in holes](help:assembly)
 - [Joints & Actuators: what to do next](help:actuators)
 - [Building a sequence](help:sequences)
+- [A ready-made robot from your dimensions: the Robot Builder](help:robots)
 - [Copy & paste recipes](help:recipes)

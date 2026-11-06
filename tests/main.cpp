@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <functional>
 #include <vector>
+#include <set>
 #include "scene/SceneGraph.h"
 #include "scene/PrimitiveMesh.h"
 #include "scene/UndoManager.h"
@@ -22,6 +23,8 @@
 #include "scene/Assembly.h"
 #include "io/RobotFormats.h"
 #include "import/StepImporter.h"
+#include "robot/RobotBuilder.h"
+#include "robot/RobotAnalysis.h"
 #include <QTemporaryDir>
 #ifdef MUJOCO_ENABLED
 #include <mujoco/mujoco.h>
@@ -2280,6 +2283,252 @@ TEST(stepImportMeshesFacesWithManyHoles) {
     CHECK_NEAR(area, expected, expected * 0.02);
 }
 #endif
+
+// ── Robot builder and analyser ──────────────────────────────────────────────
+
+namespace {
+double tcpLength(const SceneGraph& g, const robot::Built& b) { return -g.getObject(b.tcp)->transform.position.y(); }
+void setArm(SceneGraph& g, const robot::Built& b, std::vector<float> v) {
+    for (size_t i = 0; i < v.size(); ++i) g.getJoint(b.joints[i])->currentValue = v[i];
+    g.applyCouplings();
+}
+bool hasWarning(const robot::Analysis& a, const char* text) {
+    for (const QString& w : a.warnings) if (w.contains(text)) return true;
+    return false;
+}
+} // namespace
+
+TEST(robotBuilderArticulatedMatchesDimensions) {
+    robot::Spec s = robot::defaultSpec(robot::Kind::Articulated);
+    s.dims = {{"h0", .2}, {"h1", .5}, {"a1", .17}, {"a2", .6}, {"a3", .05}, {"d4", .55}, {"d6", .09}};
+    s.tool = robot::Tool::ParallelGripper;
+    SceneGraph g;
+    const robot::Built b = robot::build(g, s);
+    CHECK(b.joints.size() == 6 && b.motors.size() == 6);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+    CHECK(kin::chainTo(g, b.tcp) == b.joints);
+    CHECK(g.getMotor(b.motors[0])->name == "A1" && g.getMotor(b.motors[5])->name == "A6");
+    const double tl = tcpLength(g, b);
+    CHECK(tl > 0.05);
+    // Home: forearm level, wrist bent down 90°, tool pointing at the floor
+    QVector3D p = worldPos(g, b.tcp);
+    CHECK_NEAR(p.x(), .17 + .55, 1e-4);
+    CHECK_NEAR(p.y(), .2 + .5 + .6 + .05 - .09 - tl, 1e-4);
+    CHECK_NEAR(p.z(), 0, 1e-4);
+    CHECK_NEAR(kin::toolFrame(g, b.tcp).column(1).y(), 1, 1e-4);   // tool's −Y is world down
+    // Wrist straight: the tool points along the forearm
+    setArm(g, b, {0, 0, 0, 0, 0, 0});
+    p = worldPos(g, b.tcp);
+    CHECK_NEAR(p.x(), .17 + .55 + .09 + tl, 1e-4);
+    CHECK_NEAR(p.y(), .2 + .5 + .6 + .05, 1e-4);
+    // Directions: A2 + leans forward, A3 + lowers the forearm, A1 + turns +X towards −Z
+    setArm(g, b, {0, 10, 0, 0, 90, 0});
+    CHECK(worldPos(g, b.tcp).x() > .17f + .55f + .05f);
+    setArm(g, b, {0, 0, 10, 0, 90, 0});
+    CHECK(worldPos(g, b.tcp).y() < .2f + .5f + .6f + .05f - .09f - float(tl) - .05f);
+    setArm(g, b, {90, 0, 0, 0, 90, 0});
+    CHECK_NEAR(worldPos(g, b.tcp).z(), -(.17 + .55), 1e-4);
+    setArm(g, b, {0, 0, 0, 0, 90, 0});
+
+    // The analyser reads the entered dimensions back as DH parameters
+    robot::Analysis a = robot::analyze(g, b.tcp, 8000);
+    CHECK(a.error.isEmpty());
+    CHECK(a.axes.size() == 6);
+    CHECK(a.verticalBase);
+    CHECK_NEAR(a.axes[0].d, .2 + .5, 1e-4);
+    CHECK_NEAR(a.axes[0].a, .17, 1e-4);
+    CHECK_NEAR(std::fabs(a.axes[0].alpha), 90, 1e-3);
+    CHECK_NEAR(a.axes[1].a, .6, 1e-4);
+    CHECK_NEAR(a.axes[1].alpha, 0, 1e-3);
+    CHECK_NEAR(a.axes[2].a, .05, 1e-4);
+    CHECK_NEAR(std::fabs(a.axes[2].alpha), 90, 1e-3);
+    CHECK_NEAR(a.axes[3].d, .55, 1e-4);
+    CHECK_NEAR(a.axes[3].a, 0, 1e-4);
+    CHECK_NEAR(a.axes[4].a, 0, 1e-4);
+    CHECK_NEAR(a.axes[4].d, 0, 1e-4);
+    CHECK_NEAR(a.axes[5].d, .09 + tl, 1e-4);
+    const double stretch = .17 + .6 + std::hypot(.05, .55) + .09 + tl;   // every link in line
+    CHECK(a.maxReach <= stretch + 1e-3);
+    CHECK(a.maxReach > 0.9 * stretch);
+    CHECK(a.volume > 0.5);
+    CHECK(a.warnings.isEmpty());
+    for (const QString& w : a.warnings) std::printf("  warning: %s\n", qPrintable(w));
+    CHECK(robot::findTool(g, b.root) == b.tcp);
+    CHECK(robot::findTool(g, b.joints.size() ? g.getJoint(b.joints[2])->childBodyId : -1) == b.tcp);
+    // Wrist singularity: A5 = 0 lines A4 up with A6
+    setArm(g, b, {0, 0, 0, 0, 0, 0});
+    robot::analyzePose(g, a);
+    CHECK(hasWarning(a, "Wrist singularity"));
+    CHECK(a.dexterity < 1e-3);
+    setArm(g, b, {20, 10, 20, 30, 60, 0});
+    robot::analyzePose(g, a);
+    CHECK(a.warnings.isEmpty());
+    CHECK(a.dexterity > 0.01);
+    // Inverse kinematics reaches a frame it can reach
+    setArm(g, b, {35, 20, 15, -30, 70, 40});
+    const QMatrix4x4 goal = kin::toolFrame(g, b.tcp);
+    setArm(g, b, {0, 0, 0, 0, 90, 0});
+    const kin::Result r = kin::solve(g, b.tcp, b.joints, kin::targetFrom(goal));
+    CHECK(r.reached);
+}
+
+TEST(robotBuilderScaraMatchesDimensions) {
+    robot::Spec s = robot::defaultSpec(robot::Kind::Scara);
+    s.dims = {{"H", .5}, {"L1", .3}, {"L2", .25}, {"S", .18}, {"Fz", .33}};
+    s.tool = robot::Tool::SuctionCup;
+    SceneGraph g;
+    const robot::Built b = robot::build(g, s);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+    CHECK(kin::chainTo(g, b.tcp) == b.joints);
+    const Joint* z = g.getJoint(b.joints[2]);
+    CHECK(z->type == JointType::Prismatic);
+    CHECK_NEAR(z->limitMax, .18, 1e-6);   // J3's range follows the stroke
+    const double tl = tcpLength(g, b);
+    QVector3D p = worldPos(g, b.tcp);
+    CHECK_NEAR(p.x(), .55, 1e-4);
+    CHECK_NEAR(p.y(), .33 - tl, 1e-4);
+    setArm(g, b, {0, 0, .18f, 0});
+    CHECK_NEAR(worldPos(g, b.tcp).y(), .33 - .18 - tl, 1e-4);
+    setArm(g, b, {90, 0, 0, 0});
+    p = worldPos(g, b.tcp);
+    CHECK_NEAR(p.x(), 0, 1e-4);
+    CHECK_NEAR(p.z(), -.55, 1e-4);
+    setArm(g, b, {0, 90, 0, 0});
+    p = worldPos(g, b.tcp);
+    CHECK_NEAR(p.x(), .3, 1e-4);
+    CHECK_NEAR(p.z(), -.25, 1e-4);
+    setArm(g, b, {0, 0, 0, 77});
+    CHECK_NEAR(worldPos(g, b.tcp).x(), .55, 1e-4);   // J4 turns the tool about its own axis
+    setArm(g, b, {0, 0, 0, 0});
+
+    robot::Analysis a = robot::analyze(g, b.tcp, 8000);
+    CHECK_NEAR(a.maxReach, .55, 2e-3);
+    const double inner = std::sqrt(.3 * .3 + .25 * .25 + 2 * .3 * .25 * std::cos(qDegreesToRadians(145.0)));
+    CHECK_NEAR(a.minReach, inner, 0.01);
+    CHECK_NEAR(a.maxHeight - a.minHeight, .18, 1e-3);
+    CHECK_NEAR(a.axes[0].a, .3, 1e-4);
+    CHECK_NEAR(a.axes[1].a, .25, 1e-4);
+    CHECK_NEAR(a.axes[0].alpha, 0, 1e-3);
+    CHECK(hasWarning(a, "stretched"));   // J2 = 0 is the SCARA's singularity
+    setArm(g, b, {0, 40, .05f, 0});
+    robot::analyzePose(g, a);
+    CHECK(a.warnings.isEmpty());
+    for (const QString& w : a.warnings) std::printf("  warning: %s\n", qPrintable(w));
+}
+
+TEST(robotBuilderPalletizerKeepsFlangeLevel) {
+    robot::Spec s = robot::defaultSpec(robot::Kind::Palletizer);
+    s.dims = {{"h0", .1}, {"h1", .9}, {"a1", .3}, {"a2", 1.1}, {"a3", 1.3}, {"d5", .3}};
+    SceneGraph g;
+    const robot::Built b = robot::build(g, s);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+    CHECK(kin::chainTo(g, b.tcp) == b.joints);   // the levelling joints follow, they are not axes
+    const double tl = tcpLength(g, b);
+    for (auto [q2, q3] : {std::pair{0.f, 0.f}, {30.f, -20.f}, {-25.f, 60.f}, {80.f, 70.f}}) {
+        setArm(g, b, {15, q2, q3, 0});
+        const QMatrix4x4 f = kin::toolFrame(g, b.tcp);
+        CHECK_NEAR(f.column(1).y(), 1, 1e-4);   // flange always faces down
+        const double r = .3 + 1.1 * std::sin(qDegreesToRadians(double(q2))) + 1.3 * std::cos(qDegreesToRadians(double(q3)));
+        const double y = .1 + .9 + 1.1 * std::cos(qDegreesToRadians(double(q2))) - 1.3 * std::sin(qDegreesToRadians(double(q3))) - .3 - tl;
+        const QVector3D p = f.column(3).toVector3D();
+        CHECK_NEAR(std::hypot(p.x(), p.z()), r, 1e-4);
+        CHECK_NEAR(p.y(), y, 1e-4);
+    }
+    setArm(g, b, {0, 10, 10, 0});
+    const robot::Analysis a = robot::analyze(g, b.tcp, 6000);
+    CHECK(a.error.isEmpty());
+    CHECK_NEAR(a.axes[0].d, .1 + .9, 1e-4);
+    CHECK_NEAR(a.axes[0].a, .3, 1e-4);
+    CHECK_NEAR(a.axes[1].a, 1.1, 1e-4);
+}
+
+TEST(robotBuilderEveryPresetBuildsAndWorks) {
+    CHECK(robot::presets().size() >= 25);
+    std::set<robot::Tool> tools;
+    for (const robot::Preset& pr : robot::presets()) {
+        tools.insert(pr.spec.tool);
+        robot::Spec spec = pr.spec;
+        const QStringList problems = robot::validate(spec);
+        if (!problems.isEmpty()) std::printf("  %s: %s\n", qPrintable(pr.name), qPrintable(problems.join("; ")));
+        CHECK(problems.isEmpty());
+        // JSON round trip
+        const robot::Spec back = robot::fromJson(robot::toJson(pr.spec));
+        CHECK(back.kind == pr.spec.kind && back.tool == pr.spec.tool && back.dims == pr.spec.dims && back.style == pr.spec.style);
+        SceneGraph g;
+        const robot::Built b = robot::build(g, pr.spec);
+        const QStringList errs = AutomationEngine::validateAll(g);
+        if (!errs.isEmpty()) std::printf("  %s: %s\n", qPrintable(pr.name), qPrintable(errs.join("; ")));
+        CHECK(errs.isEmpty());
+        const int n = robot::axisCount(pr.spec.kind);
+        CHECK(int(b.joints.size()) == n);
+        CHECK(int(kin::chainTo(g, b.tcp).size()) == n);
+        CHECK(robot::findTool(g, b.root) == b.tcp);
+        // IK to a frame a few axes away from home
+        std::vector<float> q;
+        for (int i = 0; i < n; ++i) {
+            const robot::AxisSpec& ax = pr.spec.axes[i];
+            q.push_back(float(ax.home + (ax.max - ax.home) * (i % 2 ? 0.2 : 0.25)));
+        }
+        setArm(g, b, q);
+        kin::Target t = kin::targetFrom(kin::toolFrame(g, b.tcp));
+        t.useOrientation = n >= 6;
+        std::vector<float> home;
+        for (int i = 0; i < n; ++i) home.push_back(float(pr.spec.axes[i].home));
+        setArm(g, b, home);
+        const kin::Result r = kin::solve(g, b.tcp, b.joints, t, 200);
+        if (!r.reached) std::printf("  %s: IK %g m %g deg\n", qPrintable(pr.name), r.positionError, r.angleError);
+        CHECK(r.reached);
+        setArm(g, b, home);
+        // Run it: every Bool input on; tool actuators (fingers, spindles) move
+        std::map<int, float> start;
+        for (auto& [id, j] : g.allJoints()) start[id] = j.currentValue;
+        SimulationEngine sim(&g);
+        sim.step();
+        for (auto& [id, sg] : g.allSignals())
+            if (sg.kind == SignalKind::Input && sg.type == SignalType::Bool) sim.automation()->setInput(sg.name, 1);
+        for (int i = 0; i < 120; ++i) sim.step();
+        CHECK(sim.automation()->warnings().isEmpty());
+        for (auto& [id, m] : g.allMotors()) {
+            if (std::find(b.motors.begin(), b.motors.end(), id) != b.motors.end()) continue;
+            if (std::fabs(g.getJoint(m.jointId)->currentValue - start[m.jointId]) < 1e-4f)
+                std::printf("  %s: tool actuator %s did not move\n", qPrintable(pr.name), qPrintable(m.name));
+            CHECK(std::fabs(g.getJoint(m.jointId)->currentValue - start[m.jointId]) > 1e-4f);
+        }
+        sim.reset();
+        // Saves and loads like any scene
+        SceneGraph loaded;
+        roundTrip(g, loaded);
+        CHECK(AutomationEngine::validateAll(loaded).isEmpty());
+        CHECK(loaded.allJoints().size() == g.allJoints().size());
+        const robot::Analysis a = robot::analyze(g, b.tcp, 3000);
+        CHECK(a.error.isEmpty());
+        CHECK(a.maxReach > 0.1 && a.volume > 0);
+    }
+    CHECK(tools.size() >= 14);
+}
+
+TEST(robotBuilderSecondRobotGetsFreeNames) {
+    SceneGraph g;
+    robot::Spec s = robot::defaultSpec(robot::Kind::Articulated);
+    s.tool = robot::Tool::ParallelGripper;
+    robot::build(g, s);
+    const robot::Built b2 = robot::build(g, s);
+    CHECK(g.getMotor(b2.motors[0])->name == "A1_2");
+    CHECK(signalNamed(g, "Grip") && signalNamed(g, "Grip_2"));
+    CHECK(signalNamed(g, "InGripper_2"));
+    bool bound = false;
+    for (auto& [id, m] : g.allMotors()) if (m.targetExpr.startsWith("Grip_2 ?")) bound = true;
+    CHECK(bound);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+    // Out-of-range values are clamped and reported
+    robot::Spec bad = robot::defaultSpec(robot::Kind::Scara);
+    bad.dims["Fz"] = 1.5;
+    bad.dims["L1"] = 99;
+    const QStringList problems = robot::validate(bad);
+    CHECK(!problems.isEmpty());
+    CHECK_NEAR(bad.dims["Fz"], bad.dims["H"], 1e-9);
+    CHECK_NEAR(bad.dims["L1"], 1.5, 1e-9);
+}
 
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);

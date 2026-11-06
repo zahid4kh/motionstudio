@@ -8,6 +8,9 @@
 #include "import/StepImporter.h"
 #include "ui/ImportProgressDialog.h"
 #include "ui/TemplateDialog.h"
+#include "ui/robot/RobotBuilderDialog.h"
+#include "ui/robot/RobotAnalyzerDialog.h"
+#include "robot/RobotBuilder.h"
 #include "ui/HelpDialog.h"
 #include "ui/Island.h"
 #include "ui/Theme.h"
@@ -297,7 +300,50 @@ void MainWindow::buildToolsMenu() {
     connect(m_viewport, &Viewport::assembleModeChanged, m_assembleAction, &QAction::setChecked);
     addAction(m_assembleAction);
     tools->addSeparator();
+    {
+        QAction* a = tools->addAction(Theme::icon("bot"), "&Robot Builder…", this, &MainWindow::openRobotBuilder);
+        a->setShortcut(QKeySequence("Ctrl+Shift+R"));
+        a->setToolTip("Build a SCARA, palletizer or 6-axis robot from a preset and your dimensions (Ctrl+Shift+R)");
+        addAction(a);
+        tools->addAction(Theme::icon("gauge"), "Analy&ze Robot…", this, [this]{ openRobotAnalyzer(m_scene->selectedObjectId()); })
+            ->setToolTip("Workspace, reach, DH parameters, dexterity and singularities of the selected robot");
+    }
+    tools->addSeparator();
     tools->addAction(Theme::icon("network"), "External &I/O (Modbus TCP)…", this, &MainWindow::openExternalIo);
+}
+
+void MainWindow::openRobotBuilder() {
+    if(m_sim->isActive()){ showStatus("Reset the simulation to add a robot", false); return; }
+    RobotBuilderDialog dlg(this);
+    if(dlg.exec() != QDialog::Accepted) return;
+    const robot::Spec spec = dlg.spec();
+    SceneGraph built;
+    const robot::Built b = robot::build(built, spec);
+    QStringList extras;
+    for(auto& [id, sg] : built.allSignals()) extras << sg.name;
+    const std::vector<int> roots = mergeScene(*m_scene, built);
+    if(roots.empty()) return;
+    // Stand it on the floor under the centre of the view
+    const QVector3D at = m_viewport->camera().target();
+    if(SceneObject* o = m_scene->getObject(roots.front())){
+        o->transform.position += QVector3D(at.x(), 0, at.z());
+        emit m_scene->objectChanged(roots.front());
+    }
+    m_scene->selectObject(roots.front());
+    showStatus(QString("Built %1: %2 axes, %3%4 — jog it in Automation › Actuators & Poses (Ctrl+J)")
+                   .arg(spec.name).arg(b.joints.size()).arg(robot::toolDef(spec.tool).name)
+                   .arg(extras.isEmpty() ? QString() : " (" + extras.join(", ") + ")"));
+}
+
+void MainWindow::openRobotAnalyzer(int objectId) {
+    if(!m_robotAnalyzer) m_robotAnalyzer = new RobotAnalyzerDialog(m_scene, this);
+    if(!m_robotAnalyzer->analyzeObject(objectId)){
+        showStatus("No robot to analyse: select a robot (or its TCP), or build one with Tools › Robot Builder", false);
+        return;
+    }
+    m_robotAnalyzer->show();
+    m_robotAnalyzer->raise();
+    m_robotAnalyzer->activateWindow();
 }
 
 void MainWindow::openExternalIo() {
@@ -324,6 +370,7 @@ void MainWindow::buildHelpMenu() {
         {"copy",         "&Recipes (copy && paste)",   "recipes"},
         {"radio",        "Sensors && &Gripping",       "sensors"},
         {"move-diagonal-2", "Robot &Tools && IK",      "kinematics"},
+        {"bot",          "Robot &Builder && Analyzer", "robots"},
         {"activity",     "Running && &Debugging",      "runtime"},
         {"network",      "External &I/O (Modbus)",     "io"},
         {"download",     "&Import && Export",          "exchange"},
@@ -387,6 +434,9 @@ void MainWindow::buildToolbar() {
     connect(mkBtn(tb, "rotate-3d", "Joint",    "Add Revolute joint\nObject must have a parent"), &QAction::triggered, this, &MainWindow::addJointToSelected);
     connect(mkBtn(tb, "cog",       "Actuator", "Add an actuator to the selected part's joint\nso automation logic can drive it"),  &QAction::triggered, this, &MainWindow::addMotorToSelected);
     connect(mkBtn(tb, "trash-2",   "Delete",   "Delete selected  (Del)"),                        &QAction::triggered, this, &MainWindow::deleteSelected);
+    tb->addSeparator();
+    connect(mkBtn(tb, "bot",       "Robot",    "Robot Builder  (Ctrl+Shift+R)\nBuild a SCARA, palletizer or 6-axis robot from a preset and your dimensions"),
+            &QAction::triggered, this, &MainWindow::openRobotBuilder);
 
     static_cast<QHBoxLayout*>(m_toolHost->layout())->addStretch(1);
 
@@ -533,6 +583,7 @@ void MainWindow::buildDocks() {
     });
     connect(m_automation, &AutomationPanel::statusMessage, this, &MainWindow::showStatus);
     connect(m_automation, &AutomationPanel::externalIoRequested, this, &MainWindow::openExternalIo);
+    connect(m_hierarchy, &HierarchyPanel::analyzeRobotRequested, this, &MainWindow::openRobotAnalyzer);
     connect(m_hierarchy, &HierarchyPanel::addSensorRequested, this, [this](int objectId){
         if (m_sim->isActive()) { showStatus("Reset the simulation to add a sensor", false); return; }
         m_automationDock->show();

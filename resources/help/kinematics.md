@@ -4,6 +4,8 @@ Joint moves (Move, MoveToPose) say where each joint goes. For a robot it is ofte
 
 A **tool** is any part that actuated joints move: the flange, the gripper, or an empty frame placed at the tool centre point (TCP). Its own frame (origin and axes) is what IK positions. To put the TCP somewhere else, add a child frame there (an empty imported group works) and use it as the tool.
 
+To get a ready-made robot with a TCP, use **Tools › Robot Builder…**; see [Robot Builder & Analyzer](help:robots).
+
 IK uses the joints that have an **actuator**, from the tool up to the root. A chain of 6 or more joints keeps the tool's orientation too. Shorter chains (a SCARA, a gantry, a 3-axis arm) position the tool only.
 
 ## Cartesian jog

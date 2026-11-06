@@ -7,6 +7,7 @@
 
 class QApplication;
 class QLabel;
+class QAbstractButton;
 class QWidget;
 
 // The application look: monochrome dark or light "islands" (rounded panels
@@ -89,6 +90,10 @@ void setLabelIcon(QLabel* label, const QString& name, int size = 16, Tint tint =
 QString css(const QColor& color);
 // The colour at low opacity, for soft state backgrounds (table cells, chips)
 QColor soft(const QColor& color, qreal alpha = 0.22);
+
+// A checkable button's icon in the text colour, or on-accent while checked
+// (for #segment buttons, whose checked background is the accent)
+void segmentIcon(QAbstractButton* button, const QString& name);
 
 // Re-applies the stylesheet after a dynamic property used in a selector changed
 void repolish(QWidget* w);

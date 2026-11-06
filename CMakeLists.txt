@@ -70,6 +70,8 @@ add_library(MotionStudioCore STATIC
     src/import/StepImporter.cpp
     src/io/ModbusServer.cpp
     src/io/RobotFormats.cpp
+    src/robot/RobotBuilder.cpp
+    src/robot/RobotAnalysis.cpp
 )
 target_include_directories(MotionStudioCore PUBLIC src)
 target_link_libraries(MotionStudioCore PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::Xml)
@@ -111,6 +113,10 @@ set(SOURCES
     src/ui/Island.cpp
     src/ui/TimelineBar.cpp
     src/ui/ModbusDialog.cpp
+    src/ui/robot/RobotSketch.cpp
+    src/ui/robot/RobotAnalysisPanel.cpp
+    src/ui/robot/RobotBuilderDialog.cpp
+    src/ui/robot/RobotAnalyzerDialog.cpp
     src/ui/automation/AutomationCommon.cpp
     src/ui/automation/AutomationPanel.cpp
     src/ui/automation/ExpressionEdit.cpp

@@ -30,6 +30,7 @@ Born out of an interest in robotics, automation, and digital twins — a place t
 - **STEP import** — bring in CAD assemblies (`.step`/`.stp`) via OpenCASCADE, preserving the part hierarchy for rigid-body grouping
 - **Undo/redo** — full history across every kind of scene edit
 - **Hierarchy & Properties panels** — Unity-style tree view and inspector
+- **Robot Builder & Analyzer** — build a SCARA, palletizer or 6-axis robot from 28 presets and your own dimensions, axis ranges, end effector (16 tools: grippers, suction, magnet, drill, screwdriver, welding torch, dispenser, spray gun, laser, camera…) and style, with a live dimensioned drawing; analyse any robot's workspace, reach, DH parameters, dexterity and singularities
 - **Templates** — working automation examples (pick & place arm, 6-axis robot cell, indexing table with press, pendulum, solar system, spinning top, crank arm)
 - **Save/Load** — JSON-based `.mstudio` project files
 
