@@ -33,7 +33,7 @@ const QList<TemplateDialog::TemplateInfo> TemplateDialog::s_templates = {
     },
     {
         "6-Axis Robot Cell",
-        "A six-axis robot inside a guarded cell: a source feeds parts on the infeed belt,\n"
+        "A six-axis robot inside a fenced cell: a source feeds parts on the infeed belt,\n"
         "the robot finds each one, picks it from above with straight-line moves and sets\n"
         "it on the outfeed. Opening the door (OpenDoor) holds the robot. Needs MuJoCo for\n"
         "the parts to ride the belts. Press Play, then switch Start ON.",

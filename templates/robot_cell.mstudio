@@ -288,131 +288,6 @@
             "color": "#e3b23c"
         },
         {
-            "id": 13,
-            "name": "Panel Back",
-            "type": "Cube",
-            "parentId": 2,
-            "transform": {
-                "position": {
-                    "x": 0.0,
-                    "y": 1.1,
-                    "z": -1.5
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 2.94,
-                    "y": 2.0,
-                    "z": 0.01
-                }
-            },
-            "color": "#9cc3d5",
-            "opacity": 0.18
-        },
-        {
-            "id": 14,
-            "name": "Panel Left",
-            "type": "Cube",
-            "parentId": 2,
-            "transform": {
-                "position": {
-                    "x": -1.5,
-                    "y": 1.1,
-                    "z": 0.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 0.01,
-                    "y": 2.0,
-                    "z": 2.94
-                }
-            },
-            "color": "#9cc3d5",
-            "opacity": 0.18
-        },
-        {
-            "id": 15,
-            "name": "Panel Right",
-            "type": "Cube",
-            "parentId": 2,
-            "transform": {
-                "position": {
-                    "x": 1.5,
-                    "y": 1.1,
-                    "z": 0.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 0.01,
-                    "y": 2.0,
-                    "z": 2.94
-                }
-            },
-            "color": "#9cc3d5",
-            "opacity": 0.18
-        },
-        {
-            "id": 16,
-            "name": "Panel Front",
-            "type": "Cube",
-            "parentId": 2,
-            "transform": {
-                "position": {
-                    "x": 0.575,
-                    "y": 1.1,
-                    "z": 1.5
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 1.79,
-                    "y": 2.0,
-                    "z": 0.01
-                }
-            },
-            "color": "#9cc3d5",
-            "opacity": 0.18
-        },
-        {
-            "id": 17,
-            "name": "Roof",
-            "type": "Cube",
-            "parentId": 2,
-            "transform": {
-                "position": {
-                    "x": 0.0,
-                    "y": 2.2350000000000003,
-                    "z": 0.0
-                },
-                "rotation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0
-                },
-                "scale": {
-                    "x": 3.0,
-                    "y": 0.01,
-                    "z": 3.0
-                }
-            },
-            "color": "#9cc3d5",
-            "opacity": 0.1
-        },
-        {
             "id": 18,
             "name": "Door",
             "type": "ImportedMesh",
@@ -437,13 +312,13 @@
         },
         {
             "id": 19,
-            "name": "Door Panel",
+            "name": "Door Rail 3",
             "type": "Cube",
             "parentId": 18,
             "transform": {
                 "position": {
                     "x": -0.925,
-                    "y": 1.1,
+                    "y": 0.95,
                     "z": 1.54
                 },
                 "rotation": {
@@ -453,12 +328,11 @@
                 },
                 "scale": {
                     "x": 1.17,
-                    "y": 2.0,
-                    "z": 0.01
+                    "y": 0.025,
+                    "z": 0.025
                 }
             },
-            "color": "#9cc3d5",
-            "opacity": 0.25
+            "color": "#2b2f36"
         },
         {
             "id": 20,
@@ -1502,6 +1376,1012 @@
                     "z": 1.0
                 }
             }
+        },
+        {
+            "id": 115,
+            "name": "Guard Fence",
+            "type": "ImportedMesh",
+            "parentId": 2,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            }
+        },
+        {
+            "id": 116,
+            "name": "Post Back M",
+            "type": "Cube",
+            "parentId": 115,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 1.1,
+                    "z": -1.5
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.06,
+                    "y": 2.2,
+                    "z": 0.06
+                }
+            },
+            "color": "#e3b23c"
+        },
+        {
+            "id": 117,
+            "name": "Post Left M",
+            "type": "Cube",
+            "parentId": 115,
+            "transform": {
+                "position": {
+                    "x": -1.5,
+                    "y": 1.1,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.06,
+                    "y": 2.2,
+                    "z": 0.06
+                }
+            },
+            "color": "#e3b23c"
+        },
+        {
+            "id": 118,
+            "name": "Post Right M",
+            "type": "Cube",
+            "parentId": 115,
+            "transform": {
+                "position": {
+                    "x": 1.5,
+                    "y": 1.1,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.06,
+                    "y": 2.2,
+                    "z": 0.06
+                }
+            },
+            "color": "#e3b23c"
+        },
+        {
+            "id": 119,
+            "name": "Post Front M",
+            "type": "Cube",
+            "parentId": 115,
+            "transform": {
+                "position": {
+                    "x": 0.575,
+                    "y": 1.1,
+                    "z": 1.5
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.06,
+                    "y": 2.2,
+                    "z": 0.06
+                }
+            },
+            "color": "#e3b23c"
+        },
+        {
+            "id": 120,
+            "name": "Back Rail 1",
+            "type": "Cube",
+            "parentId": 115,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 0.15,
+                    "z": -1.5
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 3.0,
+                    "y": 0.025,
+                    "z": 0.025
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 121,
+            "name": "Left Rail 1",
+            "type": "Cube",
+            "parentId": 115,
+            "transform": {
+                "position": {
+                    "x": -1.5,
+                    "y": 0.15,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.025,
+                    "y": 0.025,
+                    "z": 3.0
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 122,
+            "name": "Right Rail 1",
+            "type": "Cube",
+            "parentId": 115,
+            "transform": {
+                "position": {
+                    "x": 1.5,
+                    "y": 0.15,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.025,
+                    "y": 0.025,
+                    "z": 3.0
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 123,
+            "name": "Front Rail 1",
+            "type": "Cube",
+            "parentId": 115,
+            "transform": {
+                "position": {
+                    "x": 0.575,
+                    "y": 0.15,
+                    "z": 1.5
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.85,
+                    "y": 0.025,
+                    "z": 0.025
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 124,
+            "name": "Back Rail 2",
+            "type": "Cube",
+            "parentId": 115,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 0.55,
+                    "z": -1.5
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 3.0,
+                    "y": 0.025,
+                    "z": 0.025
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 125,
+            "name": "Left Rail 2",
+            "type": "Cube",
+            "parentId": 115,
+            "transform": {
+                "position": {
+                    "x": -1.5,
+                    "y": 0.55,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.025,
+                    "y": 0.025,
+                    "z": 3.0
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 126,
+            "name": "Right Rail 2",
+            "type": "Cube",
+            "parentId": 115,
+            "transform": {
+                "position": {
+                    "x": 1.5,
+                    "y": 0.55,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.025,
+                    "y": 0.025,
+                    "z": 3.0
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 127,
+            "name": "Front Rail 2",
+            "type": "Cube",
+            "parentId": 115,
+            "transform": {
+                "position": {
+                    "x": 0.575,
+                    "y": 0.55,
+                    "z": 1.5
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.85,
+                    "y": 0.025,
+                    "z": 0.025
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 128,
+            "name": "Back Rail 3",
+            "type": "Cube",
+            "parentId": 115,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 0.95,
+                    "z": -1.5
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 3.0,
+                    "y": 0.025,
+                    "z": 0.025
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 129,
+            "name": "Left Rail 3",
+            "type": "Cube",
+            "parentId": 115,
+            "transform": {
+                "position": {
+                    "x": -1.5,
+                    "y": 0.95,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.025,
+                    "y": 0.025,
+                    "z": 3.0
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 130,
+            "name": "Right Rail 3",
+            "type": "Cube",
+            "parentId": 115,
+            "transform": {
+                "position": {
+                    "x": 1.5,
+                    "y": 0.95,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.025,
+                    "y": 0.025,
+                    "z": 3.0
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 131,
+            "name": "Front Rail 3",
+            "type": "Cube",
+            "parentId": 115,
+            "transform": {
+                "position": {
+                    "x": 0.575,
+                    "y": 0.95,
+                    "z": 1.5
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.85,
+                    "y": 0.025,
+                    "z": 0.025
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 132,
+            "name": "Back Rail 4",
+            "type": "Cube",
+            "parentId": 115,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 1.35,
+                    "z": -1.5
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 3.0,
+                    "y": 0.025,
+                    "z": 0.025
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 133,
+            "name": "Left Rail 4",
+            "type": "Cube",
+            "parentId": 115,
+            "transform": {
+                "position": {
+                    "x": -1.5,
+                    "y": 1.35,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.025,
+                    "y": 0.025,
+                    "z": 3.0
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 134,
+            "name": "Right Rail 4",
+            "type": "Cube",
+            "parentId": 115,
+            "transform": {
+                "position": {
+                    "x": 1.5,
+                    "y": 1.35,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.025,
+                    "y": 0.025,
+                    "z": 3.0
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 135,
+            "name": "Front Rail 4",
+            "type": "Cube",
+            "parentId": 115,
+            "transform": {
+                "position": {
+                    "x": 0.575,
+                    "y": 1.35,
+                    "z": 1.5
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.85,
+                    "y": 0.025,
+                    "z": 0.025
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 136,
+            "name": "Back Rail 5",
+            "type": "Cube",
+            "parentId": 115,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 1.75,
+                    "z": -1.5
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 3.0,
+                    "y": 0.025,
+                    "z": 0.025
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 137,
+            "name": "Left Rail 5",
+            "type": "Cube",
+            "parentId": 115,
+            "transform": {
+                "position": {
+                    "x": -1.5,
+                    "y": 1.75,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.025,
+                    "y": 0.025,
+                    "z": 3.0
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 138,
+            "name": "Right Rail 5",
+            "type": "Cube",
+            "parentId": 115,
+            "transform": {
+                "position": {
+                    "x": 1.5,
+                    "y": 1.75,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.025,
+                    "y": 0.025,
+                    "z": 3.0
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 139,
+            "name": "Front Rail 5",
+            "type": "Cube",
+            "parentId": 115,
+            "transform": {
+                "position": {
+                    "x": 0.575,
+                    "y": 1.75,
+                    "z": 1.5
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.85,
+                    "y": 0.025,
+                    "z": 0.025
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 140,
+            "name": "Door Stile L",
+            "type": "Cube",
+            "parentId": 18,
+            "transform": {
+                "position": {
+                    "x": -1.495,
+                    "y": 1.1,
+                    "z": 1.54
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.03,
+                    "y": 2.0,
+                    "z": 0.03
+                }
+            },
+            "color": "#e3b23c"
+        },
+        {
+            "id": 141,
+            "name": "Door Stile R",
+            "type": "Cube",
+            "parentId": 18,
+            "transform": {
+                "position": {
+                    "x": -0.3550000000000001,
+                    "y": 1.1,
+                    "z": 1.54
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.03,
+                    "y": 2.0,
+                    "z": 0.03
+                }
+            },
+            "color": "#e3b23c"
+        },
+        {
+            "id": 142,
+            "name": "Door Rail 2",
+            "type": "Cube",
+            "parentId": 18,
+            "transform": {
+                "position": {
+                    "x": -0.925,
+                    "y": 0.55,
+                    "z": 1.54
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.17,
+                    "y": 0.025,
+                    "z": 0.025
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 143,
+            "name": "Door Rail 4",
+            "type": "Cube",
+            "parentId": 18,
+            "transform": {
+                "position": {
+                    "x": -0.925,
+                    "y": 1.35,
+                    "z": 1.54
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.17,
+                    "y": 0.025,
+                    "z": 0.025
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 144,
+            "name": "Door Rail 5",
+            "type": "Cube",
+            "parentId": 18,
+            "transform": {
+                "position": {
+                    "x": -0.925,
+                    "y": 1.75,
+                    "z": 1.54
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.17,
+                    "y": 0.025,
+                    "z": 0.025
+                }
+            },
+            "color": "#2b2f36"
+        },
+        {
+            "id": 145,
+            "name": "Controls",
+            "type": "ImportedMesh",
+            "parentId": 1,
+            "transform": {
+                "position": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                }
+            }
+        },
+        {
+            "id": 146,
+            "name": "Panel Pedestal",
+            "type": "Cube",
+            "parentId": 145,
+            "transform": {
+                "position": {
+                    "x": 0.2,
+                    "y": 0.5,
+                    "z": 1.85
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.06,
+                    "y": 1.0,
+                    "z": 0.06
+                }
+            },
+            "color": "#3a3f47"
+        },
+        {
+            "id": 147,
+            "name": "Operator Panel",
+            "type": "Cube",
+            "parentId": 145,
+            "transform": {
+                "position": {
+                    "x": 0.2,
+                    "y": 1.08,
+                    "z": 1.85
+                },
+                "rotation": {
+                    "x": -25.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.32,
+                    "y": 0.2,
+                    "z": 0.1
+                }
+            },
+            "color": "#c9ced6"
+        },
+        {
+            "id": 148,
+            "name": "Start Button",
+            "type": "Cylinder",
+            "parentId": 145,
+            "transform": {
+                "position": {
+                    "x": 0.12,
+                    "y": 1.09,
+                    "z": 1.885
+                },
+                "rotation": {
+                    "x": 65.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.05,
+                    "y": 0.03,
+                    "z": 0.05
+                }
+            },
+            "color": "#3fa45b"
+        },
+        {
+            "id": 149,
+            "name": "E-Stop",
+            "type": "Cylinder",
+            "parentId": 145,
+            "transform": {
+                "position": {
+                    "x": 0.27,
+                    "y": 1.09,
+                    "z": 1.885
+                },
+                "rotation": {
+                    "x": 65.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.07,
+                    "y": 0.04,
+                    "z": 0.07
+                }
+            },
+            "color": "#d63d3d"
+        },
+        {
+            "id": 150,
+            "name": "Controller Cabinet",
+            "type": "Cube",
+            "parentId": 145,
+            "transform": {
+                "position": {
+                    "x": 1.95,
+                    "y": 0.9,
+                    "z": -0.9
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.5,
+                    "y": 1.8,
+                    "z": 0.6
+                }
+            },
+            "color": "#c9ced6"
+        },
+        {
+            "id": 151,
+            "name": "Cabinet Door Seam",
+            "type": "Cube",
+            "parentId": 145,
+            "transform": {
+                "position": {
+                    "x": 2.201,
+                    "y": 0.9,
+                    "z": -0.9
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.01,
+                    "y": 1.7,
+                    "z": 0.01
+                }
+            },
+            "color": "#3a3f47"
+        },
+        {
+            "id": 152,
+            "name": "Cabinet Handle",
+            "type": "Cube",
+            "parentId": 145,
+            "transform": {
+                "position": {
+                    "x": 2.205,
+                    "y": 1.0,
+                    "z": -0.75
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.02,
+                    "y": 0.18,
+                    "z": 0.025
+                }
+            },
+            "color": "#3a3f47"
+        },
+        {
+            "id": 153,
+            "name": "Cabinet Plinth",
+            "type": "Cube",
+            "parentId": 145,
+            "transform": {
+                "position": {
+                    "x": 1.95,
+                    "y": 0.04,
+                    "z": -0.9
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.52,
+                    "y": 0.08,
+                    "z": 0.62
+                }
+            },
+            "color": "#3a3f47"
+        },
+        {
+            "id": 154,
+            "name": "Stack Light Green",
+            "type": "Cylinder",
+            "parentId": 145,
+            "transform": {
+                "position": {
+                    "x": 1.5,
+                    "y": 2.28,
+                    "z": 1.5
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.08,
+                    "y": 0.09,
+                    "z": 0.08
+                }
+            },
+            "color": "#3fa45b"
+        },
+        {
+            "id": 155,
+            "name": "Stack Light Amber",
+            "type": "Cylinder",
+            "parentId": 145,
+            "transform": {
+                "position": {
+                    "x": 1.5,
+                    "y": 2.38,
+                    "z": 1.5
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.08,
+                    "y": 0.09,
+                    "z": 0.08
+                }
+            },
+            "color": "#e39b2b"
+        },
+        {
+            "id": 156,
+            "name": "Stack Light Red",
+            "type": "Cylinder",
+            "parentId": 145,
+            "transform": {
+                "position": {
+                    "x": 1.5,
+                    "y": 2.48,
+                    "z": 1.5
+                },
+                "rotation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "scale": {
+                    "x": 0.08,
+                    "y": 0.09,
+                    "z": 0.08
+                }
+            },
+            "color": "#d63d3d"
         }
     ],
     "joints": [
@@ -1873,13 +2753,13 @@
             "kind": "Sensor",
             "initialValue": 0,
             "expression": "",
-            "description": "Door switch: sees the door panel in its closed position",
+            "description": "Door switch: sees the door's middle rail in its closed position",
             "sensor": {
                 "type": "Zone",
                 "objectId": -1,
                 "offset": {
                     "x": -1.4,
-                    "y": 1.1,
+                    "y": 0.95,
                     "z": 1.54
                 },
                 "direction": {
