@@ -878,8 +878,9 @@ void Viewport::drawScene(){
     for(auto& [id,obj] : m_scene->allObjects()){
         const QMatrix4x4 model=m_scene->worldTransform(id);
         float opacity = m_scene->opacityOf(id);
-        // A hidden part still shows faintly while it is selected
-        if(obj.selected) opacity = std::max(opacity, 0.12f);
+        // A part faded to 0 still shows faintly while it is selected; one
+        // hidden with Alt+V doesn't
+        if(obj.selected && !m_scene->isHidden(id)) opacity = std::max(opacity, 0.12f);
         if(opacity >= 0.999f){ drawObject(id, obj, model, 1.0f); continue; }
         if(opacity <= 0.0f) continue;
         const QVector3D centre = model.map((obj.aabbMin() + obj.aabbMax()) * 0.5f);

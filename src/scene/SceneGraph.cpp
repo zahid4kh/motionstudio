@@ -72,6 +72,7 @@ int SceneGraph::duplicateObject(int id) {
         copy.mesh      = original.mesh;
         copy.color     = original.color;
         copy.opacity   = original.opacity;
+        copy.hidden    = original.hidden;
         copyOf[originalId] = copyId;
         emit objectChanged(copyId);
         for (int childId : original.childIds) self(self, childId, copyId);
@@ -447,6 +448,7 @@ int SceneGraph::spawnCopy(int templateId, int sourceId, const QString& name) {
         copy.parentId = parentId;
         copy.color    = original.color;
         copy.opacity  = original.opacity;
+        copy.hidden   = original.hidden;
         copy.mesh     = original.mesh;
         copy.copyOf   = originalId;
         copy.sourceId = sourceId;
@@ -632,10 +634,30 @@ QColor SceneGraph::colorOf(int id) const {
 float SceneGraph::opacityOf(int id) const {
     float a = 1.0f;
     for (const SceneObject* o = getObject(id); o; o = getObject(o->parentId)) {
-        if (o->parked) return 0.0f;
+        if (o->parked || o->hidden) return 0.0f;
         a *= o->opacity;
     }
     return a;
+}
+
+int SceneGraph::hiddenBy(int id) const {
+    for (const SceneObject* o = getObject(id); o; o = getObject(o->parentId))
+        if (o->hidden) return o->id;
+    return -1;
+}
+
+void SceneGraph::setHidden(int id, bool hidden) {
+    SceneObject* o = getObject(id);
+    if (!o || o->hidden == hidden) return;
+    o->hidden = hidden;
+    emit objectChanged(id);
+}
+
+bool SceneGraph::toggleHidden(const std::vector<int>& ids) {
+    bool anyShown = false;
+    for (int id : ids) if (getObject(id) && !isHidden(id)) anyShown = true;
+    for (int id : ids) setHidden(id, anyShown);
+    return anyShown;
 }
 
 void SceneGraph::setWorldTransform(int id, const QMatrix4x4& world) {

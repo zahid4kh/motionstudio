@@ -29,4 +29,6 @@
 | Step one scan | F10 |
 | Delete the selected part | Delete |
 | Duplicate the selected part, with its children, joints and actuators | Ctrl+D |
+| Hide the selected part (or every part picked in the Hierarchy), or show it again | Alt+V |
+| Show every hidden part | Alt+Shift+V |
 | Rename in the hierarchy | F2, or double-click |

@@ -188,6 +188,19 @@ void MainWindow::buildMenu() {
         edit->addAction(dup);
         addAction(dup);   // so Ctrl+D also works from floating panels
     }
+    {
+        auto* hide = new QAction(Theme::icon("eye-off"), "&Hide / Show", this);
+        hide->setShortcut(QKeySequence(Qt::ALT | Qt::Key_V));
+        hide->setToolTip("Hide the selected part, or show it again  (Alt+V)");
+        connect(hide, &QAction::triggered, this, &MainWindow::toggleHiddenSelected);
+        edit->addAction(hide);
+        addAction(hide);
+        auto* all = new QAction(Theme::icon("eye"), "Show &All Hidden", this);
+        all->setShortcut(QKeySequence(Qt::ALT | Qt::SHIFT | Qt::Key_V));
+        connect(all, &QAction::triggered, this, &MainWindow::showAllHidden);
+        edit->addAction(all);
+        addAction(all);
+    }
 
     // Menu bar on the frame, the toolbar island below it (filled by buildToolbar)
     auto* top = new QWidget;
@@ -205,7 +218,7 @@ void MainWindow::buildMenu() {
 }
 
 void MainWindow::buildViewMenu() {
-    auto* view = m_menuBar->addMenu("&View");
+    auto* view = m_menuBar->addMenu("Vie&w");
     auto* themes = view->addMenu(Theme::icon("sun-moon"), "&Theme");
     auto* group = new QActionGroup(themes);
     const struct { const char* name; Theme::Mode mode; } modes[] = {
@@ -493,6 +506,7 @@ QDockWidget* MainWindow::makeDock(const QString& title, const QString& icon, QWi
 void MainWindow::buildDocks() {
     m_hierarchy  = new HierarchyPanel(m_scene, this);
     connect(m_hierarchy, &HierarchyPanel::duplicateRequested, this, &MainWindow::duplicateObject);
+    connect(m_hierarchy, &HierarchyPanel::toggleHiddenRequested, this, &MainWindow::toggleHiddenSelected);
     m_properties = new PropertiesPanel(m_scene, this);
 
     m_hierarchyDock  = makeDock("Hierarchy",  "list-tree", m_hierarchy, Qt::LeftDockWidgetArea);
@@ -945,6 +959,36 @@ void MainWindow::deleteSelected() {
     QString name = m_scene->getObject(id) ? m_scene->getObject(id)->name : "object";
     m_scene->removeObject(id);
     showStatus("Deleted " + name);
+}
+
+// Alt+V: hides the selection (every item picked in the Hierarchy), or shows
+// it again when it is all hidden. Hidden parts still simulate and are sensed.
+void MainWindow::toggleHiddenSelected() {
+    std::vector<int> ids = m_hierarchy ? m_hierarchy->selectedIds() : std::vector<int>{};
+    if(ids.empty() && m_scene->selectedObjectId() != -1) ids.push_back(m_scene->selectedObjectId());
+    if(ids.empty()){ showStatus("Nothing selected to hide or show", false); return; }
+    const bool hidden = m_scene->toggleHidden(ids);
+    const SceneObject* first = m_scene->getObject(ids.front());
+    const QString what = ids.size() == 1 ? (first ? "\"" + first->name + "\"" : QString("object"))
+                                         : QString("%1 objects").arg(ids.size());
+    if(hidden){ showStatus("Hid " + what + "  —  Alt+V shows it again"); return; }
+    // Shown, unless a hidden parent still hides it
+    for(int id : ids)
+        if(int by = m_scene->hiddenBy(id); by != -1){
+            showStatus(QString("Showing %1, but it is inside hidden \"%2\"  —  select that and press Alt+V")
+                           .arg(what, m_scene->getObject(by)->name), false);
+            return;
+        }
+    showStatus("Showing " + what);
+}
+
+void MainWindow::showAllHidden() {
+    int n = 0;
+    std::vector<int> ids;
+    for(const auto& [id, obj] : m_scene->allObjects()) if(obj.hidden) ids.push_back(id);
+    for(int id : ids){ m_scene->setHidden(id, false); ++n; }
+    showStatus(n ? QString("Showing %1 hidden object%2").arg(n).arg(n == 1 ? "" : "s")
+                 : QString("Nothing is hidden"), n > 0);
 }
 
 // ── Sim slots ─────────────────────────────────────────────────────────────────

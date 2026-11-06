@@ -180,6 +180,75 @@ TEST(opacityMultipliesDownDuplicatesAndSaves) {
     CHECK(std::abs(u.allObjects().begin()->second.opacity - 0.3f) < 1e-6f);
 }
 
+TEST(hiddenPartsHideTheirSubtreeSaveAndStillSense) {
+    SceneGraph g;
+    int group = g.addObject("Assembly", PrimitiveType::ImportedMesh);
+    int a = addBox(g, "A", {0, 0.5f, 0}, {0.2f, 0.2f, 0.2f}, group);
+    int b = addBox(g, "B", {2, 0.5f, 0}, {0.2f, 0.2f, 0.2f});
+    CHECK(!g.isHidden(a) && g.hiddenBy(a) == -1);
+
+    // Alt+V on a shown selection hides it all, again shows it
+    CHECK(g.toggleHidden({group, b}));
+    CHECK(g.isHidden(a) && g.hiddenBy(a) == group && g.hiddenBy(b) == b);
+    CHECK(g.opacityOf(a) == 0.0f && g.opacityOf(b) == 0.0f);
+    CHECK(!g.getObject(a)->hidden);                  // the child's own flag is untouched
+    CHECK(!g.toggleHidden({group, b}));
+    CHECK(!g.isHidden(a) && !g.isHidden(b) && g.opacityOf(a) == 1.0f);
+
+    // Mixed selection: hides the shown ones too
+    g.setHidden(b, true);
+    CHECK(g.toggleHidden({a, b}) && g.getObject(a)->hidden && g.getObject(b)->hidden);
+    g.setHidden(a, false);
+    g.setHidden(b, false);
+
+    // Showing a part inside a hidden parent leaves it hidden by the parent
+    g.setHidden(group, true);
+    g.setHidden(a, true);
+    CHECK(!g.toggleHidden({a}) && !g.getObject(a)->hidden && g.hiddenBy(a) == group);
+
+    // Hidden is a view thing: picking skips it, sensors still see it
+    g.setHidden(group, false);
+    g.setHidden(b, true);
+    int post = addBox(g, "Post", {1, 0.5f, 0}, {0.1f, 0.1f, 0.1f});
+    SensorConfig c;
+    c.objectId = post;
+    c.direction = {1, 0, 0};
+    c.range = 2.0f;
+    CHECK(sensors::read(g, c).objectId == b);
+
+    // Saved only when set; duplicates keep it
+    int copy = g.duplicateObject(b);
+    CHECK(g.getObject(copy) && g.getObject(copy)->hidden);
+    const QJsonObject json = ProjectSerializer::toJson(g);
+    int written = 0;
+    for (const QJsonValue& v : json["objects"].toArray()) written += v.toObject().contains("hidden");
+    CHECK(written == 2);
+    SceneGraph h;
+    roundTrip(g, h);
+    int n = 0;
+    for (auto& [id, o] : h.allObjects()) {
+        if (o.name.startsWith("B")) { CHECK(o.hidden && h.isHidden(id)); ++n; }
+        if (o.name == "A") { CHECK(!o.hidden && !h.isHidden(id)); ++n; }
+    }
+    CHECK(n == 3);
+
+    // One Alt+V is one undo step
+    SceneGraph u;
+    UndoManager undo(&u);
+    const int x = addBox(u, "X", {0, 0, 0}, {1, 1, 1});
+    const int y = addBox(u, "Y", {2, 0, 0}, {1, 1, 1});
+    undo.reset();
+    u.toggleHidden({x, y});
+    QElapsedTimer wait; wait.start();
+    while (!undo.canUndo() && wait.elapsed() < 2000) QCoreApplication::processEvents();
+    CHECK(undo.canUndo());
+    undo.undo();
+    for (auto& [id, o] : u.allObjects()) CHECK(!o.hidden);
+    CHECK(!undo.canUndo());
+    undo.redo();
+    for (auto& [id, o] : u.allObjects()) CHECK(o.hidden);
+}
+
 TEST(undoKeepsTheSelectedPart) {
     SceneGraph u;
     UndoManager undo(&u);

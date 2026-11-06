@@ -58,6 +58,7 @@
         <file alias="icons/equal.svg">resources/icons/equal.svg</file>
         <file alias="icons/eraser.svg">resources/icons/eraser.svg</file>
         <file alias="icons/eye.svg">resources/icons/eye.svg</file>
+        <file alias="icons/eye-off.svg">resources/icons/eye-off.svg</file>
         <file alias="icons/fast-forward.svg">resources/icons/fast-forward.svg</file>
         <file alias="icons/file-input.svg">resources/icons/file-input.svg</file>
         <file alias="icons/file-plus.svg">resources/icons/file-plus.svg</file>

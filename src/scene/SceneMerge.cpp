@@ -57,6 +57,7 @@ std::vector<int> mergeScene(SceneGraph& target, SceneGraph& source, int parentId
         c->mesh = o->mesh;
         c->color = o->color;
         c->opacity = o->opacity;
+        c->hidden = o->hidden;
         objects[id] = copy;
         if (newParent == parentId) roots.push_back(copy);
         for (int child : o->childIds) copyObject(child, copy);

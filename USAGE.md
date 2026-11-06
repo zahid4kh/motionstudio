@@ -124,6 +124,7 @@ Shows the selected part. With nothing selected (click empty space in the viewpor
 - **Scale** — local scale
 - **Colour** — click the swatch for any colour, or pick a preset (steel, aluminium, anthracite, safety orange, signal yellow, blue, green, red); **×** removes it. A part without its own colour uses its parent's, so colouring an assembly colours all its parts. STEP imports keep the colours stored in the file.
 - **Opacity** — drag the slider, or type an exact value from 0 (invisible) to 1 (solid) in the box and press Enter. Fading an assembly fades all its parts (a part's own opacity multiplies with its parents'; the panel then says *Shown at 0.40*). Parts below 0.5 are clicked through: a click selects the solid part behind them, so you can fade a housing and pick what's inside. A part at 0 can only be selected in the Hierarchy, and shows faintly while selected. Opacity is saved with the project, and dragging the slider is one undo step.
+- **Hide / Show (Alt+V)** — select a part and press **Alt+V** (or **Edit › Hide / Show**, or right-click it in the Hierarchy) to hide it; press Alt+V again to show it. With several items picked in the Hierarchy (Ctrl/Shift-click), Alt+V hides them all, or shows them all if they are all hidden. Hiding an assembly hides its parts. A hidden part isn't drawn or clicked in the viewport; select it in the Hierarchy, where it is listed dimmed with a crossed-out eye, and Properties says *Hidden*. A part inside a hidden assembly stays hidden until the assembly is shown. **Alt+Shift+V** (**Edit › Show All Hidden**) shows everything. Hiding only changes the view: hidden parts still move, collide and are seen by sensors when simulating. It is saved with the project and is one undo step. (The View menu opens with Alt+W.)
 
 ### Joint (visible when object has a joint)
 
@@ -277,7 +278,8 @@ A real PLC (or CODESYS, OpenPLC…) can drive the model over Modbus TCP. Give si
 - Selecting a part in the viewport selects it here too: collapsed assemblies open up to it and the tree scrolls it into view
 - Assemblies you collapse stay collapsed when the tree updates (after undo, adding or deleting parts)
 - **Double-click** to rename
-- **Right-click** → Rename, Duplicate, **Add Sensor Here…**, Delete
+- **Right-click** → Rename, Duplicate, **Add Sensor Here…**, **Hide / Show** (Alt+V), Delete
+- Hidden parts are listed dimmed with a crossed-out eye icon
 
 ---
 

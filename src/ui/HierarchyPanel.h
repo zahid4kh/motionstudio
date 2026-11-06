@@ -10,6 +10,8 @@ class HierarchyPanel : public QWidget {
     Q_OBJECT
 public:
     explicit HierarchyPanel(SceneGraph* scene, QWidget* parent = nullptr);
+    // Objects selected in the tree (several with Ctrl/Shift), else the scene's selection
+    std::vector<int> selectedIds() const;
 
 signals:
     void objectSelected(int id);
@@ -17,6 +19,7 @@ signals:
     void addSensorRequested(int id);
     void addSourceRequested(int id);   // the object becomes an object source's template
     void addSinkRequested(int id);     // a sink on the object's bounds
+    void toggleHiddenRequested();      // Hide / Show on the selected items (Alt+V)
 
 private slots:
     void onObjectAdded(int id);
@@ -34,6 +37,7 @@ private:
     void revealSelection(int id, bool centre);
     void addItem(int objectId, QTreeWidgetItem* parent, const QString& parentPath);
     void applyRigidBodyIcon(QTreeWidgetItem* item, int objectId);
+    void refreshHidden(QTreeWidgetItem* item);   // the item and its subtree
     void combineSelectedIntoRigidBody(const QList<QTreeWidgetItem*>& items);
     void deleteSelectedItems(const QList<QTreeWidgetItem*>& items);
     void setRelation(int childId, int parentId);

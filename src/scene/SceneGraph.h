@@ -172,6 +172,16 @@ public:
     // Drawn opacity: the object's own times every ancestor's, so fading an
     // assembly fades its parts
     float  opacityOf(int id) const;
+    // Hidden (Alt+V): the object or an ancestor has `hidden` set. Hidden
+    // objects have opacityOf 0, so they aren't drawn or picked; simulation
+    // and sensors ignore the flag. hiddenBy is the nearest hidden one, or -1.
+    bool   isHidden(int id) const { return hiddenBy(id) != -1; }
+    int    hiddenBy(int id) const;
+    void   setHidden(int id, bool hidden);   // emits objectChanged
+    // Alt+V on a selection: hides them all when any is shown, else clears
+    // their own flags (one under a hidden parent stays hidden). Returns
+    // whether they were hidden.
+    bool   toggleHidden(const std::vector<int>& ids);
 
     // Transform helpers
     QMatrix4x4 worldTransform(int id) const;

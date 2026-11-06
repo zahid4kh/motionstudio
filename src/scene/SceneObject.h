@@ -37,6 +37,9 @@ struct SceneObject {
     // Own opacity, 0 (invisible) … 1 (solid); multiplies down onto the
     // children (see SceneGraph::opacityOf)
     float       opacity = 1.0f;
+    // Hidden from view (Alt+V), with its children: not drawn or picked, but
+    // still simulated and sensed (see SceneGraph::isHidden)
+    bool        hidden  = false;
 
     // Simulation-time state, never saved (see SceneGraph::spawnCopy):
     // made by an object source (the original's id and the source's), and

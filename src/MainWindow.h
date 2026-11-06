@@ -53,6 +53,8 @@ private slots:
     void addJointToSelected();
     void addMotorToSelected();
     void deleteSelected();
+    void toggleHiddenSelected();   // Alt+V
+    void showAllHidden();          // Alt+Shift+V
     void duplicateObject(int id);
 
     void onSimStateChanged(bool running);

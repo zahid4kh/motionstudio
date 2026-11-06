@@ -21,6 +21,7 @@ Then press **Play** (Space) and drive the machine from the **Runtime** tab.
 - **Click a part in the viewport** and the Hierarchy opens its assembly and scrolls to it, so you see where it sits in the tree.
 - **Collapse assemblies** you aren't working on; they stay collapsed. **Undo** (Ctrl+Z) keeps the part you had selected.
 - **See inside:** select a housing, panel or door and lower its **Opacity** in Properties (slider, or type 0–1). Fade an assembly to fade all its parts. Parts below 0.5 are clicked through, so the next click picks what's behind them. **Section** in the viewport cuts the model open instead.
+- **Hide a part:** select it and press **Alt+V** (**Edit › Hide / Show**); Alt+V again shows it. Hiding an assembly hides all its parts. Hidden parts are listed dimmed in the Hierarchy with a crossed-out eye, where you can select them again; **Alt+Shift+V** shows everything. Hidden parts still move, collide and are seen by sensors when you press Play: hiding only changes the view. It is saved with the project and can be undone.
 
 ## The mental model
 

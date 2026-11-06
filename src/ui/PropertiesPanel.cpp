@@ -439,6 +439,13 @@ void PropertiesPanel::updateOpacityRow(int id) {
             m_opacitySpin->setValue(obj->opacity);
     }
     // A faded parent fades this part too: say so, or the slider looks wrong
+    // Hidden with Alt+V (this part or a parent) says that instead
+    if (const int by = m_scene->hiddenBy(id); by != -1) {
+        m_opacityHint->setVisible(true);
+        m_opacityHint->setText(by == id ? QString("Hidden  —  Alt+V shows it")
+                                        : QString("Hidden with \"%1\"").arg(m_scene->getObject(by)->name));
+        return;
+    }
     const float shown = m_scene->opacityOf(id);
     m_opacityHint->setVisible(std::abs(shown - obj->opacity) > 1e-3f);
     m_opacityHint->setText(QString("Shown at %1 (a parent is faded too)").arg(shown, 0, 'f', 2));

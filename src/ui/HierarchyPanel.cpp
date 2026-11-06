@@ -66,6 +66,26 @@ HierarchyPanel::HierarchyPanel(SceneGraph* scene, QWidget* parent)
     connect(scene, &SceneGraph::sceneCleared,      this, &HierarchyPanel::onSceneCleared);
     connect(scene, &SceneGraph::rigidBodyAdded,    this, &HierarchyPanel::onRigidBodyChanged);
     connect(scene, &SceneGraph::rigidBodyRemoved,  this, &HierarchyPanel::onRigidBodyChanged);
+    // Hiding (Alt+V) dims the object and its subtree
+    connect(scene, &SceneGraph::objectChanged, this, [this](int id){
+        if(m_rebuildPending || !m_items.contains(id)) return;
+        QTreeWidgetItem* item = m_items[id];
+        if(item->data(0, Qt::UserRole + 2).toBool() != m_scene->isHidden(id)) refreshHidden(item);
+    });
+    connect(Theme::notifier(), &Theme::Notifier::changed, this, &HierarchyPanel::scheduleRebuild);
+}
+
+std::vector<int> HierarchyPanel::selectedIds() const {
+    std::vector<int> ids;
+    for(QTreeWidgetItem* item : m_tree->selectedItems())
+        ids.push_back(item->data(0, Qt::UserRole).toInt());
+    if(ids.empty() && m_scene->selectedObjectId() != -1) ids.push_back(m_scene->selectedObjectId());
+    return ids;
+}
+
+void HierarchyPanel::refreshHidden(QTreeWidgetItem* item) {
+    applyRigidBodyIcon(item, item->data(0, Qt::UserRole).toInt());
+    for(int i = 0; i < item->childCount(); ++i) refreshHidden(item->child(i));
 }
 
 void HierarchyPanel::addItem(int objectId, QTreeWidgetItem* parentItem, const QString& parentPath) {
@@ -97,9 +117,18 @@ void HierarchyPanel::applyRigidBodyIcon(QTreeWidgetItem* item, int objectId) {
     const SceneObject* obj = m_scene->getObject(objectId);
     if(!obj) return;
     const bool rigid = m_scene->getRigidBody(objectId) != nullptr;
-    item->setIcon(0, Theme::icon(primitiveIconName(obj->type, obj->mesh != nullptr),
-                                 rigid ? Theme::Tint::Physics : Theme::Tint::Muted));
-    item->setToolTip(0, QString(typeName(*obj)) + (rigid ? "  ·  Rigid body" : ""));
+    item->setIcon(0, obj->hidden ? Theme::icon("eye-off", Theme::Tint::Muted)
+                                 : Theme::icon(primitiveIconName(obj->type, obj->mesh != nullptr),
+                                               rigid ? Theme::Tint::Physics : Theme::Tint::Muted));
+    // A hidden object and everything under it is listed dimmed
+    const int hiddenBy = m_scene->hiddenBy(objectId);
+    item->setData(0, Qt::UserRole + 2, hiddenBy != -1);
+    if(hiddenBy != -1) item->setForeground(0, Theme::colors().muted);
+    else item->setData(0, Qt::ForegroundRole, QVariant());
+    QString tip = QString(typeName(*obj)) + (rigid ? "  ·  Rigid body" : "");
+    if(obj->hidden) tip += "  ·  Hidden (Alt+V shows it)";
+    else if(hiddenBy != -1) tip += "  ·  Hidden with " + m_scene->getObject(hiddenBy)->name;
+    item->setToolTip(0, tip);
 }
 
 void HierarchyPanel::onRigidBodyChanged(int objectId) {
@@ -208,6 +237,15 @@ void HierarchyPanel::showContextMenu(const QPoint& pos) {
 
     QMenu menu(this);
 
+    // Hide / Show for the whole selection, the same as Alt+V
+    auto addHideShow = [&]{
+        bool anyShown = false;
+        for(QTreeWidgetItem* s : selected)
+            if(!m_scene->isHidden(s->data(0, Qt::UserRole).toInt())) anyShown = true;
+        menu.addAction(Theme::icon(anyShown ? "eye-off" : "eye"), anyShown ? "Hide\tAlt+V" : "Show\tAlt+V",
+                       this, [this]{ emit toggleHiddenRequested(); });
+    };
+
     if(selected.isEmpty()){
         menu.addAction("(select an object to act on it)");
     } else if(selected.size() == 1){
@@ -227,6 +265,7 @@ void HierarchyPanel::showContextMenu(const QPoint& pos) {
         menu.addAction(Theme::icon("log-out"), "Add Part Sink Here…", [this, only](){
             emit addSinkRequested(only->data(0, Qt::UserRole).toInt());
         });
+        addHideShow();
         menu.addSeparator();
         menu.addAction(Theme::icon("trash-2", Theme::Tint::Danger), "Delete", [this, selected](){
             deleteSelectedItems(selected);
@@ -249,6 +288,7 @@ void HierarchyPanel::showContextMenu(const QPoint& pos) {
         menu.addAction(Theme::icon("weight"), "No relation \xE2\x80\x94 just combine", [this, selected](){
             combineSelectedIntoRigidBody(selected);
         });
+        addHideShow();
         menu.addSeparator();
         menu.addAction(Theme::icon("trash-2", Theme::Tint::Danger), "Delete Selected (2)", [this, selected](){
             deleteSelectedItems(selected);
@@ -257,6 +297,7 @@ void HierarchyPanel::showContextMenu(const QPoint& pos) {
         menu.addAction(Theme::icon("weight"), QString("Combine into Rigid Body (%1)").arg(selected.size()), [this, selected](){
             combineSelectedIntoRigidBody(selected);
         });
+        addHideShow();
         menu.addSeparator();
         menu.addAction(Theme::icon("trash-2", Theme::Tint::Danger), QString("Delete Selected (%1)").arg(selected.size()), [this, selected](){
             deleteSelectedItems(selected);
