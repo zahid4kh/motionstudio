@@ -317,9 +317,20 @@ void RobotSketch::paintEvent(QPaintEvent*) {
             p.drawRoundedRect(QRectF(-9, -5, 18, 10), 2, 2);
             p.restore();
         }
-        p.setPen(c.text);
-        p.drawText(P + QPointF(10, -9), j.name);
     }
+    // Names, one label for joints that coincide in this view (A1 · A2 when the shoulder sits on the base axis)
+    std::vector<std::pair<QPointF, QStringList>> labels;
+    for (const JointMark& j : m_joints) {
+        if (j.passive) continue;
+        const QPointF P = T.map(project(j.point));
+        auto it = std::find_if(labels.begin(), labels.end(), [&](const auto& l) {
+            return std::hypot(l.first.x() - P.x(), l.first.y() - P.y()) < 4;
+        });
+        if (it == labels.end()) labels.push_back({P, {j.name}});
+        else it->second << j.name;
+    }
+    p.setPen(c.text);
+    for (const auto& [P, names] : labels) p.drawText(P + QPointF(10, -9), names.join(" · "));
     if (m_hasTcp) {
         const QPointF P = T.map(project(m_tcp));
         p.setPen(QPen(c.warning, 1.8));
