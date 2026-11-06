@@ -233,7 +233,7 @@ The ✓/⚠ indicator in the panel's top-right corner validates all definitions 
 
 ### Timeline (under the viewport while simulating)
 
-Every scan is recorded until **Reset**. Pause, then drag or click the timeline to see any earlier moment: the 3D view, the watch values, the Signals tab and the trace playhead follow. **Live** (or Play/Step) returns to the latest scan. **Export Video…** saves the run, or a time range of it, as MP4, an animated GIF (both need `ffmpeg`) or PNG frames. Frames are rendered from the current camera at 15–60 fps, at 50–100 % of the viewport size.
+Every scan is recorded until **Reset**. Pause, then drag or click the timeline to see any earlier moment: the 3D view, the watch values, the Signals tab and the trace playhead follow. **Live** (or Play/Step) returns to the latest scan. **Export Video…** saves the run, or a time range of it, as MP4, an animated GIF (both need `ffmpeg`) or PNG frames. Frames are rendered offscreen with multisampling at the resolution you pick (Full HD 1920 × 1080 by default; 4K, 1440p, HD, square, vertical or the viewport's own size) at 15–60 fps, so docked panels such as the Automation panel never crop or shrink them. **Framing** is either **Fit the whole scene** (the viewport's view direction, zoomed to the whole scene) or **Everything the viewport shows** (its camera, backed off just enough to fit the video's shape). Selection, hover and the gizmo are left out; sensor labels and the axis triad stay. MP4s are H.264 at high quality (CRF 16). The dialog remembers your choices.
 
 ### Expressions
 

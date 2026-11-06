@@ -19,6 +19,7 @@
 #include <QPushButton>
 #include <QSlider>
 #include <QMouseEvent>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QStyle>
 #include <QStyleOptionSlider>
@@ -126,7 +127,8 @@ void TimelineBar::exportRun() {
     vb->addWidget(title);
     auto* sub = new QLabel(ffmpeg.isEmpty()
         ? "ffmpeg was not found, so only PNG frames can be saved. Install ffmpeg for MP4 and GIF."
-        : "Frames are rendered from the viewport as it looks now: same camera, size and overlays.");
+        : "Frames are rendered offscreen at the size you pick, from the viewport's view direction, so "
+          "docked panels don't crop them. Selection, hover and the gizmo are left out.");
     sub->setObjectName("hint");
     sub->setWordWrap(true);
     vb->addWidget(sub);
@@ -141,8 +143,28 @@ void TimelineBar::exportRun() {
     auto* fps = new QComboBox;
     for (int f : {15, 24, 30, 60}) fps->addItem(QString("%1 fps").arg(f), f);
     fps->setCurrentIndex(2);
-    auto* scale = new QComboBox;
-    for (int s : {100, 75, 50}) scale->addItem(QString("%1 %").arg(s), s);
+    QSettings settings("MotionStudio", "MotionStudio");
+    const QSize viewSize = m_viewport->size() * m_viewport->devicePixelRatioF();
+    auto* resolution = new QComboBox;
+    resolution->addItem("Full HD — 1920 × 1080", QSize(1920, 1080));
+    resolution->addItem("4K — 3840 × 2160", QSize(3840, 2160));
+    resolution->addItem("1440p — 2560 × 1440", QSize(2560, 1440));
+    resolution->addItem("HD — 1280 × 720", QSize(1280, 720));
+    resolution->addItem("Square — 1080 × 1080", QSize(1080, 1080));
+    resolution->addItem("Vertical — 1080 × 1920", QSize(1080, 1920));
+    resolution->addItem(QString("Viewport size — %1 × %2").arg(viewSize.width()).arg(viewSize.height()), QSize());
+    const QString savedResolution = settings.value("export/resolution", "Full HD").toString();
+    for (int i = 0; i < resolution->count(); ++i)
+        if (resolution->itemText(i).section(" — ", 0, 0) == savedResolution) resolution->setCurrentIndex(i);
+    auto* framing = new QComboBox;
+    framing->addItem("Fit the whole scene", true);
+    framing->addItem("Everything the viewport shows", false);
+    framing->setToolTip("Fit the whole scene: the viewport's view direction, zoomed so every part fills the frame.\n"
+                        "Everything the viewport shows: its camera as it is, backed off just enough that\n"
+                        "all of the viewport's picture fits the video's shape.");
+    framing->setCurrentIndex(settings.value("export/framing", "fit").toString() == "fit" ? 0 : 1);
+    fps->setCurrentIndex(std::max(0, fps->findData(settings.value("export/fps", 30).toInt())));
+    format->setCurrentIndex(std::max(0, format->findData(settings.value("export/format", "mp4").toString())));
     auto* from = new QDoubleSpinBox;
     auto* to = new QDoubleSpinBox;
     for (auto* sp : {from, to}) {
@@ -158,7 +180,8 @@ void TimelineBar::exportRun() {
     range->addWidget(to);
     form->addRow("Format", format);
     form->addRow("Frame rate", fps);
-    form->addRow("Size", scale);
+    form->addRow("Resolution", resolution);
+    form->addRow("Framing", framing);
     form->addRow("Time", range);
     vb->addLayout(form);
     auto* btns = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
@@ -172,7 +195,11 @@ void TimelineBar::exportRun() {
 
     const QString kind = format->currentData().toString();
     const int rate = fps->currentData().toInt();
-    const double pct = scale->currentData().toInt() / 100.0;
+    const bool fitScene = framing->currentData().toBool();
+    settings.setValue("export/resolution", resolution->currentText().section(" — ", 0, 0));
+    settings.setValue("export/framing", fitScene ? "fit" : "view");
+    settings.setValue("export/fps", rate);
+    settings.setValue("export/format", kind);
     const double t0 = std::min(from->value(), to->value()), t1 = std::max(from->value(), to->value());
 
     QString out;
@@ -186,8 +213,8 @@ void TimelineBar::exportRun() {
     if (out.isEmpty()) return;
 
     // Frame size: even numbers (H.264 needs them)
-    QImage probe = m_viewport->grabFramebuffer();
-    QSize size = (QSizeF(probe.size()) * pct).toSize();
+    QSize size = resolution->currentData().toSize();
+    if (!size.isValid()) size = viewSize;
     size = QSize(std::max(2, size.width() & ~1), std::max(2, size.height() & ~1));
 
     QProcess proc;
@@ -196,7 +223,8 @@ void TimelineBar::exportRun() {
                             "-s", QString("%1x%2").arg(size.width()).arg(size.height()),
                             "-r", QString::number(rate), "-i", "-"};
         if (kind == "mp4")
-            args << "-c:v" << "libx264" << "-pix_fmt" << "yuv420p" << "-crf" << "20" << out;
+            args << "-c:v" << "libx264" << "-preset" << "slow" << "-tune" << "animation" << "-crf" << "16"
+                 << "-pix_fmt" << "yuv420p" << "-movflags" << "+faststart" << out;
         else
             args << "-vf" << "split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer"
                  << "-loop" << "0" << out;
@@ -213,13 +241,14 @@ void TimelineBar::exportRun() {
     progress.setWindowModality(Qt::WindowModal);
     progress.setMinimumDuration(0);
     bool cancelled = false;
+    QString error;
     for (int i = 0; i < count; ++i) {
         progress.setValue(i);
         QApplication::processEvents();
         if (progress.wasCanceled()) { cancelled = true; break; }
         m_sim->seek(rec.frameAt(t0 + double(i) / rate));
-        QImage img = m_viewport->grabFramebuffer();
-        if (img.size() != size) img = img.scaled(size, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        QImage img = m_viewport->renderImage(size, fitScene);
+        if (img.isNull()) { error = "The viewport could not render a frame of this size."; cancelled = true; break; }
         if (kind == "png") {
             img.save(QDir(out).filePath(QString("frame_%1.png").arg(i + 1, 5, 10, QChar('0'))));
         } else {
@@ -231,7 +260,6 @@ void TimelineBar::exportRun() {
     }
     progress.setLabelText("Encoding…");
     QApplication::processEvents();
-    QString error;
     if (kind != "png") {
         proc.closeWriteChannel();
         if (cancelled) proc.kill();
@@ -242,10 +270,11 @@ void TimelineBar::exportRun() {
     progress.setValue(count);
     if (restore >= 0) m_sim->seek(restore); else m_sim->seekLive();
 
-    if (cancelled) { emit statusMessage("Export cancelled", false); return; }
     if (!error.isEmpty()) {
-        QMessageBox::warning(this, "Export Video", "ffmpeg failed:\n\n" + error.left(800));
+        QMessageBox::warning(this, "Export Video", "Export failed:\n\n" + error.left(800));
         return;
     }
-    emit statusMessage(QString("Exported %1 frames to %2").arg(count).arg(QDir::toNativeSeparators(out)), true);
+    if (cancelled) { emit statusMessage("Export cancelled", false); return; }
+    emit statusMessage(QString("Exported %1 frames (%2 × %3) to %4").arg(count).arg(size.width()).arg(size.height())
+                           .arg(QDir::toNativeSeparators(out)), true);
 }

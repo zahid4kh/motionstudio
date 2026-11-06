@@ -38,6 +38,15 @@ public:
     // Frames every object, keeping the view direction
     void fitAll();
 
+    // Renders the scene offscreen at `size` pixels (any size, independent of
+    // the widget's), multisampled, for video export: the current camera
+    // widened so everything the viewport shows fits the new shape (or the
+    // whole scene with `fitScene`). No selection, hover, gizmo or edit-mode
+    // overlays; sensor labels and the axis triad are kept.
+    QImage renderImage(const QSize& size, bool fitScene = false);
+    // The camera renderImage uses for that size
+    Camera exportCamera(const QSize& size, bool fitScene) const;
+
     // Axis-pick mode for the joint of `objectId`: hovering any part shows the
     // axis its geometry defines (round edge or cylindrical face → centre line,
     // straight edge → the edge, flat face → its normal) and a click sets the
@@ -263,6 +272,7 @@ private:
     QPoint           m_lastMouse;
     Qt::MouseButton  m_dragBtn = Qt::NoButton;
     int              m_vpW = 1, m_vpH = 1;
+    bool             m_exporting = false;   // renderImage: no selection / hover tint
 
     // Translate gizmo
     int       m_gizmoHoveredAxis  = -1;   // 0=X, 1=Y, 2=Z

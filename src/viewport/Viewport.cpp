@@ -1,4 +1,5 @@
 #include "Viewport.h"
+#include <QOpenGLFramebufferObject>
 #include "ui/Theme.h"
 #include "ViewCube.h"
 #include "scene/MeshWeld.h"
@@ -562,6 +563,77 @@ void Viewport::paintGL() {
     drawAssemble(p);
 }
 
+Camera Viewport::exportCamera(const QSize& size, bool fitScene) const {
+    Camera cam = m_camera;
+    if (fitScene) { frameScene(&cam); return cam; }
+    // The view shows a fixed height; a frame narrower than the widget would
+    // cut its sides off, so back off until the widget's width fits
+    const float viewAspect = float(m_vpW) / float(std::max(m_vpH, 1));
+    const float aspect = float(size.width()) / float(std::max(size.height(), 1));
+    if (viewAspect > aspect) cam.setDistance(cam.distance() * viewAspect / aspect);
+    return cam;
+}
+
+QImage Viewport::renderImage(const QSize& size, bool fitScene) {
+    if (!m_objShader || size.isEmpty()) return {};
+    makeCurrent();
+    GLint maxSamples = 4;
+    glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+    QOpenGLFramebufferObjectFormat format;
+    format.setAttachment(QOpenGLFramebufferObject::CombinedDepthStencil);
+    format.setSamples(std::min(8, int(maxSamples)));
+    QOpenGLFramebufferObject fbo(size, format);
+    if (!fbo.isValid()) { doneCurrent(); return {}; }
+
+    const Camera keepCamera = m_camera;
+    const int keepW = m_vpW, keepH = m_vpH;
+    m_camera = exportCamera(size, fitScene);
+    m_vpW = size.width();
+    m_vpH = size.height();
+    m_exporting = true;
+
+    fbo.bind();
+    if (m_sweepMeshes) sweepFreedMeshes();
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDepthFunc(GL_LESS);
+    glDisable(GL_BLEND);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_SCISSOR_TEST);
+    const QColor bg = Theme::colors().viewport;
+    glClearColor(bg.redF(), bg.greenF(), bg.blueF(), 1.0f);
+    glViewport(0, 0, m_vpW, m_vpH);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    drawGrid();
+    drawScene();
+    drawPhysicsOverlays();
+    drawAxisGizmo();
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_DEPTH_TEST);
+    fbo.release();
+    QImage img = fbo.toImage().convertToFormat(QImage::Format_RGB32);   // blits the samples down
+    doneCurrent();
+
+    {
+        QPainter p(&img);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setRenderHint(QPainter::TextAntialiasing);
+        // Labels keep their on-screen size relative to the frame
+        QFont f = font();
+        f.setPointSizeF(f.pointSizeF() * std::max(1.0, size.height() / 900.0));
+        p.setFont(f);
+        drawAxisLabels(p);
+        p.setFont(f);
+        drawSensorLabels(p);
+    }
+
+    m_exporting = false;
+    m_camera = keepCamera;
+    m_vpW = keepW;
+    m_vpH = keepH;
+    return img;
+}
+
 void Viewport::setIkAvailable(bool available) {
     m_ikAvailable = available;
     m_btnIk->setEnabled(available);
@@ -855,8 +927,8 @@ void Viewport::drawScene(){
         m_objShader->setUniformValue("objColor",   own.isValid() ? QVector3D(own.redF(), own.greenF(), own.blueF())
                                                                  : primitiveColor(obj.type));
         m_objShader->setUniformValue("opacity",    opacity);
-        m_objShader->setUniformValue("isSelected", obj.selected);
-        m_objShader->setUniformValue("isHovered",  id == m_hoveredId && !obj.selected);
+        m_objShader->setUniformValue("isSelected", obj.selected && !m_exporting);
+        m_objShader->setUniformValue("isHovered",  id == m_hoveredId && !obj.selected && !m_exporting);
         m_objShader->setUniformValue("isActive",   m_movingObjects.contains(id));
         m_objShader->setUniformValue("isAlert",    m_interfering.contains(id));
         switch(obj.type){
@@ -880,7 +952,7 @@ void Viewport::drawScene(){
         float opacity = m_scene->opacityOf(id);
         // A part faded to 0 still shows faintly while it is selected; one
         // hidden with Alt+V doesn't
-        if(obj.selected && !m_scene->isHidden(id)) opacity = std::max(opacity, 0.12f);
+        if(obj.selected && !m_exporting && !m_scene->isHidden(id)) opacity = std::max(opacity, 0.12f);
         if(opacity >= 0.999f){ drawObject(id, obj, model, 1.0f); continue; }
         if(opacity <= 0.0f) continue;
         const QVector3D centre = model.map((obj.aabbMin() + obj.aabbMax()) * 0.5f);

@@ -16,7 +16,7 @@ Every scan is recorded from the first Play or Step until **Reset**: the joints, 
 
 - **Look back:** pause, then drag the timeline, or click anywhere on it. The scene shows that moment. The Values list, the Signals tab and the trace plot's playhead show the values at that moment too. The overlay in the viewport says that you are looking at the recording.
 - **Continue:** **Live** returns to the latest scan. **Play** or **Step** also continue from the latest scan, never from the moment on display.
-- **Export Video…** (while paused) renders the run, or part of it, from the viewport as it looks now: the same camera, size and labels. You can save an **MP4** video, an animated **GIF**, or a folder of **PNG** frames. MP4 and GIF need `ffmpeg` installed.
+- **Export Video…** (while paused) renders the run, or part of it, offscreen at the **Resolution** you pick: **Full HD 1920 × 1080** by default, or 4K, 1440p, HD, square, vertical or the viewport's own size. Open panels never crop it. **Framing**: *Fit the whole scene* uses the viewport's view direction zoomed to every part; *Everything the viewport shows* keeps its camera and backs off until the whole picture fits. Selection, hover and the gizmo are left out; sensor labels stay. You can save an **MP4** video (high-quality H.264), an animated **GIF**, or a folder of **PNG** frames. MP4 and GIF need `ffmpeg` installed.
 
 Sequence and operation states always show the latest scan. The recording holds up to 20 minutes; after that, the bar shows *FULL*.
 
