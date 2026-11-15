@@ -74,6 +74,7 @@ private:
     void buildToolsMenu();
     void openExternalIo();
     void openRobotBuilder();
+    void openHumanoidBuilder();
     void openRobotAnalyzer(int objectId);
     void updateModbusLabel();
     void buildStatusBar();

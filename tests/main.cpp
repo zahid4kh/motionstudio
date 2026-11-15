@@ -25,6 +25,7 @@
 #include "import/StepImporter.h"
 #include "robot/RobotBuilder.h"
 #include "robot/RobotAnalysis.h"
+#include "robot/HumanoidBuilder.h"
 #include <QTemporaryDir>
 #ifdef MUJOCO_ENABLED
 #include <mujoco/mujoco.h>
@@ -2528,6 +2529,189 @@ TEST(robotBuilderSecondRobotGetsFreeNames) {
     CHECK(!problems.isEmpty());
     CHECK_NEAR(bad.dims["Fz"], bad.dims["H"], 1e-9);
     CHECK_NEAR(bad.dims["L1"], 1.5, 1e-9);
+}
+
+// ── Humanoid builder ────────────────────────────────────────────────────────
+
+namespace {
+void setJoints(SceneGraph& g, const humanoid::Built& b, const std::map<QString, float>& v) {
+    for (auto& [id, j] : g.allJoints()) if (j.coupledTo < 0) g.getJoint(id)->currentValue = 0;
+    for (auto& [name, val] : v) {
+        auto it = b.joints.find(name);
+        if (it != b.joints.end()) g.getJoint(it->second)->currentValue = val;
+    }
+    g.applyCouplings();
+}
+} // namespace
+
+TEST(humanoidBuilderMatchesDimensions) {
+    humanoid::Spec s = humanoid::defaultSpec();
+    s.dims["Ha"] = .08; s.dims["Ls"] = .34; s.dims["Lt"] = .36; s.dims["Hp"] = .12; s.dims["Ht"] = .4;
+    s.dims["Hn"] = .1; s.dims["Dh"] = .22; s.dims["Ws"] = .4; s.dims["Wh"] = .2;
+    s.dims["Lu"] = .29; s.dims["Lf"] = .25; s.dims["Lh"] = .17;
+    s.hand = humanoid::Hand::Fingers;
+    CHECK(humanoid::validate(s).isEmpty());
+    CHECK_NEAR(humanoid::height(s), 1.62, 1e-9);
+    SceneGraph g;
+    const humanoid::Built b = humanoid::build(g, s);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+    CHECK(humanoid::jointCount(s) == 28);
+    CHECK(b.motors.size() == 30);   // + LHand, RHand
+    for (const char* n : {"WaistYaw", "NeckPitch", "LShoulderPitch", "RShoulderPitch", "LElbow", "RKnee", "LAnkleRoll", "LHand", "RHand"})
+        CHECK(b.joints.count(n) == 1);
+    CHECK(b.joints.count("WaistRoll") == 0 && b.joints.count("LToe") == 0);
+    // Home: the hands hang straight down at the shoulders' width
+    const float shoulder = .08f + .34f + .36f + .12f + .4f;
+    QVector3D p = worldPos(g, b.leftHand);
+    CHECK_NEAR(p.x(), 0, 1e-4);
+    CHECK_NEAR(p.z(), -.2, 1e-4);
+    CHECK_NEAR(p.y(), shoulder - .29 - .25 - (.45 * .17 + .5 * .55 * .17), 1e-4);
+    CHECK_NEAR(worldPos(g, b.rightHand).z(), .2, 1e-4);
+    CHECK_NEAR(worldPos(g, b.leftFoot).y(), .08, 1e-4);
+    CHECK_NEAR(worldPos(g, b.leftFoot).z(), -.1, 1e-4);
+    CHECK_NEAR(worldPos(g, b.head).y(), shoulder + .1, 1e-4);
+    CHECK_NEAR(kin::toolFrame(g, b.leftHand).column(1).y(), 1, 1e-4);   // fingers (−Y) point down
+    // Directions
+    setJoints(g, b, {{"LShoulderRoll", 90}});
+    CHECK_NEAR(worldPos(g, b.leftHand).y(), shoulder, 1e-4);
+    CHECK(worldPos(g, b.leftHand).z() < -.2f - .5f);        // left arm out to the left (−Z)
+    setJoints(g, b, {{"RShoulderRoll", 90}});
+    CHECK(worldPos(g, b.rightHand).z() > .2f + .5f);        // mirrored: right arm out to the right
+    setJoints(g, b, {{"LShoulderPitch", 90}});
+    CHECK(worldPos(g, b.leftHand).x() > .5f);               // forward
+    setJoints(g, b, {{"LElbow", 90}});
+    CHECK(worldPos(g, b.leftHand).x() > .2f);               // forearm forward
+    setJoints(g, b, {{"LHipPitch", 45}});
+    CHECK(worldPos(g, b.leftFoot).x() > .2f);               // leg forward
+    setJoints(g, b, {{"LKnee", 90}});
+    CHECK(worldPos(g, b.leftFoot).x() < -.3f);              // shin back
+    setJoints(g, b, {{"NeckYaw", 90}});
+    CHECK_NEAR(g.worldTransform(b.head).column(0).toVector3D().z(), -1, 1e-4);   // looks to its left
+    setJoints(g, b, {{"WaistPitch", 30}});
+    CHECK(worldPos(g, b.head).x() > .2f);                   // bends forward
+    // Equal values on both sides give a mirror image
+    std::map<QString, float> v;
+    int k = 0;
+    for (const humanoid::JointDef& d : humanoid::jointDefs()) {
+        if (!d.sided) continue;
+        const float val = float(10 + 7 * (k++ % 5));
+        v["L" + d.key] = val;
+        v["R" + d.key] = val;
+    }
+    setJoints(g, b, v);
+    for (auto [l, r] : {std::pair{b.leftHand, b.rightHand}, {b.leftFoot, b.rightFoot}}) {
+        const QVector3D a = worldPos(g, l), c = worldPos(g, r);
+        CHECK_NEAR(a.x(), c.x(), 1e-4);
+        CHECK_NEAR(a.y(), c.y(), 1e-4);
+        CHECK_NEAR(a.z(), -c.z(), 1e-4);
+    }
+    // The hand actuator curls every finger
+    setJoints(g, b, {{"LHand", 90}});
+    int moved = 0;
+    for (auto& [id, j] : g.allJoints())
+        if (j.coupledTo == b.joints.at("LHand") && std::fabs(j.currentValue) > 1) ++moved;
+    CHECK(moved == 9);   // 3 more fingers, 4 tips, thumb and its tip
+}
+
+TEST(humanoidBuilderEveryPresetBuildsAndWorks) {
+    CHECK(humanoid::presets().size() >= 6);
+    for (const humanoid::Preset& pr : humanoid::presets()) {
+        humanoid::Spec spec = pr.spec;
+        const QStringList problems = humanoid::validate(spec);
+        if (!problems.isEmpty()) std::printf("  %s: %s\n", qPrintable(pr.name), qPrintable(problems.join("; ")));
+        CHECK(problems.isEmpty());
+        CHECK(humanoid::toJson(humanoid::fromJson(humanoid::toJson(pr.spec))) == humanoid::toJson(pr.spec));
+        SceneGraph g;
+        const humanoid::Built b = humanoid::build(g, pr.spec);
+        const QStringList errs = AutomationEngine::validateAll(g);
+        if (!errs.isEmpty()) std::printf("  %s: %s\n", qPrintable(pr.name), qPrintable(errs.join("; ")));
+        CHECK(errs.isEmpty());
+        const int hands = pr.spec.hand == humanoid::Hand::Mitten ? 0 : 2;
+        CHECK(int(b.motors.size()) == humanoid::jointCount(pr.spec) + hands);
+        CHECK((b.leftFoot >= 0) == (pr.spec.base == humanoid::Base::Legs));
+        CHECK(b.sequence >= 0 && b.poses.size() >= 3);
+        // Nothing below the floor at Home
+        for (auto& [id, o] : g.allObjects()) {
+            if (o.type == PrimitiveType::ImportedMesh) continue;
+            const QMatrix4x4 m = g.worldTransform(id);
+            for (const QVector3D& c : {QVector3D(-.5f, -.5f, -.5f), QVector3D(.5f, -.5f, .5f)})
+                CHECK(m.map(c).y() > -1e-3f || o.type != PrimitiveType::Cube);
+        }
+        // IK: the left hand reaches a frame it had a few joints away
+        const std::vector<int> chain = kin::chainTo(g, b.leftHand);
+        CHECK(chain.size() >= 3);
+        std::map<int, float> home;
+        for (int jid : chain) home[jid] = g.getJoint(jid)->currentValue;
+        for (int jid : chain) {
+            Joint* j = g.getJoint(jid);
+            j->currentValue = j->currentValue + (j->limitMax - j->currentValue) * 0.25f;
+        }
+        g.applyCouplings();
+        kin::Target t = kin::targetFrom(kin::toolFrame(g, b.leftHand));
+        t.useOrientation = chain.size() >= 6;
+        for (int jid : chain) g.getJoint(jid)->currentValue = home[jid];
+        g.applyCouplings();
+        const kin::Result r = kin::solve(g, b.leftHand, chain, t, 200);
+        if (!r.reached) std::printf("  %s: IK %g m %g deg\n", qPrintable(pr.name), r.positionError, r.angleError);
+        CHECK(r.reached);
+        for (int jid : chain) g.getJoint(jid)->currentValue = home[jid];
+        g.applyCouplings();
+        // Play: the demo sequence moves the arms, without warnings
+        std::map<int, float> start;
+        for (auto& [id, j] : g.allJoints()) start[id] = j.currentValue;
+        SimulationEngine sim(&g);
+        for (int i = 0; i < 90; ++i) sim.step();
+        CHECK(sim.automation()->warnings().isEmpty());
+        int moved = 0;
+        for (auto& [id, j] : g.allJoints()) if (std::fabs(j.currentValue - start[id]) > 1) ++moved;
+        CHECK(moved >= 2);
+        sim.reset();
+        SceneGraph loaded;
+        roundTrip(g, loaded);
+        CHECK(AutomationEngine::validateAll(loaded).isEmpty());
+        CHECK(loaded.allJoints().size() == g.allJoints().size());
+        CHECK(loaded.allSequences().size() == 1);
+    }
+}
+
+TEST(humanoidBuilderJointChoiceAndNames) {
+    humanoid::Spec s = humanoid::defaultSpec();
+    for (const humanoid::JointDef& d : humanoid::jointDefs()) s.joints[d.key].enabled = false;
+    s.joints["Elbow"].enabled = true;
+    s.joints["NeckYaw"].enabled = true;
+    s.hand = humanoid::Hand::Gripper;
+    s.demo = false;
+    SceneGraph g;
+    const humanoid::Built b = humanoid::build(g, s);
+    CHECK(b.motors.size() == 5);   // NeckYaw, LElbow, RElbow, LGrip, RGrip
+    CHECK(g.getMotor(b.motors[0])->name == "NeckYaw");
+    CHECK(g.getMotor(b.motors[1])->name == "LElbow" && g.getMotor(b.motors[2])->name == "RElbow");
+    CHECK(g.getMotor(b.motors[3])->name == "LGrip");
+    CHECK(b.poses.size() == 1 && b.sequence < 0);
+    CHECK(g.getJoint(b.joints.at("LGrip"))->type == JointType::Prismatic);
+    // The jaws close towards each other
+    const int jawA = g.getJoint(b.joints.at("LGrip"))->childBodyId;
+    const QVector3D a0 = worldPos(g, jawA);
+    g.getJoint(b.joints.at("LGrip"))->currentValue = g.getJoint(b.joints.at("LGrip"))->limitMax;
+    g.applyCouplings();
+    CHECK(worldPos(g, jawA).x() < a0.x() - 1e-3f);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+    // A second humanoid gets free names
+    s.name = "Twin";
+    s.demo = true;
+    const humanoid::Built b2 = humanoid::build(g, s);
+    CHECK(b2.joints.count("LElbow_2") == 1);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+    // Pedestal: no legs, and the height scales every length
+    humanoid::Spec p = humanoid::defaultSpec();
+    p.base = humanoid::Base::Pedestal;
+    const double lu = p.dim("Lu");
+    humanoid::scaleToHeight(p, 2 * humanoid::height(p));
+    CHECK_NEAR(p.dim("Lu"), 2 * lu, 1e-9);
+    SceneGraph g2;
+    const humanoid::Built b3 = humanoid::build(g2, p);
+    CHECK(b3.leftFoot < 0 && b3.joints.count("LKnee") == 0);
+    CHECK(AutomationEngine::validateAll(g2).isEmpty());
 }
 
 int main(int argc, char** argv) {

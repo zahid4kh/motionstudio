@@ -121,13 +121,14 @@ struct Built {
 Built build(SceneGraph& scene, Spec spec);
 
 // Dimension lines for the drawing, in the robot's own frame at its home pose
-// (side view = XY plane, top view = XZ plane)
+// (side view = XY plane, top view = XZ plane, front view = ZY plane)
 struct DimensionLine {
     QString   symbol;
     QVector3D from, to;
     QVector3D offsetDir;    // where the dimension line sits, away from the robot
     double    offset = 0.08;
     bool      top = false;  // drawn in the top view
+    bool      front = false;  // drawn in the front view
 };
 std::vector<DimensionLine> dimensionLines(const Spec& spec);
 

@@ -26,6 +26,7 @@
         <file alias="icons/arrow-down.svg">resources/icons/arrow-down.svg</file>
         <file alias="icons/arrow-up.svg">resources/icons/arrow-up.svg</file>
         <file alias="icons/bot.svg">resources/icons/bot.svg</file>
+        <file alias="icons/person-standing.svg">resources/icons/person-standing.svg</file>
         <file alias="icons/magnet.svg">resources/icons/magnet.svg</file>
         <file alias="icons/grid-2x2.svg">resources/icons/grid-2x2.svg</file>
         <file alias="icons/forklift.svg">resources/icons/forklift.svg</file>
@@ -142,6 +143,7 @@
 
         <file alias="help/kinematics.md">resources/help/kinematics.md</file>
         <file alias="help/robots.md">resources/help/robots.md</file>
+        <file alias="help/humanoids.md">resources/help/humanoids.md</file>
         <file alias="help/flow.md">resources/help/flow.md</file>
         <file alias="help/sequences.md">resources/help/sequences.md</file>
         <file alias="help/signals.md">resources/help/signals.md</file>

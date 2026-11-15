@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <map>
 
 namespace {
 
@@ -45,6 +46,10 @@ double niceStep(double minimum) {
 
 QString mm(double metres) { return QString::number(std::round(metres * 1000)); }
 
+RobotSketch::View viewOf(const robot::DimensionLine& d) {
+    return d.front ? RobotSketch::View::Front : d.top ? RobotSketch::View::Top : RobotSketch::View::Side;
+}
+
 } // namespace
 
 RobotSketch::RobotSketch(QWidget* parent) : QWidget(parent) {
@@ -62,25 +67,39 @@ void RobotSketch::setView(View v) {
 }
 
 QPointF RobotSketch::project(const QVector3D& p) const {
-    return m_view == View::Side ? QPointF(p.x(), p.y()) : QPointF(p.x(), -p.z());
+    switch (m_view) {
+    case View::Side:  return {p.x(), p.y()};
+    case View::Top:   return {p.x(), -p.z()};
+    case View::Front: return {-p.z(), p.y()};
+    }
+    return {};
 }
 
 void RobotSketch::clear() {
     m_side.clear();
     m_top.clear();
+    m_front.clear();
     m_joints.clear();
+    m_tips.clear();
     m_envSide.clear();
     m_envTop.clear();
-    m_hasTcp = false;
     update();
 }
 
 void RobotSketch::setMessage(const QString& text) { m_message = text; update(); }
 
+void RobotSketch::setJointLabels(bool on) { m_jointLabels = on; update(); }
+
 void RobotSketch::capture(const SceneGraph& g, int baseFrame, int tcpId) {
+    capture(g, baseFrame, std::vector<Tip>{{tcpId, "TCP"}});
+}
+
+void RobotSketch::capture(const SceneGraph& g, int baseFrame, const std::vector<Tip>& tips) {
     m_side.clear();
     m_top.clear();
+    m_front.clear();
     m_joints.clear();
+    m_tips.clear();
     m_message.clear();
     const QMatrix4x4 toRobot = scenequery::stripScale(g.worldTransform(baseFrame)).inverted();
     std::function<void(int)> walk = [&](int id) {
@@ -92,20 +111,23 @@ void RobotSketch::capture(const SceneGraph& g, int baseFrame, int tcpId) {
             const QMatrix4x4 m = toRobot * g.worldTransform(id);
             const size_t verts = soup->size() / 6;
             const size_t step = std::max<size_t>(1, verts / 3000);
-            std::vector<QPointF> side, top;
-            double zs = 0, ys = 0;
+            std::vector<QPointF> side, top, front;
+            double zs = 0, ys = 0, xs = 0;
             for (size_t v = 0; v < verts; v += step) {
                 const QVector3D p = m.map(QVector3D((*soup)[v * 6], (*soup)[v * 6 + 1], (*soup)[v * 6 + 2]));
                 side.emplace_back(p.x(), p.y());
                 top.emplace_back(p.x(), -p.z());
+                front.emplace_back(-p.z(), p.y());
                 zs += p.z();
                 ys += p.y();
+                xs += p.x();
             }
             const double n = double(side.size());
             QColor c = g.colorOf(id);
             if (!c.isValid()) c = QColor(150, 156, 164);
             m_side.push_back({convexHull(side), c, opacity, zs / n});
             m_top.push_back({convexHull(top), c, opacity, ys / n});
+            m_front.push_back({convexHull(front), c, opacity, xs / n});
         }
         for (int c : o->childIds) walk(c);
     };
@@ -113,22 +135,32 @@ void RobotSketch::capture(const SceneGraph& g, int baseFrame, int tcpId) {
     auto byDepth = [](const Shape& a, const Shape& b) { return a.depth < b.depth; };   // far first
     std::stable_sort(m_side.begin(), m_side.end(), byDepth);
     std::stable_sort(m_top.begin(), m_top.end(), byDepth);
-    for (int jid : kin::chainTo(g, tcpId, false)) {
-        const Joint* j = g.getJoint(jid);
-        if (!j) continue;
-        const QMatrix4x4 parent = toRobot * g.worldTransform(j->parentBodyId);
-        JointMark mk;
-        mk.axis = parent.mapVector(j->axis).normalized();
-        mk.point = j->type == JointType::Revolute ? parent.map(j->pivot)
-                                                  : (toRobot * g.worldTransform(j->childBodyId)).column(3).toVector3D();
-        mk.prismatic = j->type == JointType::Prismatic;
-        const Motor* mo = g.motorForJoint(jid);
-        mk.name = mo ? mo->name : j->name;
-        mk.passive = !mo;
-        m_joints.push_back(mk);
+    std::stable_sort(m_front.begin(), m_front.end(), byDepth);
+    // Chains share their first joints (a humanoid's waist): each joint once,
+    // linked to the one before it in its chain
+    std::map<int, int> markOf;   // joint id → index in m_joints
+    for (const Tip& tip : tips) {
+        if (!g.getObject(tip.id)) continue;
+        int prev = -1;
+        for (int jid : kin::chainTo(g, tip.id, false)) {
+            if (auto it = markOf.find(jid); it != markOf.end()) { prev = it->second; continue; }
+            const Joint* j = g.getJoint(jid);
+            if (!j) continue;
+            const QMatrix4x4 parent = toRobot * g.worldTransform(j->parentBodyId);
+            JointMark mk;
+            mk.axis = parent.mapVector(j->axis).normalized();
+            mk.point = j->type == JointType::Revolute ? parent.map(j->pivot)
+                                                      : (toRobot * g.worldTransform(j->childBodyId)).column(3).toVector3D();
+            mk.prismatic = j->type == JointType::Prismatic;
+            const Motor* mo = g.motorForJoint(jid);
+            mk.name = mo ? mo->name : j->name;
+            mk.passive = !mo;
+            mk.prev = prev;
+            prev = markOf[jid] = int(m_joints.size());
+            m_joints.push_back(mk);
+        }
+        m_tips.push_back({(toRobot * g.worldTransform(tip.id)).column(3).toVector3D(), tip.label, prev});
     }
-    m_hasTcp = g.getObject(tcpId) != nullptr;
-    if (m_hasTcp) m_tcp = (toRobot * g.worldTransform(tcpId)).column(3).toVector3D();
     update();
 }
 
@@ -186,17 +218,18 @@ void RobotSketch::setEnvelope(const robot::Analysis* a, const SceneGraph* g) {
 QRectF RobotSketch::contentBounds() const {
     QRectF b;
     auto add = [&](const QRectF& r) { b = b.isNull() ? r : b.united(r); };
-    for (const Shape& s : m_view == View::Side ? m_side : m_top) add(s.poly.boundingRect());
-    for (const QPolygonF& p : m_view == View::Side ? m_envSide : m_envTop) add(p.boundingRect());
+    for (const Shape& s : shapes()) add(s.poly.boundingRect());
+    if (m_view != View::Front)
+        for (const QPolygonF& p : m_view == View::Side ? m_envSide : m_envTop) add(p.boundingRect());
     for (const JointMark& j : m_joints) add(QRectF(project(j.point), QSizeF(1e-4, 1e-4)));
     for (const robot::DimensionLine& d : m_dims) {
-        if (d.top != (m_view == View::Top)) continue;
+        if (viewOf(d) != m_view) continue;
         const QVector3D o = d.offsetDir * float(d.offset * 1.4);
         add(QRectF(project(d.from + o), QSizeF(1e-4, 1e-4)));
         add(QRectF(project(d.to + o), QSizeF(1e-4, 1e-4)));
     }
     if (b.isNull()) b = QRectF(-0.5, -0.1, 1, 1);
-    if (m_view == View::Side) add(QRectF(b.left(), 0, b.width(), 1e-4));   // floor
+    if (m_view != View::Top) add(QRectF(b.left(), 0, b.width(), 1e-4));   // floor
     const double m = std::max(b.width(), b.height()) * 0.06 + 0.02;
     return b.adjusted(-m, -m, m, m);
 }
@@ -221,9 +254,8 @@ void RobotSketch::paintEvent(QPaintEvent*) {
     p.setClipPath(frame);
     m_hits.clear();
 
-    const bool side = m_view == View::Side;
-    const std::vector<Shape>& shapes = side ? m_side : m_top;
-    if (shapes.empty() && m_joints.empty()) {
+    const bool side = m_view == View::Side, top = m_view == View::Top;
+    if (shapes().empty() && m_joints.empty()) {
         p.setPen(c.muted);
         p.drawText(rect().adjusted(20, 20, -20, -20), Qt::AlignCenter | Qt::TextWordWrap,
                    m_message.isEmpty() ? QString("Nothing to draw") : m_message);
@@ -243,7 +275,7 @@ void RobotSketch::paintEvent(QPaintEvent*) {
         p.drawLine(T.map(QPointF(vis.left(), y)), T.map(QPointF(vis.right(), y)));
 
     // Floor
-    if (side) {
+    if (!top) {
         const QPointF a = T.map(QPointF(vis.left(), 0)), b = T.map(QPointF(vis.right(), 0));
         p.setPen(QPen(c.muted, 1.5));
         p.drawLine(a, b);
@@ -254,10 +286,11 @@ void RobotSketch::paintEvent(QPaintEvent*) {
     // Workspace
     p.setPen(Qt::NoPen);
     p.setBrush(Theme::soft(c.info, c.dark ? 0.2 : 0.16));
-    for (const QPolygonF& q : side ? m_envSide : m_envTop) p.drawPolygon(T.map(q));
+    if (m_view != View::Front)
+        for (const QPolygonF& q : side ? m_envSide : m_envTop) p.drawPolygon(T.map(q));
 
     // Parts
-    for (const Shape& s : shapes) {
+    for (const Shape& s : shapes()) {
         QColor fill = s.color;
         fill.setAlphaF(std::clamp(0.92 * s.opacity, 0.15, 1.0));
         // Outline half way to the text colour, so white parts show on a light background
@@ -270,19 +303,21 @@ void RobotSketch::paintEvent(QPaintEvent*) {
     }
 
     // Kinematic chain
-    QPolygonF chain;
-    for (const JointMark& j : m_joints) chain << T.map(project(j.point));
-    if (m_hasTcp) chain << T.map(project(m_tcp));
     p.setPen(QPen(c.accent, 2.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     p.setBrush(Qt::NoBrush);
-    p.drawPolyline(chain);
+    for (const JointMark& j : m_joints)
+        if (j.prev >= 0) p.drawLine(T.map(project(m_joints[j.prev].point)), T.map(project(j.point)));
+    for (const TipMark& t : m_tips)
+        if (t.prev >= 0) p.drawLine(T.map(project(m_joints[t.prev].point)), T.map(project(t.point)));
     QFont small = font();
     small.setPointSizeF(font().pointSizeF() * 0.88);
     small.setBold(true);
     p.setFont(small);
     for (const JointMark& j : m_joints) {
         const QPointF P = T.map(project(j.point));
-        const QPointF dir = side ? QPointF(j.axis.x(), -j.axis.y()) : QPointF(j.axis.x(), j.axis.z());   // screen y down
+        const QPointF dir = side ? QPointF(j.axis.x(), -j.axis.y())     // screen y down
+                          : top  ? QPointF(j.axis.x(), j.axis.z())
+                                 : QPointF(-j.axis.z(), -j.axis.y());
         const double inPlane = std::hypot(dir.x(), dir.y());
         if (j.passive) {                                   // follows another joint (coupling, levelling link)
             p.setPen(QPen(c.muted, 1.4));
@@ -321,7 +356,7 @@ void RobotSketch::paintEvent(QPaintEvent*) {
     // Names, one label for joints that coincide in this view (A1 · A2 when the shoulder sits on the base axis)
     std::vector<std::pair<QPointF, QStringList>> labels;
     for (const JointMark& j : m_joints) {
-        if (j.passive) continue;
+        if (j.passive || !m_jointLabels) continue;
         const QPointF P = T.map(project(j.point));
         auto it = std::find_if(labels.begin(), labels.end(), [&](const auto& l) {
             return std::hypot(l.first.x() - P.x(), l.first.y() - P.y()) < 4;
@@ -331,15 +366,16 @@ void RobotSketch::paintEvent(QPaintEvent*) {
     }
     p.setPen(c.text);
     for (const auto& [P, names] : labels) p.drawText(P + QPointF(10, -9), names.join(" · "));
-    if (m_hasTcp) {
-        const QPointF P = T.map(project(m_tcp));
+    for (const TipMark& t : m_tips) {
+        if (t.label.isEmpty()) continue;
+        const QPointF P = T.map(project(t.point));
         p.setPen(QPen(c.warning, 1.8));
         p.setBrush(Qt::NoBrush);
         p.drawEllipse(P, 5, 5);
         p.drawLine(P - QPointF(9, 0), P + QPointF(9, 0));
         p.drawLine(P - QPointF(0, 9), P + QPointF(0, 9));
         p.setPen(c.warning);
-        p.drawText(P + QPointF(9, 14), "TCP");
+        p.drawText(P + QPointF(9, 14), t.label);
     }
 
     // Dimensions
@@ -349,7 +385,7 @@ void RobotSketch::paintEvent(QPaintEvent*) {
     p.setFont(dimFont);
     const QFontMetricsF fm(dimFont);
     for (const robot::DimensionLine& d : m_dims) {
-        if (d.top != !side) continue;
+        if (viewOf(d) != m_view) continue;
         const QPointF p1 = project(d.from), p2 = project(d.to);
         QPointF sd = project(d.offsetDir) - project(QVector3D());
         const double sl = std::hypot(sd.x(), sd.y());
@@ -402,7 +438,7 @@ void RobotSketch::paintEvent(QPaintEvent*) {
     p.setPen(c.muted);
     p.drawText(b0 + QPointF(barPx + 6, 4), QString("%1 mm").arg(mm(step)));
     p.drawText(QRectF(0, 8, width() - 12, 20), Qt::AlignRight,
-               side ? "SIDE VIEW  ·  X → , Y ↑" : "TOP VIEW  ·  X → , Z ↓");
+               side ? "SIDE VIEW  ·  X → , Y ↑" : top ? "TOP VIEW  ·  X → , Z ↓" : "FRONT VIEW  ·  −Z → , Y ↑");
 }
 
 void RobotSketch::wheelEvent(QWheelEvent* e) {

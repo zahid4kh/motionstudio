@@ -10,6 +10,8 @@
 #include "ui/TemplateDialog.h"
 #include "ui/robot/RobotBuilderDialog.h"
 #include "ui/robot/RobotAnalyzerDialog.h"
+#include "ui/robot/HumanoidBuilderDialog.h"
+#include "robot/HumanoidBuilder.h"
 #include "robot/RobotBuilder.h"
 #include "ui/HelpDialog.h"
 #include "ui/Island.h"
@@ -305,6 +307,10 @@ void MainWindow::buildToolsMenu() {
         a->setShortcut(QKeySequence("Ctrl+Shift+R"));
         a->setToolTip("Build a SCARA, palletizer or 6-axis robot from a preset and your dimensions (Ctrl+Shift+R)");
         addAction(a);
+        QAction* h = tools->addAction(Theme::icon("person-standing"), "&Humanoid Builder…", this, &MainWindow::openHumanoidBuilder);
+        h->setShortcut(QKeySequence("Ctrl+Shift+U"));
+        h->setToolTip("Build a humanoid from its body dimensions and the joints you choose (Ctrl+Shift+U)");
+        addAction(h);
         tools->addAction(Theme::icon("gauge"), "Analy&ze Robot…", this, [this]{ openRobotAnalyzer(m_scene->selectedObjectId()); })
             ->setToolTip("Workspace, reach, DH parameters, dexterity and singularities of the selected robot");
     }
@@ -333,6 +339,26 @@ void MainWindow::openRobotBuilder() {
     showStatus(QString("Built %1: %2 axes, %3%4 — jog it in Automation › Actuators & Poses (Ctrl+J)")
                    .arg(spec.name).arg(b.joints.size()).arg(robot::toolDef(spec.tool).name)
                    .arg(extras.isEmpty() ? QString() : " (" + extras.join(", ") + ")"));
+}
+
+void MainWindow::openHumanoidBuilder() {
+    if(m_sim->isActive()){ showStatus("Reset the simulation to add a humanoid", false); return; }
+    HumanoidBuilderDialog dlg(this);
+    if(dlg.exec() != QDialog::Accepted) return;
+    const humanoid::Spec spec = dlg.spec();
+    SceneGraph built;
+    const humanoid::Built b = humanoid::build(built, spec);
+    const std::vector<int> roots = mergeScene(*m_scene, built);
+    if(roots.empty()) return;
+    const QVector3D at = m_viewport->camera().target();
+    if(SceneObject* o = m_scene->getObject(roots.front())){
+        o->transform.position += QVector3D(at.x(), 0, at.z());
+        emit m_scene->objectChanged(roots.front());
+    }
+    m_scene->selectObject(roots.front());
+    showStatus(QString("Built %1: %2 actuators, %3 poses%4 — jog it in Automation › Actuators & Poses (Ctrl+J)")
+                   .arg(spec.name).arg(b.motors.size()).arg(b.poses.size())
+                   .arg(b.sequence >= 0 ? QString(", a demo sequence that runs on Play") : QString()));
 }
 
 void MainWindow::openRobotAnalyzer(int objectId) {
@@ -437,6 +463,8 @@ void MainWindow::buildToolbar() {
     tb->addSeparator();
     connect(mkBtn(tb, "bot",       "Robot",    "Robot Builder  (Ctrl+Shift+R)\nBuild a SCARA, palletizer or 6-axis robot from a preset and your dimensions"),
             &QAction::triggered, this, &MainWindow::openRobotBuilder);
+    connect(mkBtn(tb, "person-standing", "Humanoid", "Humanoid Builder  (Ctrl+Shift+U)\nBuild a humanoid from its body dimensions and the joints you choose"),
+            &QAction::triggered, this, &MainWindow::openHumanoidBuilder);
 
     static_cast<QHBoxLayout*>(m_toolHost->layout())->addStretch(1);
 

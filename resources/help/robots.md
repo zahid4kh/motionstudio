@@ -121,3 +121,5 @@ Select a robot (any part of it, or its TCP) and choose **Tools › Analyze Robot
 - Jog it in **Automation › Actuators & Poses** (Ctrl+J), including Cartesian jog with the TCP as the tool; see [Robot Tools & IK](help:kinematics).
 - Capture poses and build a sequence: **MoveToPose** to get close, **MoveL** with the TCP for straight approaches, **Set** `Grip` (or `Vacuum`) and **Grip** / **Release** to carry parts.
 - Turn a spindle on with its input (`SpindleOn`) from a **Set** operation, or from the Runtime tab.
+
+For a humanoid, use **Tools › Humanoid Builder…** instead; see [Humanoid Builder](help:humanoids).
