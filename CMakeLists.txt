@@ -69,6 +69,7 @@ add_library(MotionStudioCore STATIC
     src/serialization/ProjectSerializer.cpp
     src/import/StepImporter.cpp
     src/io/ModbusServer.cpp
+    src/io/ApiServer.cpp
     src/io/RobotFormats.cpp
     src/robot/RobotBuilder.cpp
     src/robot/RobotAnalysis.cpp
@@ -114,6 +115,7 @@ set(SOURCES
     src/ui/Island.cpp
     src/ui/TimelineBar.cpp
     src/ui/ModbusDialog.cpp
+    src/ui/ApiServerDialog.cpp
     src/ui/robot/RobotSketch.cpp
     src/ui/robot/RobotAnalysisPanel.cpp
     src/ui/robot/RobotBuilderDialog.cpp
@@ -147,6 +149,11 @@ target_link_libraries(MotionStudio
     Qt6::Network
     nlohmann_json::nlohmann_json
 )
+
+# The robot API without the app window: motionstudio-server project.mstudio
+add_executable(motionstudio-server src/server/main.cpp)
+target_link_libraries(motionstudio-server PRIVATE MotionStudioCore)
+target_compile_definitions(motionstudio-server PRIVATE MS_VERSION="${PROJECT_VERSION}")
 
 # Headless regression tests for the core: cmake -DMOTIONSTUDIO_TESTS=ON,
 # then ./build/MotionStudioTests (exit code 0 = all passed)

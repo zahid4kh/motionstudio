@@ -39,6 +39,7 @@ const Topic kTopics[] = {
     {"recipes",     "Recipes",                "copy"},
     {"runtime",     "Running & Debugging",    "activity"},
     {"io",          "External I/O (Modbus)",  "network"},
+    {"api",         "Robot API (code)",       "square-terminal"},
     {"exchange",    "Import & Export",        "download"},
     {"shortcuts",   "Keyboard & Mouse",       "keyboard"},
 };

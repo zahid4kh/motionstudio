@@ -10,3 +10,7 @@ CLAUDE.md
 packaging
 AUTOMATION_PLAN.md
 templates/tutorial.md
+.gradle/
+.kotlin/
+__pycache__/
+*.egg-info/

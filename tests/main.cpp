@@ -19,6 +19,7 @@
 #include "serialization/ProjectSerializer.h"
 #include "scene/Interference.h"
 #include "io/ModbusServer.h"
+#include "io/ApiServer.h"
 #include "scene/SceneMerge.h"
 #include "scene/Assembly.h"
 #include "io/RobotFormats.h"
@@ -2298,6 +2299,320 @@ bool hasWarning(const robot::Analysis& a, const char* text) {
     return false;
 }
 } // namespace
+
+// ── Motions commanded from outside (API) ─────────────────────────────────────
+
+namespace {
+// Runs scans until the motion is finished (or `limit` seconds pass)
+AutomationEngine::MotionStatus runMotion(AutomationEngine& e, int id, double limit = 30,
+                                         const std::function<void()>& each = {}) {
+    for (int i = 0; i < int(limit / 0.016) && !e.motionStatus(id).finished(); ++i) {
+        e.scan(0.016);
+        if (each) each();
+    }
+    return e.motionStatus(id);
+}
+} // namespace
+
+TEST(apiMotionsMoveJointsAndLines) {
+    robot::Spec s = robot::defaultSpec(robot::Kind::Articulated);
+    SceneGraph g;
+    const robot::Built b = robot::build(g, s);
+    AutomationEngine e(&g);
+    using MK = AutomationEngine::MotionKind;
+    using MS = AutomationEngine::MotionState;
+    QString code, err;
+    {   // Not running yet
+        AutomationEngine::MotionRequest r;
+        r.joints[b.joints[0]] = 10;
+        CHECK(e.submitMotion(r, &code, &err) == 0 && code == "not_running");
+    }
+    CHECK(e.start(nullptr));
+
+    // Joint move: both joints arrive together
+    AutomationEngine::MotionRequest jm;
+    jm.joints[b.joints[0]] = 30;
+    jm.joints[b.joints[1]] = -10;
+    jm.speed = 50;
+    const int m1 = e.submitMotion(jm, &code, &err);
+    CHECK(m1 > 0);
+    CHECK(e.motionStatus(m1).state == MS::Queued);
+    bool together = true;
+    const auto st1 = runMotion(e, m1, 30, [&] {
+        const double p0 = std::fabs(g.getJoint(b.joints[0])->currentValue) / 30.0;
+        const double p1 = std::fabs(g.getJoint(b.joints[1])->currentValue) / 10.0;
+        if (std::fabs(p0 - p1) > 0.02) together = false;
+    });
+    CHECK(st1.state == MS::Done && st1.progress == 1);
+    CHECK(together);
+    CHECK_NEAR(g.getJoint(b.joints[0])->currentValue, 30, 1e-3);
+    CHECK_NEAR(g.getJoint(b.joints[1])->currentValue, -10, 1e-3);
+
+    // Out of limits is refused at once
+    AutomationEngine::MotionRequest bad;
+    bad.joints[b.joints[1]] = 1000;
+    CHECK(e.submitMotion(bad, &code, &err) == 0 && code == "out_of_limits");
+    CHECK(err.contains("A2"));
+
+    // Straight line 100 mm down in the robot's frame, keeping the orientation
+    const QMatrix4x4 start = kin::toolFrame(g, b.tcp);
+    AutomationEngine::MotionRequest lm;
+    lm.kind = MK::Linear;
+    lm.tool = b.tcp;
+    lm.goal.frameId = b.root;
+    lm.goal.relative = true;
+    lm.goal.y = -0.1;
+    lm.speed = 0.2;
+    const int m2 = e.submitMotion(lm, &code, &err);
+    CHECK(m2 > 0);
+    double offLine = 0;
+    const auto st2 = runMotion(e, m2, 30, [&] {
+        const QVector3D d = (kin::toolFrame(g, b.tcp).column(3) - start.column(3)).toVector3D();
+        offLine = std::max(offLine, double(std::hypot(d.x(), d.z())));
+    });
+    CHECK(st2.state == MS::Done);
+    const QMatrix4x4 end = kin::toolFrame(g, b.tcp);
+    CHECK_NEAR(end(1, 3), start(1, 3) - 0.1, 1e-4);
+    CHECK_NEAR(end(0, 3), start(0, 3), 1e-4);
+    CHECK(offLine < 1e-3);
+    for (int c = 0; c < 3; ++c) CHECK_NEAR(end.column(c).toVector3D().distanceToPoint(start.column(c).toVector3D()), 0, 1e-3);
+
+    // Absolute goal with only x given keeps y, z and the orientation
+    AutomationEngine::MotionRequest ax = lm;
+    ax.goal = {};
+    ax.goal.frameId = b.root;
+    ax.goal.x = double(end(0, 3)) - 0.05;
+    const int m3 = e.submitMotion(ax);
+    CHECK(runMotion(e, m3).state == MS::Done);
+    CHECK_NEAR(kin::toolFrame(g, b.tcp)(0, 3), end(0, 3) - 0.05, 1e-4);
+    CHECK_NEAR(kin::toolFrame(g, b.tcp)(1, 3), end(1, 3), 1e-4);
+
+    // Motions sharing joints queue in order; the tool frame comes back
+    const QMatrix4x4 before = kin::toolFrame(g, b.tcp);
+    AutomationEngine::MotionRequest up = lm, down = lm;
+    up.goal.y = 0.05;
+    down.goal.y = -0.05;
+    down.kind = MK::JointsToPose;
+    down.speed = 100;
+    const int q1 = e.submitMotion(up), q2 = e.submitMotion(down);
+    e.scan(0.016);
+    CHECK(e.motionStatus(q1).state == MS::Running && e.motionStatus(q2).state == MS::Queued);
+    CHECK(runMotion(e, q2).state == MS::Done);
+    CHECK(e.motionStatus(q1).state == MS::Done);
+    CHECK(kin::toolFrame(g, b.tcp).column(3).toVector3D().distanceToPoint(before.column(3).toVector3D()) < 2e-4);
+
+    // Out of reach fails when it starts, and cancels the queued motion behind it
+    AutomationEngine::MotionRequest far = lm;
+    far.goal.y = 5.0;
+    const int f1 = e.submitMotion(far), f2 = e.submitMotion(up);
+    e.scan(0.016);
+    CHECK(e.motionStatus(f1).state == MS::Failed && e.motionStatus(f1).code == "out_of_reach");
+    CHECK(e.motionStatus(f2).state == MS::Cancelled);
+    CHECK(e.motionStatus(f2).error.contains("earlier"));
+
+    // A 4-joint chain refuses an orientation
+    AutomationEngine::MotionRequest rot = lm;
+    rot.chain = {b.joints[0], b.joints[1], b.joints[2], b.joints[3]};
+    rot.goal.rx = 10;
+    CHECK(e.submitMotion(rot, &code, &err) == 0 && code == "bad_request");
+
+    // Cancel stops a running motion where it is; reset cancels the rest
+    AutomationEngine::MotionRequest swing;
+    swing.joints[b.joints[0]] = -60;
+    const int c1 = e.submitMotion(swing);
+    for (int i = 0; i < 10; ++i) e.scan(0.016);
+    CHECK(e.motionStatus(c1).state == MS::Running);
+    e.cancelMotion(c1);
+    CHECK(e.motionStatus(c1).state == MS::Cancelled);
+    for (int i = 0; i < 20; ++i) e.scan(0.016);
+    const float held = g.getJoint(b.joints[0])->currentValue;
+    e.scan(0.016);
+    CHECK(held > -60 && held < 30);
+    CHECK_NEAR(g.getJoint(b.joints[0])->currentValue, held, 1e-6);
+    const int r1 = e.submitMotion(up);
+    e.stop();
+    CHECK(e.motionStatus(r1).state == MS::Cancelled && e.motionStatus(r1).code == "reset");
+    CHECK(e.motionStatus(9999).code == "not_found");
+}
+
+namespace {
+// A line-based JSON client for the API server test: sends a request and
+// processes events until the reply with its id arrives
+struct ApiClient {
+    QTcpSocket sock;
+    QByteArray buf;
+    int next = 1;
+    bool connectTo(quint16 port) {
+        sock.connectToHost(QHostAddress::LocalHost, port);
+        QElapsedTimer t;
+        t.start();
+        while (sock.state() != QAbstractSocket::ConnectedState && t.elapsed() < 2000)
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+        return sock.state() == QAbstractSocket::ConnectedState;
+    }
+    int send(const QString& method, const QJsonObject& params = {}) {
+        const int id = next++;
+        sock.write(QJsonDocument(QJsonObject{{"id", id}, {"method", method}, {"params", params}}).toJson(QJsonDocument::Compact) + '\n');
+        sock.flush();
+        return id;
+    }
+    QJsonObject reply(int id, int timeoutMs = 20000) {
+        QElapsedTimer t;
+        t.start();
+        while (t.elapsed() < timeoutMs) {
+            int nl;
+            while ((nl = buf.indexOf('\n')) >= 0) {
+                const QJsonObject o = QJsonDocument::fromJson(buf.left(nl)).object();
+                buf.remove(0, nl + 1);
+                if (o.value("id").toInt() == id) return o;
+                pending.push_back(o);
+            }
+            for (size_t i = 0; i < pending.size(); ++i)
+                if (pending[i].value("id").toInt() == id) { QJsonObject o = pending[i]; pending.erase(pending.begin() + long(i)); return o; }
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+            buf += sock.readAll();
+        }
+        return {};
+    }
+    QJsonObject call(const QString& method, const QJsonObject& params = {}) { return reply(send(method, params)); }
+    std::vector<QJsonObject> pending;
+};
+QString errorCode(const QJsonObject& r) { return r.value("error").toObject().value("code").toString(); }
+QJsonObject result(const QJsonObject& r) { return r.value("result").toObject(); }
+} // namespace
+
+TEST(apiMotionsLeaveAStretchedArm) {
+    // A humanoid's arm hangs straight at home, the elbow at its limit: a
+    // singular pose that inverse kinematics has to nudge out of
+    SceneGraph g;
+    const humanoid::Built h = humanoid::build(g, humanoid::defaultSpec());
+    AutomationEngine e(&g);
+    CHECK(e.start(nullptr));
+    const QMatrix4x4 start = kin::toolFrame(g, h.rightHand);
+    AutomationEngine::MotionRequest up;
+    up.kind = AutomationEngine::MotionKind::Linear;
+    up.tool = h.rightHand;
+    up.goal.frameId = h.root;
+    up.goal.relative = true;
+    up.goal.y = 0.05;
+    const int m = e.submitMotion(up);
+    const auto st = runMotion(e, m);
+    CHECK(st.state == AutomationEngine::MotionState::Done);
+    if (!st.error.isEmpty()) std::printf("  %s\n", qPrintable(st.error));
+    CHECK_NEAR(kin::toolFrame(g, h.rightHand)(1, 3), start(1, 3) + 0.05, 1e-4);
+    CHECK_NEAR(kin::toolFrame(g, h.rightHand)(0, 3), start(0, 3), 1e-4);
+}
+
+TEST(apiServerFindsRobots) {
+    SceneGraph g;
+    const robot::Built a = robot::build(g, robot::defaultSpec(robot::Kind::Articulated));
+    const robot::Built b = robot::build(g, robot::defaultSpec(robot::Kind::Scara));
+    humanoid::Spec hs = humanoid::defaultSpec();
+    const humanoid::Built h = humanoid::build(g, hs);
+    // A cell holding a turntable next to the first robot
+    const int cell = g.addObject("Cell", PrimitiveType::ImportedMesh);
+    g.setParent(a.root, cell);
+    const int table = addBox(g, "Table", {1, 0, 0}, {1, .1f, 1}, cell);
+    Joint tj;
+    tj.parentBodyId = cell;
+    tj.childBodyId = table;
+    tj.pivot = {1, 0, 0};
+    tj.continuous = true;
+    g.addActuatorForJoint(g.addJoint(tj));
+
+    const auto robots = ApiServer::findRobots(g);
+    CHECK(robots.size() == 4);
+    std::map<QString, ApiServer::Robot> byPath;
+    for (const auto& r : robots) byPath[r.path] = r;
+    const QString ap = ApiServer::pathOf(g, a.root), bp = ApiServer::pathOf(g, b.root);
+    CHECK(ap.startsWith("Cell/"));
+    CHECK(byPath.count(ap) && byPath[ap].root == a.root && byPath[ap].tools == std::vector<int>{a.tcp});
+    CHECK(byPath.count(bp) && byPath[bp].tools == std::vector<int>{b.tcp});
+    // The humanoid is one machine with both hands as tools
+    const auto& hr = byPath[ApiServer::pathOf(g, h.root)];
+    CHECK(hr.root == h.root);
+    CHECK(hr.joints.size() == h.motors.size());
+    CHECK(hr.tools.size() == 2);
+    CHECK(byPath.count("Cell/Table") && byPath["Cell/Table"].joints.size() == 1);
+    CHECK(byPath["Cell/Table"].tools.empty());   // not the robot's TCP next to it
+}
+
+TEST(apiServerAnswersOverTcp) {
+    SceneGraph g;
+    const robot::Built b = robot::build(g, robot::defaultSpec(robot::Kind::Articulated));
+    const humanoid::Built h = humanoid::build(g, humanoid::defaultSpec());
+    Signal start;
+    start.name = "Start"; start.kind = SignalKind::Input; start.type = SignalType::Bool;
+    g.addSignal(start);
+    Signal echo;
+    echo.name = "Started"; echo.kind = SignalKind::Derived; echo.type = SignalType::Bool; echo.expression = "Start";
+    g.addSignal(echo);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+    const QString rname = g.getObject(b.root)->name, hname = g.getObject(h.root)->name;
+
+    SimulationEngine sim(&g);
+    sim.setSpeedFactor(20);
+    ApiServer server(&g, &sim);
+    CHECK(server.start(0));
+    ApiClient c;
+    CHECK(c.connectTo(server.port()));
+
+    QJsonObject r = c.call("hello");
+    CHECK(result(r).value("protocol").toInt() == ApiServer::kProtocol);
+    CHECK(result(r).value("units").toObject().value("length").toString() == "mm");
+    CHECK(errorCode(c.call("no.such")) == "unknown_method");
+    CHECK(c.call("scene.robots").value("result").toArray().size() == 2);
+
+    // Joint and tool queries work before the simulation runs
+    r = c.call("robot.info", {{"robot", rname}});
+    CHECK(result(r).value("joints").toArray().size() >= 6);
+    CHECK(result(r).value("tools").toArray().first().toObject().value("name").toString() == "TCP");
+    const QJsonObject p0 = result(c.call("tool.pose", {{"robot", rname}}));
+    CHECK_NEAR(p0.value("x").toDouble(), worldPos(g, b.tcp).x() * 1000, 1e-2);
+    CHECK(!sim.isActive());
+    // The humanoid has two hands: the tool must be named
+    CHECK(errorCode(c.call("tool.pose", {{"robot", hname}})) == "ambiguous");
+    CHECK(c.call("tool.pose", {{"robot", hname}, {"tool", "Right Hand TCP"}}).contains("result"));
+
+    // A straight line 100 mm up starts the simulation and answers when done
+    r = c.call("tool.moveL", {{"robot", rname}, {"target", QJsonObject{{"y", 100}}}, {"relative", true}, {"speed", 400}});
+    CHECK(result(r).value("state").toString() == "done");
+    CHECK(sim.isRunning());
+    const QJsonObject p1 = result(c.call("tool.pose", {{"robot", rname}}));
+    CHECK_NEAR(p1.value("y").toDouble(), p0.value("y").toDouble() + 100, 0.05);
+    CHECK_NEAR(p1.value("x").toDouble(), p0.value("x").toDouble(), 0.05);
+
+    // Without waiting: the motion's id, then motion.wait; joints in degrees
+    r = c.call("robot.moveJoints", {{"robot", rname}, {"joints", QJsonObject{{"A1", 20}}}, {"wait", false}});
+    const int motion = result(r).value("motion").toInt();
+    CHECK(motion > 0);
+    CHECK(result(c.call("motion.wait", {{"motion", motion}})).value("state").toString() == "done");
+    CHECK_NEAR(result(c.call("robot.joints", {{"robot", rname}})).value("A1").toDouble(), 20, 1e-3);
+
+    // Errors carry a code and a message
+    r = c.call("robot.moveJoints", {{"robot", rname}, {"joints", QJsonObject{{"A2", 999}}}});
+    CHECK(errorCode(r) == "out_of_limits");
+    CHECK(errorCode(c.call("tool.moveL", {{"robot", rname}, {"target", QJsonObject{{"x", 9000}}}})) == "out_of_reach");
+    CHECK(errorCode(c.call("robot.info", {{"robot", "Nobody"}})) == "not_found");
+    CHECK(errorCode(c.call("tool.moveL", {{"robot", rname}, {"target", QJsonObject{{"q", 1}}}})) == "bad_request");
+
+    // Signals: set an input, wait for a condition, read the derived signal
+    CHECK(c.call("signal.set", {{"name", "Start"}, {"value", true}}).contains("result"));
+    CHECK(c.call("signal.waitUntil", {{"condition", "Started"}, {"timeout", 5}}).contains("result"));
+    CHECK(result(c.call("signal.get", {{"name", "Started"}})).value("value").toDouble() == 1);
+    CHECK(errorCode(c.call("signal.set", {{"name", "Started"}, {"value", 1}})) == "bad_request");
+    CHECK(errorCode(c.call("signal.waitUntil", {{"condition", "Start == 0"}, {"timeout", 0.2}})) == "timeout");
+    const double t0 = result(c.call("sim.state")).value("time").toDouble();
+    CHECK(result(c.call("sim.wait", {{"seconds", 0.5}})).value("time").toDouble() >= t0 + 0.5 - 1e-6);
+
+    // Reset answers what still waits
+    const int moving = result(c.call("robot.moveJoints", {{"robot", rname}, {"joints", QJsonObject{{"A1", -150}}},
+                                                          {"speed", 5}, {"wait", false}})).value("motion").toInt();
+    const int waitId = c.send("motion.wait", {{"motion", moving}});
+    c.call("sim.reset");
+    CHECK(errorCode(c.reply(waitId)) == "reset");
+    CHECK(!sim.isActive());
+}
 
 TEST(robotBuilderArticulatedMatchesDimensions) {
     robot::Spec s = robot::defaultSpec(robot::Kind::Articulated);

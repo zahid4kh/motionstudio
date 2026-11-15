@@ -156,6 +156,7 @@ QLabel#fieldLabel { color: @muted@; }
 QLabel#nameTitle { font-size: 15px; font-weight: 700; }
 QLabel#mono { font-family: monospace; font-weight: 600; }
 QLabel#monoHint { font-family: monospace; color: @muted@; font-size: 11px; }
+QPlainTextEdit#code { font-family: monospace; font-size: 12px; }
 QLabel#axisX { color: @axisx@; font-weight: 700; font-size: 11px; }
 QLabel#axisY { color: @axisy@; font-weight: 700; font-size: 11px; }
 QLabel#axisZ { color: @axisz@; font-weight: 700; font-size: 11px; }

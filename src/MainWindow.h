@@ -77,6 +77,8 @@ private:
     void openHumanoidBuilder();
     void openRobotAnalyzer(int objectId);
     void updateModbusLabel();
+    void openRobotApi();
+    void updateApiLabel();
     void buildStatusBar();
     QDockWidget* makeDock(const QString& title, const QString& icon, QWidget* content,
                           Qt::DockWidgetArea area, QWidget* headerTools = nullptr);
@@ -101,6 +103,8 @@ private:
     class TimelineBar* m_timeline  = nullptr;
     class ModbusServer* m_modbus   = nullptr;
     QLabel*  m_modbusLabel = nullptr;   // status bar: server state
+    class ApiServer* m_api = nullptr;   // the robot API (Tools › Robot API)
+    QLabel*  m_apiLabel = nullptr;
     class RobotAnalyzerDialog* m_robotAnalyzer = nullptr;   // Tools › Analyze Robot (non-modal, reused)
     QDockWidget*      m_hierarchyDock  = nullptr;
     QDockWidget*      m_propertiesDock = nullptr;

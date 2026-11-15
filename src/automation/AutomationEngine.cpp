@@ -543,6 +543,7 @@ bool AutomationEngine::start(QStringList* errors) {
 }
 
 void AutomationEngine::stop() {
+    cancelMotions({}, "the simulation was reset", "reset");
     m_active = false;
     m_symbols.clear();
     m_slotIndex.clear();
@@ -613,8 +614,9 @@ void AutomationEngine::scan(double dt) {
     for (auto& d : m_derived)
         m_cur[size_t(d.slot)] = coerceSignal(d.type, d.ex.eval(ctx()));
 
-    // 3. Sequences
+    // 3. Sequences, then motions commanded from outside
     for (auto& s : m_sequences) advanceSequence(s);
+    advanceMotions();
 
     // 4. Bindings
     applyBindings();
@@ -836,9 +838,9 @@ void AutomationEngine::startOperation(SeqRt& seq, OpRt& op) {
             op.planned = false;
             op.part    = -1;
             const Pose* pose = m_scene->getPose(op.def.poseId);
-            op.tool  = op.def.toolId != -1 ? op.def.toolId : pose ? pose->toolId : -1;
-            op.chain = kin::chainTo(*m_scene, op.tool);
-            if (!pose || op.chain.empty()) break;
+            op.path.tool  = op.def.toolId != -1 ? op.def.toolId : pose ? pose->toolId : -1;
+            op.path.chain = kin::chainTo(*m_scene, op.path.tool);
+            if (!pose || op.path.chain.empty()) break;
             op.status.detail = QString("→ %1 (linear)").arg(pose->name);
             planLinearMove(op);
             break;
@@ -863,16 +865,8 @@ bool AutomationEngine::operationFinished(OpRt& op) {
         }
         case OperationType::MoveToPose: {
             if (!op.planned && !planPoseMove(op)) return false;
-            double worst = 1.0;
             bool all = true;
-            for (size_t i = 0; i < op.poseTargets.size(); ++i) {
-                const ActuatorRt& ax = m_actuators[size_t(op.poseTargets[i].first)];
-                double tgt  = op.poseTargets[i].second;
-                double span = std::fabs(tgt - op.poseFrom[i]);
-                if (span > 0) worst = std::min(worst, 1.0 - std::fabs(tgt - ax.st.pos) / span);
-                if (!inPosition(ax, tgt)) all = false;
-            }
-            op.status.progress = worst;
+            op.status.progress = jointProgress(op.poseTargets, op.poseFrom, &all);
             return all;
         }
         case OperationType::Run:
@@ -935,26 +929,27 @@ int AutomationEngine::partFor(OpRt& op, const Pose& pose) {
     return op.part;
 }
 
-void AutomationEngine::commandJoints(OpRt& op, const std::map<int, float>& values, double pct) {
+void AutomationEngine::commandJoints(const std::map<int, double>& values, double pct,
+                                     std::vector<std::pair<int, double>>& targets, std::vector<double>& from) {
     // Synchronized point-to-point: every axis uses the slowest axis's
     // profile scaled by its own distance, so all arrive together.
     double leaderV = 0, leaderA = 0, leaderD = 0, leaderT = 0;
+    const size_t first = targets.size();
     for (auto& [jid, val] : values) {
-        const Motor* m = m_scene->motorForJoint(jid);
-        if (!m) continue;
-        auto it = m_actIndexByMotor.find(m->id);
-        if (it == m_actIndexByMotor.end()) continue;
-        ActuatorRt& ax = m_actuators[size_t(it->second)];
+        const int idx = actIndexForJoint(jid);
+        if (idx < 0) continue;
+        ActuatorRt& ax = m_actuators[size_t(idx)];
         double tgt = clampToLimits(ax, val);
         double d   = std::fabs(tgt - ax.st.pos);
         double v   = std::fabs(ax.defVelocity) * pct / 100.0;
         double acc = ax.defAccel * pct / 100.0;
         double T   = motion::moveTime(d, v, acc);
         if (T > leaderT) { leaderT = T; leaderV = v; leaderA = acc; leaderD = d; }
-        op.poseTargets.emplace_back(it->second, tgt);
-        op.poseFrom.push_back(ax.st.pos);
+        targets.emplace_back(idx, tgt);
+        from.push_back(ax.st.pos);
     }
-    for (auto& [idx, tgt] : op.poseTargets) {
+    for (size_t i = first; i < targets.size(); ++i) {
+        auto& [idx, tgt] = targets[i];
         ActuatorRt& ax = m_actuators[size_t(idx)];
         double d = std::fabs(tgt - ax.st.pos);
         double k = leaderD > 0 ? d / leaderD : 0.0;
@@ -966,15 +961,39 @@ void AutomationEngine::commandJoints(OpRt& op, const std::map<int, float>& value
     }
 }
 
+double AutomationEngine::jointProgress(const std::vector<std::pair<int, double>>& targets,
+                                       const std::vector<double>& from, bool* arrived) const {
+    double worst = 1.0;
+    bool all = true;
+    for (size_t i = 0; i < targets.size(); ++i) {
+        const ActuatorRt& ax = m_actuators[size_t(targets[i].first)];
+        const double tgt  = targets[i].second;
+        const double span = std::fabs(tgt - from[i]);
+        if (span > 0) worst = std::min(worst, 1.0 - std::fabs(tgt - ax.st.pos) / span);
+        if (!inPosition(ax, tgt)) all = false;
+    }
+    if (arrived) *arrived = all;
+    return std::clamp(worst, 0.0, 1.0);
+}
+
+int AutomationEngine::actIndexForJoint(int jointId) const {
+    const Motor* m = m_scene->motorForJoint(jointId);
+    if (!m) return -1;
+    auto it = m_actIndexByMotor.find(m->id);
+    return it != m_actIndexByMotor.end() ? it->second : -1;
+}
+
 bool AutomationEngine::planPoseMove(OpRt& op) {
     const Pose* pose = m_scene->getPose(op.def.poseId);
     if (!pose) { op.planned = true; return true; }
-    std::map<int, float> values;
+    std::map<int, float> solved;
+    std::map<int, double> values;
     if (pose->isRelative()) {
         const int part = partFor(op, *pose);
         if (part == -1) return false;
         const kin::Result r = kin::solveFor(*m_scene, *pose, pose->toolId,
-                                            kin::poseTarget(*m_scene, *pose, part), &values);
+                                            kin::poseTarget(*m_scene, *pose, part), &solved);
+        values.insert(solved.begin(), solved.end());
         if (!r.reached && r.positionError > 1e-3f)
             m_warnings << QString("%1: %2 is out of reach on %3 (%4 mm off)")
                               .arg(op.def.name.isEmpty() ? QString("MoveToPose") : op.def.name, pose->name)
@@ -983,77 +1002,68 @@ bool AutomationEngine::planPoseMove(OpRt& op) {
         const SceneObject* p = m_scene->getObject(part);
         op.status.detail = QString("→ %1 on %2").arg(pose->name, p ? p->name : QString("?"));
     } else {
-        values = pose->jointValues;
+        values.insert(pose->jointValues.begin(), pose->jointValues.end());
     }
     const double pct = op.velocity.isEmpty() ? 100.0 : std::max(0.1, op.velocity.eval(ctx()));
-    commandJoints(op, values, pct);
+    commandJoints(values, pct, op.poseTargets, op.poseFrom);
     op.planned = true;
     return true;
 }
 
 bool AutomationEngine::planLinearMove(OpRt& op) {
     const Pose* pose = m_scene->getPose(op.def.poseId);
-    if (!pose || op.chain.empty()) { op.planned = true; return true; }
+    if (!pose || op.path.chain.empty()) { op.planned = true; return true; }
     if (pose->isRelative()) {
         const int part = partFor(op, *pose);
         if (part == -1) return false;
-        op.pathTo = kin::poseTarget(*m_scene, *pose, part);
+        op.path.to = kin::poseTarget(*m_scene, *pose, part);
         const SceneObject* p = m_scene->getObject(part);
         op.status.detail = QString("→ %1 on %2 (linear)").arg(pose->name, p ? p->name : QString("?"));
     } else {
         std::map<int, float> values(pose->jointValues.begin(), pose->jointValues.end());
-        op.pathTo = kin::toolFrameAt(*m_scene, op.tool, values);
+        op.path.to = kin::toolFrameAt(*m_scene, op.path.tool, values);
     }
-    op.pathFrom = kin::toolFrame(*m_scene, op.tool);
-    op.pathOrient = kin::canOrient(op.chain);
     const double speed = op.velocity.isEmpty() ? 0.25 : std::max(1e-4, std::fabs(op.velocity.eval(ctx())));
-    const double dist = (op.pathTo.column(3) - op.pathFrom.column(3)).toVector3D().length();
-    double angle = 0;
-    if (op.pathOrient) {
-        const QQuaternion qa = kin::targetFrom(op.pathFrom).orientation, qb = kin::targetFrom(op.pathTo).orientation;
-        angle = 2.0 * std::acos(std::min(1.0, std::fabs(double(QQuaternion::dotProduct(qa, qb)))));
-    }
-    // A radian of tool rotation takes as long as 0.3 m of travel
-    op.pathDuration = std::max(dist, 0.3 * angle) / speed;
-    op.pathStart = m_time;
+    beginPath(op.path, speed);
     op.pathWarned = false;
     op.planned = true;
     return true;
 }
 
+void AutomationEngine::beginPath(LinearPath& p, double speed) {
+    p.from = kin::toolFrame(*m_scene, p.tool);
+    p.orient = kin::canOrient(p.chain);
+    const double dist = (p.to.column(3) - p.from.column(3)).toVector3D().length();
+    double angle = 0;
+    if (p.orient) {
+        const QQuaternion qa = kin::targetFrom(p.from).orientation, qb = kin::targetFrom(p.to).orientation;
+        angle = 2.0 * std::acos(std::min(1.0, std::fabs(double(QQuaternion::dotProduct(qa, qb)))));
+    }
+    // A radian of tool rotation takes as long as 0.3 m of travel
+    p.duration = std::max(dist, 0.3 * angle) / speed;
+    p.start = m_time;
+}
+
 // One scan of a straight-line tool move: the next point on the path (eased
 // in and out), inverse kinematics from the current joint values, and the
-// chain's actuators set straight to the solution. To a pose on a part, the
-// end of the path follows the part, so the tool meets it where it is.
-bool AutomationEngine::stepLinearMove(OpRt& op) {
-    if (op.chain.empty()) return true;
-    if (!op.planned && !planLinearMove(op)) return false;
-    if (const Pose* pose = m_scene->getPose(op.def.poseId);
-        pose && pose->isRelative() && m_scene->getObject(op.part) && !m_scene->isParked(op.part))
-        op.pathTo = kin::poseTarget(*m_scene, *pose, op.part);
-    const double T = op.pathDuration;
-    const double s = T > 1e-9 ? std::clamp((m_time + m_dt - op.pathStart) / T, 0.0, 1.0) : 1.0;
+// chain's actuators set straight to the solution.
+double AutomationEngine::stepPath(LinearPath& p, kin::Result* result) {
+    const double T = p.duration;
+    const double s = T > 1e-9 ? std::clamp((m_time + m_dt - p.start) / T, 0.0, 1.0) : 1.0;
     const double k = s * s * (3 - 2 * s);
-    op.status.progress = s;
 
     kin::Target t;
-    const kin::Target a = kin::targetFrom(op.pathFrom), b = kin::targetFrom(op.pathTo);
+    const kin::Target a = kin::targetFrom(p.from), b = kin::targetFrom(p.to);
     t.position = a.position + (b.position - a.position) * float(k);
     t.orientation = QQuaternion::slerp(a.orientation, b.orientation, float(k));
-    t.useOrientation = op.pathOrient;
-    const kin::Result r = kin::solve(*m_scene, op.tool, op.chain, t, 30);
-    if (!r.reached && !op.pathWarned && r.positionError > 1e-3f) {
-        op.pathWarned = true;
-        m_warnings << QString("%1: tool path out of reach (%2 mm off)")
-                          .arg(op.def.name.isEmpty() ? QString("MoveL") : op.def.name)
-                          .arg(double(r.positionError) * 1000, 0, 'f', 1);
-    }
-    for (int jid : op.chain) {
-        const Motor* m = m_scene->motorForJoint(jid);
-        auto it = m ? m_actIndexByMotor.find(m->id) : m_actIndexByMotor.end();
+    t.useOrientation = p.orient;
+    const kin::Result r = kin::solve(*m_scene, p.tool, p.chain, t, 30);
+    if (result) *result = r;
+    for (int jid : p.chain) {
+        const int idx = actIndexForJoint(jid);
         const Joint* j = m_scene->getJoint(jid);
-        if (it == m_actIndexByMotor.end() || !j) continue;
-        ActuatorRt& ax = m_actuators[size_t(it->second)];
+        if (idx < 0 || !j) continue;
+        ActuatorRt& ax = m_actuators[size_t(idx)];
         const double v = clampToLimits(ax, j->currentValue);
         ax.st.vel  = m_dt > 0 ? (v - ax.st.pos) / m_dt : 0.0;
         ax.st.pos  = v;
@@ -1062,13 +1072,30 @@ bool AutomationEngine::stepLinearMove(OpRt& op) {
         ax.active  = true;
         ax.direct  = true;
     }
-    if (s < 1.0) return false;
-    for (int jid : op.chain)
-        if (const Motor* m = m_scene->motorForJoint(jid)) {
-            auto it = m_actIndexByMotor.find(m->id);
-            if (it != m_actIndexByMotor.end()) m_actuators[size_t(it->second)].st.vel = 0;
-        }
-    return true;
+    if (s >= 1.0)
+        for (int jid : p.chain)
+            if (const int idx = actIndexForJoint(jid); idx >= 0) m_actuators[size_t(idx)].st.vel = 0;
+    return s;
+}
+
+// To a pose on a part, the end of the path follows the part, so the tool
+// meets it where it is.
+bool AutomationEngine::stepLinearMove(OpRt& op) {
+    if (op.path.chain.empty()) return true;
+    if (!op.planned && !planLinearMove(op)) return false;
+    if (const Pose* pose = m_scene->getPose(op.def.poseId);
+        pose && pose->isRelative() && m_scene->getObject(op.part) && !m_scene->isParked(op.part))
+        op.path.to = kin::poseTarget(*m_scene, *pose, op.part);
+    kin::Result r;
+    const double s = stepPath(op.path, &r);
+    op.status.progress = s;
+    if (!r.reached && !op.pathWarned && r.positionError > 1e-3f) {
+        op.pathWarned = true;
+        m_warnings << QString("%1: tool path out of reach (%2 mm off)")
+                          .arg(op.def.name.isEmpty() ? QString("MoveL") : op.def.name)
+                          .arg(double(r.positionError) * 1000, 0, 'f', 1);
+    }
+    return s >= 1.0;
 }
 
 void AutomationEngine::attach(int gripperId, int partId) {
@@ -1239,6 +1266,345 @@ void AutomationEngine::integrate(double dt) {
             j->currentValue = float(a.st.pos);
     }
     m_scene->applyCouplings();
+}
+
+
+// ── Motions commanded from outside ───────────────────────────────────────────
+
+namespace {
+constexpr double kReachTol  = 1e-3;   // m: a tool goal or path point this far off is out of reach
+constexpr double kAngleTol  = 0.5;    // degrees
+constexpr size_t kKeepFinished = 2000;
+
+QString jointLabel(const SceneGraph& g, int jid) {
+    if (const Motor* m = g.motorForJoint(jid)) return m->name;
+    const Joint* j = g.getJoint(jid);
+    return j ? j->name : QString("joint %1").arg(jid);
+}
+QString unitOf(const Joint& j) { return j.type == JointType::Prismatic ? " mm" : "°"; }
+double shown(const Joint& j, double v) { return j.type == JointType::Prismatic ? v * 1000 : v; }
+
+QMatrix4x4 rotationXyz(double rx, double ry, double rz) {
+    QMatrix4x4 m;
+    m.rotate(float(rx), 1, 0, 0);
+    m.rotate(float(ry), 0, 1, 0);
+    m.rotate(float(rz), 0, 0, 1);
+    return m;
+}
+QMatrix4x4 rotationOnly(QMatrix4x4 m) {
+    m.setColumn(3, {0, 0, 0, 1});
+    return m;
+}
+} // namespace
+
+QString AutomationEngine::motionStateName(MotionState s) {
+    switch (s) {
+        case MotionState::Queued:    return "queued";
+        case MotionState::Running:   return "running";
+        case MotionState::Done:      return "done";
+        case MotionState::Failed:    return "failed";
+        case MotionState::Cancelled: return "cancelled";
+    }
+    return {};
+}
+
+int AutomationEngine::submitMotion(const MotionRequest& r, QString* code, QString* error) {
+    auto reject = [&](const QString& c, const QString& e) {
+        if (code) *code = c;
+        if (error) *error = e;
+        return 0;
+    };
+    if (!m_active) return reject("not_running", "the simulation is not running");
+    MotionRt m;
+    m.req = r;
+    if (r.kind == MotionKind::Joints) {
+        if (r.joints.empty()) return reject("bad_request", "no joints to move");
+        if (r.speed < 0 || r.speed > 100) return reject("bad_request", "speed must be between 0 and 100 %");
+        for (auto& [jid, v] : r.joints) {
+            const Joint* j = m_scene->getJoint(jid);
+            if (!j) return reject("not_found", QString("joint %1 does not exist").arg(jid));
+            const int idx = actIndexForJoint(jid);
+            if (idx < 0) return reject("not_actuated", QString("%1 has no actuator").arg(jointLabel(*m_scene, jid)));
+            const ActuatorRt& a = m_actuators[size_t(idx)];
+            if (!std::isfinite(v)) return reject("bad_request", QString("%1: the value is not a number").arg(a.name));
+            if (!r.relativeJoints && a.limited && (v < a.limMin - kPosTol || v > a.limMax + kPosTol))
+                return reject("out_of_limits", QString("%1 = %2%3 is outside its range %4 … %5%3")
+                                  .arg(a.name).arg(shown(*j, v)).arg(unitOf(*j))
+                                  .arg(shown(*j, a.limMin)).arg(shown(*j, a.limMax)));
+            m.joints.push_back(jid);
+        }
+    } else {
+        if (!m_scene->getObject(r.tool)) return reject("not_found", "the tool does not exist");
+        if (m.req.chain.empty()) m.req.chain = kin::chainTo(*m_scene, r.tool);
+        if (m.req.chain.empty())
+            return reject("not_actuated", QString("no actuated joint moves %1").arg(m_scene->getObject(r.tool)->name));
+        for (int jid : m.req.chain)
+            if (actIndexForJoint(jid) < 0)
+                return reject("not_actuated", QString("%1 has no actuator").arg(jointLabel(*m_scene, jid)));
+        if (r.goal.hasRotation() && !kin::canOrient(m.req.chain))
+            return reject("bad_request", QString("%1 joints can't hold an orientation (it takes 6): give only "
+                                                 "x, y and z").arg(m.req.chain.size()));
+        if (r.goal.frameId != -1 && !m_scene->getObject(r.goal.frameId))
+            return reject("not_found", "the reference frame does not exist");
+        if (r.kind == MotionKind::Linear ? r.speed < 0 : (r.speed < 0 || r.speed > 100))
+            return reject("bad_request", r.kind == MotionKind::Linear ? QString("speed must be positive")
+                                                                      : QString("speed must be between 0 and 100 %"));
+        m.joints = m.req.chain;
+    }
+    if (m.req.label.isEmpty())
+        m.req.label = r.kind == MotionKind::Linear ? "moveL" : r.kind == MotionKind::JointsToPose ? "moveJ" : "moveJoints";
+    m.id = m_nextMotionId++;
+    m_motions.push_back(std::move(m));
+    return m_motions.back().id;
+}
+
+bool AutomationEngine::hasMotion(int id) const {
+    if (m_finishedMotions.count(id)) return true;
+    return std::any_of(m_motions.begin(), m_motions.end(), [&](const MotionRt& m) { return m.id == id; });
+}
+
+AutomationEngine::MotionStatus AutomationEngine::motionStatus(int id) const {
+    for (const MotionRt& m : m_motions)
+        if (m.id == id) return m.status;
+    auto it = m_finishedMotions.find(id);
+    if (it != m_finishedMotions.end()) return it->second;
+    MotionStatus st;
+    st.state = MotionState::Failed;
+    st.code  = "not_found";
+    st.error = QString("there is no motion %1").arg(id);
+    return st;
+}
+
+void AutomationEngine::holdJoints(const std::vector<int>& joints) {
+    for (int jid : joints) {
+        const int idx = actIndexForJoint(jid);
+        if (idx < 0) continue;
+        ActuatorRt& a = m_actuators[size_t(idx)];
+        // Brake at the actuator's own deceleration, then hold
+        a.mode     = ActuatorMode::Speed;
+        a.velocity = 0;
+        a.accel    = a.defAccel;
+        a.direct   = false;
+    }
+}
+
+void AutomationEngine::finishMotion(MotionRt& m, MotionState state, const QString& code, const QString& error) {
+    const bool wasRunning = m.status.state == MotionState::Running;
+    m.status.state = state;
+    m.status.code  = code;
+    m.status.error = error;
+    if (state == MotionState::Done) m.status.progress = 1;
+    else if (wasRunning) holdJoints(m.joints);
+    m_finishedMotions[m.id] = m.status;
+    while (m_finishedMotions.size() > kKeepFinished) m_finishedMotions.erase(m_finishedMotions.begin());
+}
+
+void AutomationEngine::cancelMotion(int id, const QString& why) {
+    for (size_t i = 0; i < m_motions.size(); ++i) {
+        if (m_motions[i].id != id) continue;
+        finishMotion(m_motions[i], MotionState::Cancelled, "cancelled", why.isEmpty() ? QString("cancelled") : why);
+        m_motions.erase(m_motions.begin() + long(i));
+        return;
+    }
+}
+
+int AutomationEngine::cancelMotions(const std::set<int>& joints, const QString& why, const QString& code) {
+    int n = 0;
+    for (size_t i = 0; i < m_motions.size();) {
+        MotionRt& m = m_motions[i];
+        const bool hit = joints.empty() || std::any_of(m.joints.begin(), m.joints.end(),
+                                                       [&](int j) { return joints.count(j) > 0; });
+        if (!hit) { ++i; continue; }
+        finishMotion(m, MotionState::Cancelled, code, why.isEmpty() ? QString("stopped") : why);
+        m_motions.erase(m_motions.begin() + long(i));
+        ++n;
+    }
+    return n;
+}
+
+bool AutomationEngine::runActuator(int jointId, double speed, QString* error) {
+    const int idx = m_active ? actIndexForJoint(jointId) : -1;
+    if (idx < 0) {
+        if (error) *error = m_active ? QString("%1 has no actuator").arg(jointLabel(*m_scene, jointId))
+                                     : QString("the simulation is not running");
+        return false;
+    }
+    cancelMotions({jointId}, "the actuator was set to run at a speed");
+    ActuatorRt& a = m_actuators[size_t(idx)];
+    a.mode     = ActuatorMode::Speed;
+    a.velocity = speed;
+    a.accel    = a.defAccel;
+    a.active   = true;
+    return true;
+}
+
+QMatrix4x4 AutomationEngine::goalFrame(int tool, const CartesianGoal& g) const {
+    const QMatrix4x4 cur = kin::toolFrame(*m_scene, tool);
+    const QMatrix4x4 ref = g.frameId != -1 ? kin::toolFrame(*m_scene, g.frameId) : QMatrix4x4();
+    if (!g.relative) {
+        const QMatrix4x4 local = ref.inverted() * cur;
+        const Transform t = SceneGraph::toTransform(local);
+        QMatrix4x4 out;
+        out.translate(float(g.x.value_or(t.position.x())), float(g.y.value_or(t.position.y())),
+                      float(g.z.value_or(t.position.z())));
+        out *= g.hasRotation() ? rotationXyz(g.rx.value_or(t.rotation.x()), g.ry.value_or(t.rotation.y()),
+                                             g.rz.value_or(t.rotation.z()))
+                               : rotationOnly(local);
+        return ref * out;
+    }
+    const QVector3D d(float(g.x.value_or(0)), float(g.y.value_or(0)), float(g.z.value_or(0)));
+    const QMatrix4x4 rot = rotationXyz(g.rx.value_or(0), g.ry.value_or(0), g.rz.value_or(0));
+    if (g.toolAxes) {
+        QMatrix4x4 off;
+        off.translate(d);
+        return cur * off * rot;
+    }
+    // Along the reference frame's axes, turning about the tool's own point
+    const QMatrix4x4 refRot = rotationOnly(ref);
+    QMatrix4x4 out;
+    out.translate(cur.column(3).toVector3D() + refRot.map(d));
+    out *= refRot * rot * refRot.inverted() * rotationOnly(cur);
+    return out;
+}
+
+bool AutomationEngine::compileExpression(const QString& source, expr::Expression& out, QString* error) const {
+    if (!m_active) {
+        if (error) *error = "the simulation is not running";
+        return false;
+    }
+    return out.compile(source, [this](const QString& n) { return m_slotIndex.value(n, -1); }, error);
+}
+
+bool AutomationEngine::startMotion(MotionRt& m) {
+    auto fail = [&](const QString& code, const QString& err) {
+        finishMotion(m, MotionState::Failed, code, err);
+        return false;
+    };
+    const MotionRequest& r = m.req;
+    if (r.kind == MotionKind::Joints) {
+        std::map<int, double> values;
+        for (auto& [jid, v] : r.joints) {
+            const ActuatorRt& a = m_actuators[size_t(actIndexForJoint(jid))];
+            const double t = r.relativeJoints ? a.st.pos + v : v;
+            if (a.limited && (t < a.limMin - kPosTol || t > a.limMax + kPosTol)) {
+                const Joint& j = *m_scene->getJoint(jid);
+                return fail("out_of_limits", QString("%1 would go to %2%3, outside its range %4 … %5%3")
+                                                 .arg(a.name).arg(shown(j, t)).arg(unitOf(j))
+                                                 .arg(shown(j, a.limMin)).arg(shown(j, a.limMax)));
+            }
+            values[jid] = t;
+        }
+        commandJoints(values, r.speed > 0 ? r.speed : 100.0, m.targets, m.from);
+    } else {
+        const QMatrix4x4 goal = goalFrame(r.tool, r.goal);
+        const bool orient = kin::canOrient(r.chain);
+        // Solve the end first, so a goal out of reach fails now instead of
+        // half-way. A joint move may end in any configuration, so when the
+        // solution from where the joints are misses (a stretched arm is
+        // singular), it tries other starting points too.
+        std::map<int, float> saved;
+        for (auto& [jid, j] : m_scene->allJoints()) saved[jid] = j.currentValue;
+        kin::Target t = kin::targetFrom(goal);
+        t.useOrientation = orient;
+        auto missed = [&](const kin::Result& x) {
+            return x.positionError > kReachTol || (orient && x.angleError > kAngleTol);
+        };
+        kin::Result res = kin::solve(*m_scene, r.tool, r.chain, t, 200);
+        std::map<int, double> solved;
+        for (int jid : r.chain) solved[jid] = m_scene->getJoint(jid)->currentValue;
+        if (missed(res) && r.kind == MotionKind::JointsToPose) {
+            quint32 seed = 12345;
+            auto rnd = [&] { seed = seed * 1664525u + 1013904223u; return double(seed >> 8) / double(1u << 24); };
+            double bestTravel = 1e30;
+            for (int attempt = 0; attempt < 24; ++attempt) {
+                // Mostly near the current pose, more spread out later
+                const double spread = 0.15 + 0.85 * attempt / 23.0;
+                for (int jid : r.chain) {
+                    Joint* j = m_scene->getJoint(jid);
+                    const ActuatorRt& a = m_actuators[size_t(actIndexForJoint(jid))];
+                    const double lo = a.limited ? a.limMin : saved[jid] - 180, hi = a.limited ? a.limMax : saved[jid] + 180;
+                    const double v = saved[jid] + (lo + rnd() * (hi - lo) - saved[jid]) * spread;
+                    j->currentValue = float(std::clamp(v, lo, hi));
+                }
+                m_scene->applyCouplings();
+                const kin::Result x = kin::solve(*m_scene, r.tool, r.chain, t, 200);
+                if (missed(x) && !missed(res)) continue;
+                double travel = 0;
+                for (int jid : r.chain) travel += std::fabs(m_scene->getJoint(jid)->currentValue - saved[jid]);
+                const bool better = missed(res) ? x.positionError + x.angleError * 1e-3 < res.positionError + res.angleError * 1e-3
+                                                : travel < bestTravel;
+                if (!better) continue;
+                res = x;
+                if (!missed(x)) bestTravel = travel;
+                for (int jid : r.chain) solved[jid] = m_scene->getJoint(jid)->currentValue;
+            }
+        }
+        for (auto& [jid, v] : saved) m_scene->getJoint(jid)->currentValue = v;
+        m_scene->applyCouplings();
+        if (missed(res))
+            return fail("out_of_reach", orient && res.positionError <= kReachTol
+                                            ? QString("the target orientation is out of reach (%1° off)").arg(double(res.angleError), 0, 'f', 1)
+                                            : QString("the target is out of reach (%1 mm off)").arg(double(res.positionError) * 1000, 0, 'f', 1));
+        if (r.kind == MotionKind::JointsToPose) {
+            commandJoints(solved, r.speed > 0 ? r.speed : 100.0, m.targets, m.from);
+        } else {
+            m.path.tool  = r.tool;
+            m.path.chain = r.chain;
+            m.path.to    = goal;
+            beginPath(m.path, r.speed > 0 ? r.speed : 0.25);
+        }
+    }
+    m.status.state = MotionState::Running;
+    return true;
+}
+
+void AutomationEngine::advanceMotions() {
+    std::set<int> busy;   // joints of earlier unfinished motions: later ones that share one wait
+    for (size_t i = 0; i < m_motions.size();) {
+        MotionRt& m = m_motions[i];
+        const bool blocked = std::any_of(m.joints.begin(), m.joints.end(), [&](int j) { return busy.count(j) > 0; });
+        busy.insert(m.joints.begin(), m.joints.end());
+        bool finished = false;
+        if (m.status.state == MotionState::Queued && !blocked && !startMotion(m)) {
+            finished = true;
+            // Later motions that share a joint with it were planned from where it would end
+            const std::set<int> joints(m.joints.begin(), m.joints.end());
+            const QString why = QString("an earlier %1 failed: %2").arg(m.req.label, m.status.error);
+            for (size_t k = i + 1; k < m_motions.size();) {
+                MotionRt& o = m_motions[k];
+                if (std::any_of(o.joints.begin(), o.joints.end(), [&](int j) { return joints.count(j) > 0; })) {
+                    finishMotion(o, MotionState::Cancelled, "cancelled", why);
+                    m_motions.erase(m_motions.begin() + long(k));
+                } else {
+                    ++k;
+                }
+            }
+        } else if (m.status.state == MotionState::Running) {
+            if (m.req.kind == MotionKind::Linear) {
+                kin::Result res;
+                const double s = stepPath(m.path, &res);
+                m.status.progress = s;
+                if (res.positionError > kReachTol || (m.path.orient && res.angleError > kAngleTol)) {
+                    finishMotion(m, MotionState::Failed, "out_of_reach",
+                                 QString("the straight line leaves the reach of the robot at %1 % (%2 mm off)")
+                                     .arg(int(s * 100)).arg(double(res.positionError) * 1000, 0, 'f', 1));
+                    finished = true;
+                } else if (s >= 1.0) {
+                    finishMotion(m, MotionState::Done);
+                    finished = true;
+                }
+            } else {
+                bool arrived = false;
+                m.status.progress = jointProgress(m.targets, m.from, &arrived);
+                if (arrived) {
+                    finishMotion(m, MotionState::Done);
+                    finished = true;
+                }
+            }
+        }
+        if (finished) m_motions.erase(m_motions.begin() + long(i));
+        else ++i;
+    }
 }
 
 // ── Runtime queries ──────────────────────────────────────────────────────────

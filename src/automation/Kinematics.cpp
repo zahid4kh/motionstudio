@@ -129,8 +129,9 @@ Result solve(SceneGraph& scene, int toolId, const std::vector<int>& chain, const
     double bestNorm = errorNorm(e);
     double lambda = 0.05;
 
-    for (int it = 0; it < maxIterations && n > 0; ++it) {
-        res.iterations = it + 1;
+    auto iterate = [&](int iterations) {
+    for (int it = 0; it < iterations && n > 0; ++it) {
+        ++res.iterations;
         const double posErr = std::sqrt(e[0] * e[0] + e[1] * e[1] + e[2] * e[2]);
         const double angErr = std::sqrt(e[3] * e[3] + e[4] * e[4] + e[5] * e[5]) / rotWeight;
         if (posErr < posTol && (!target.useOrientation || angErr < angTol)) break;
@@ -188,6 +189,32 @@ Result solve(SceneGraph& scene, int toolId, const std::vector<int>& chain, const
             lambda *= 4;
             if (lambda > 10) break;
         }
+    }
+
+    };
+    iterate(maxIterations);
+
+    // Stalled short of the target: a stretched arm (an elbow straight at its
+    // limit) is singular, its gradient towards the target is zero. Nudge
+    // every joint a little towards the middle of its range and try again.
+    if (n > 0 && bestNorm > posTol * 10) {
+        const std::vector<double> before = best;
+        const double beforeNorm = bestNorm;
+        for (int i = 0; i < n; ++i) {
+            Joint* j = joints[size_t(i)];
+            const double v = best[size_t(i)];
+            double lo = std::min(j->limitMin, j->limitMax), hi = std::max(j->limitMin, j->limitMax);
+            if (j->type == JointType::Revolute && j->continuous) { lo = v - 180; hi = v + 180; }
+            const double step = std::min(j->type == JointType::Revolute ? 5.0 : 0.01, (hi - lo) * 0.05);
+            j->currentValue = float(std::clamp(v + (v < (lo + hi) / 2 ? step : -step), lo, hi));
+        }
+        // Solve again from the nudged pose; keep whichever ends closer
+        measure(e);
+        bestNorm = errorNorm(e);
+        for (int i = 0; i < n; ++i) best[size_t(i)] = joints[size_t(i)]->currentValue;
+        lambda = 0.05;
+        iterate(maxIterations);
+        if (bestNorm >= beforeNorm) { best = before; bestNorm = beforeNorm; }
     }
 
     for (int i = 0; i < n; ++i) joints[size_t(i)]->currentValue = float(best[size_t(i)]);

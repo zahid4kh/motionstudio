@@ -5,9 +5,12 @@
 #include <QStringList>
 #include <deque>
 #include <map>
+#include <optional>
+#include <set>
 #include <vector>
 #include "Automation.h"
 #include "Expression.h"
+#include "Kinematics.h"
 #include "MotionProfile.h"
 #include "../scene/Motor.h"
 #include "../scene/SceneQuery.h"
@@ -127,6 +130,67 @@ public:
     int  sourceCount(int sourceId) const;
     int  sinkCount(int sinkId) const;
 
+    // ── Motions commanded from outside (the API server) ─────────────────────
+    // A program asks for joints to move to values, or for a tool to go to a
+    // frame by a joint move or along a straight line. Motions that share a
+    // joint run one after another in the order they were submitted; the
+    // others run at the same time. A motion that fails cancels the queued
+    // ones that share a joint with it, as a robot program stops at a fault.
+    struct CartesianGoal {
+        int  frameId  = -1;        // the pose is in this object's unscaled frame; -1 = the world
+        bool relative = false;     // an offset from where the tool is when the motion starts
+        bool toolAxes = false;     // relative: along and about the tool's own axes, not frameId's
+        std::optional<double> x, y, z;      // m; absolute: a missing one keeps the tool's
+        std::optional<double> rx, ry, rz;   // degrees, Euler XYZ; absolute: all missing keeps the
+                                            // tool's orientation, some missing keep theirs
+        bool hasRotation() const { return rx || ry || rz; }
+    };
+    enum class MotionKind { Joints, JointsToPose, Linear };
+    struct MotionRequest {
+        MotionKind kind = MotionKind::Joints;
+        std::map<int, double> joints;   // Joints: joint id → target (deg or m)
+        bool relativeJoints = false;    // Joints: offsets from where the joints are at the start
+        int  tool = -1;                 // JointsToPose / Linear: the object whose frame moves
+        std::vector<int> chain;         // the joints that move it; empty = kin::chainTo(tool)
+        CartesianGoal goal;
+        // Joints / JointsToPose: % of each actuator's speed (0 < s ≤ 100, 0 = 100);
+        // Linear: tool speed in m/s (0 = 0.25)
+        double speed = 0;
+        QString label;                  // what to call it in messages ("moveL")
+    };
+    enum class MotionState { Queued, Running, Done, Failed, Cancelled };
+    struct MotionStatus {
+        MotionState state = MotionState::Queued;
+        double  progress = 0;           // 0..1
+        QString code;                   // Failed / Cancelled: out_of_reach, out_of_limits, cancelled, reset
+        QString error;
+        bool finished() const { return state == MotionState::Done || state == MotionState::Failed
+                                    || state == MotionState::Cancelled; }
+    };
+    static QString motionStateName(MotionState s);
+
+    // Checks the request and queues it; returns the motion's id (> 0), or 0
+    // with an error code (not_running, bad_request, not_actuated,
+    // out_of_limits) and message. Applies from the next scan.
+    int  submitMotion(const MotionRequest& r, QString* code = nullptr, QString* error = nullptr);
+    bool hasMotion(int id) const;
+    MotionStatus motionStatus(int id) const;
+    // Stops a queued or running motion; its joints brake and hold
+    void cancelMotion(int id, const QString& why = {});
+    // Cancels every unfinished motion that moves one of `joints` (every motion
+    // when empty); returns how many
+    int  cancelMotions(const std::set<int>& joints = {}, const QString& why = {},
+                       const QString& code = "cancelled");
+    // Runs an actuator in speed mode at `speed` (deg/s or m/s; 0 stops it),
+    // cancelling motions that move its joint
+    bool runActuator(int jointId, double speed, QString* error = nullptr);
+    // Where `goal` puts `tool` now (world frame, unscaled)
+    QMatrix4x4 goalFrame(int tool, const CartesianGoal& goal) const;
+    // Compiles a condition against this run's symbols, and evaluates it on
+    // this scan's values
+    bool   compileExpression(const QString& source, expr::Expression& out, QString* error = nullptr) const;
+    double evaluate(const expr::Expression& e) const { return e.eval(ctx()); }
+
 signals:
     void scanned();
 
@@ -148,6 +212,16 @@ private:
         int    slotBase = -1;   // pos, vel, target, inPosition, moving, atMin, atMax, active
     };
 
+    // A tool moving along a straight line: from → to over `duration`
+    // seconds from `start`, eased in and out
+    struct LinearPath {
+        int              tool = -1;
+        std::vector<int> chain;
+        QMatrix4x4       from, to;
+        bool             orient = false;
+        double           start = 0, duration = 0;
+    };
+
     struct OpRt {
         Operation def;
         expr::Expression target, velocity, duration, condition, startCond;
@@ -165,15 +239,19 @@ private:
         // (-1 while a sensor has not seen one) and whether the move is planned
         int              part = -1;
         bool             planned = false;
-        // MoveL: tool path from → to over `duration` seconds from pathStart;
-        // to a part, `pathTo` follows the part every scan
-        int              tool = -1;
-        double           pathStart = 0;
-        std::vector<int> chain;
-        QMatrix4x4       pathFrom, pathTo;
-        bool             pathOrient = false;
-        double           pathDuration = 0;
+        // MoveL: the tool path; to a part, `path.to` follows the part every scan
+        LinearPath       path;
         bool             pathWarned = false;
+    };
+
+    struct MotionRt {
+        int           id = -1;
+        MotionRequest req;
+        MotionStatus  status;
+        std::vector<int> joints;                           // every joint it moves
+        std::vector<std::pair<int, double>> targets;       // Joints / JointsToPose: (actIdx, target)
+        std::vector<double> from;
+        LinearPath    path;
     };
 
     struct SeqRt {
@@ -253,7 +331,21 @@ private:
     bool planPoseMove(OpRt& op);
     // MoveL: starts the tool path; false while waiting for a part
     bool planLinearMove(OpRt& op);
-    void commandJoints(OpRt& op, const std::map<int, float>& values, double percent);
+    // Synchronized point-to-point move of the joints to `values` at `percent`
+    // of their speed; fills (actIdx, target) and the start positions
+    void commandJoints(const std::map<int, double>& values, double percent,
+                       std::vector<std::pair<int, double>>& targets, std::vector<double>& from);
+    double jointProgress(const std::vector<std::pair<int, double>>& targets, const std::vector<double>& from,
+                         bool* arrived) const;
+    void beginPath(LinearPath& p, double speed);
+    // Puts the chain's actuators at the next point of the path; returns the
+    // path parameter (1 at the end)
+    double stepPath(LinearPath& p, kin::Result* result);
+    void advanceMotions();
+    bool startMotion(MotionRt& m);
+    void finishMotion(MotionRt& m, MotionState state, const QString& code = {}, const QString& error = {});
+    void holdJoints(const std::vector<int>& joints);
+    int  actIndexForJoint(int jointId) const;
     double clampToLimits(const ActuatorRt& a, double v) const;
     bool inPosition(const ActuatorRt& a, double target) const;
 
@@ -277,6 +369,10 @@ private:
     std::vector<SinkRt>     m_sinks;
     bool                    m_structureChanged = false;
     std::map<int, int>      m_actIndexByMotor;
+
+    std::vector<MotionRt>                 m_motions;      // queued and running, in submit order
+    std::map<int, MotionStatus>           m_finishedMotions;
+    int                                   m_nextMotionId = 1;   // never reset, so ids stay unique
 
     std::vector<std::pair<int, double>>   m_pendingWrites;
     std::map<int, std::deque<double>>     m_inputQueue;

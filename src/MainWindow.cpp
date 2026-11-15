@@ -2,6 +2,8 @@
 #include "ui/TimelineBar.h"
 #include "ui/ModbusDialog.h"
 #include "io/ModbusServer.h"
+#include "io/ApiServer.h"
+#include "ui/ApiServerDialog.h"
 #include "scene/SceneMerge.h"
 #include "io/RobotFormats.h"
 #include "serialization/ProjectSerializer.h"
@@ -316,6 +318,8 @@ void MainWindow::buildToolsMenu() {
     }
     tools->addSeparator();
     tools->addAction(Theme::icon("network"), "External &I/O (Modbus TCP)…", this, &MainWindow::openExternalIo);
+    tools->addAction(Theme::icon("square-terminal"), "Robot &API (Python, C++, Kotlin)…", this, &MainWindow::openRobotApi)
+        ->setToolTip("Control robots and stations from your own programs");
 }
 
 void MainWindow::openRobotBuilder() {
@@ -385,6 +389,20 @@ void MainWindow::updateModbusLabel() {
     m_modbusLabel->show();
 }
 
+void MainWindow::openRobotApi() {
+    ApiServerDialog dlg(m_scene, m_api, this);
+    dlg.exec();
+    updateApiLabel();
+}
+
+void MainWindow::updateApiLabel() {
+    if (!m_api->isListening()) { m_apiLabel->hide(); return; }
+    const int n = m_api->clientCount();
+    m_apiLabel->setText(n ? QString("API :%1 · %2 program%3").arg(m_api->port()).arg(n).arg(n == 1 ? "" : "s")
+                          : QString("API :%1").arg(m_api->port()));
+    m_apiLabel->show();
+}
+
 void MainWindow::buildHelpMenu() {
     auto* help = m_menuBar->addMenu("&Help");
     const struct { const char* icon; const char* text; const char* topic; } topics[] = {
@@ -399,6 +417,7 @@ void MainWindow::buildHelpMenu() {
         {"bot",          "Robot &Builder && Analyzer", "robots"},
         {"activity",     "Running && &Debugging",      "runtime"},
         {"network",      "External &I/O (Modbus)",     "io"},
+        {"square-terminal", "Robot &API (code)",       "api"},
         {"download",     "&Import && Export",          "exchange"},
         {"keyboard",     "&Keyboard && Mouse",         "shortcuts"},
     };
@@ -665,6 +684,14 @@ void MainWindow::buildStatusBar() {
     connect(m_modbus, &ModbusServer::clientsChanged, this, &MainWindow::updateModbusLabel);
     ModbusDialog::restore(m_modbus);
     updateModbusLabel();
+    m_apiLabel = new QLabel;
+    m_apiLabel->setToolTip("Programs can control the model through the robot API (Tools › Robot API)");
+    m_apiLabel->hide();
+    statusBar()->addPermanentWidget(m_apiLabel);
+    m_api = new ApiServer(m_scene, m_sim, this);
+    connect(m_api, &ApiServer::clientsChanged, this, &MainWindow::updateApiLabel);
+    ApiServerDialog::restore(m_api);
+    updateApiLabel();
     statusBar()->showMessage("Ready — open a project or add objects to get started");
 }
 
