@@ -83,7 +83,7 @@ QString kotlinCode(const Example& e) {
     const QString port = e.port == ApiServer::kDefaultPort ? QString() : QString("port = %1").arg(e.port);
     const QString t = e.tool.isEmpty() ? "robot" : "tool";
     std::vector<std::pair<QString, QString>> l = {
-        {"// <MotionStudio source>/api/kotlin: ./gradlew publishToMavenLocal", ""},
+        {"// Maven Central: implementation(\"io.github.zahid4kh:motionstudio:0.1.0\")", ""},
         {"import io.motionstudio.MotionStudio", ""}, {"", ""},
         {QString("fun main() = MotionStudio.connect(%1).use { studio ->").arg(port), ""},
         {QString("    val robot = studio.robot(%1)").arg(quote(e.robot)), ""}};
