@@ -24,7 +24,7 @@ with ms.connect() as studio:
 |---|---|---|
 | Python 3.8+ | [python/](python/) | `pip install ./python` |
 | C++17 | [cpp/](cpp/) | `add_subdirectory(cpp)` + `target_link_libraries(app PRIVATE motionstudio::motionstudio)` |
-| Kotlin / JVM 17+ | [kotlin/](kotlin/) | `./gradlew publishToMavenLocal` → `io.motionstudio:motionstudio:0.1.0` |
+| Kotlin / JVM 17+ | [kotlin/](kotlin/) | `implementation("io.github.zahid4kh:motionstudio:0.1.0")` from Maven Central |
 
 ## What to connect to
 

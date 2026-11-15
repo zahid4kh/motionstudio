@@ -2,9 +2,11 @@
 
 Control MotionStudio robots and stations from Kotlin, or any JVM language (JVM 17+). It has no runtime dependencies.
 
-```sh
-./gradlew publishToMavenLocal     # then: implementation("io.motionstudio:motionstudio:0.1.0") with mavenLocal()
+```kotlin
+dependencies { implementation("io.github.zahid4kh:motionstudio:0.1.0") }   // from Maven Central
 ```
+
+Or build it from this folder: `./gradlew publishToMavenLocal`, then add `mavenLocal()` to your repositories.
 
 ```kotlin
 import io.motionstudio.MotionStudio
@@ -60,3 +62,12 @@ Errors are `MotionStudioException` (`code`, `message`), with the subclasses `Not
 ./gradlew runExample -Pexample=Square          # or TwoMotions, HumanoidWave (start a server first)
 ./gradlew test                                 # starts ../../build/motionstudio-server (or $MOTIONSTUDIO_SERVER)
 ```
+
+## Publishing to Maven Central
+
+The group `io.github.zahid4kh` is the Central Portal namespace. To release:
+
+1. Raise `version` in `build.gradle.kts`. A published version can never be changed.
+2. Set the signing key once in `~/.gradle/gradle.properties`: `signing.gnupg.keyName=<gpg key fingerprint>`. Its public key must be on a keyserver (`gpg --keyserver keyserver.ubuntu.com --send-keys <fingerprint>`).
+3. `./gradlew centralBundle` builds `build/distributions/motionstudio-<version>-bundle.zip`: the jar, sources, javadoc, POM and Gradle module, each signed and with checksums.
+4. At central.sonatype.com › Publish Component, upload the zip, wait for *Validated*, then press **Publish**.

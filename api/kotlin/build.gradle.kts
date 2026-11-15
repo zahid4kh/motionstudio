@@ -2,13 +2,15 @@
 //   ./gradlew build          library jar
 //   ./gradlew test           live tests (start build/motionstudio-server of the repository)
 //   ./gradlew runExample -Pexample=Square
+//   ./gradlew centralBundle  signed bundle for Maven Central (build/distributions/…-bundle.zip)
 plugins {
     kotlin("jvm") version "2.4.21"
     `java-library`
     `maven-publish`
+    signing
 }
 
-group = "io.motionstudio"
+group = "io.github.zahid4kh"
 version = "0.1.0"
 
 repositories { mavenCentral() }
@@ -41,8 +43,70 @@ tasks.register<JavaExec>("runExample") {
     mainClass.set("examples.${project.findProperty("example") ?: "Square"}Kt")
 }
 
-java { withSourcesJar() }
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
 
 publishing {
-    publications { create<MavenPublication>("maven") { from(components["java"]) } }
+    publications {
+        create<MavenPublication>("maven") {
+            from(components["java"])
+            pom {
+                name.set("MotionStudio robot API")
+                description.set("Control the robots and stations of a MotionStudio scene from Kotlin or Java: straight-line and joint moves, taught poses, signals.")
+                url.set("https://github.com/zahid4kh/motionstudio")
+                licenses {
+                    license {
+                        name.set("MIT License")
+                        url.set("https://opensource.org/licenses/MIT")
+                    }
+                }
+                developers {
+                    developer {
+                        id.set("zahid4kh")
+                        name.set("Zahid Khalilov")
+                        url.set("https://github.com/zahid4kh")
+                    }
+                }
+                scm {
+                    url.set("https://github.com/zahid4kh/motionstudio")
+                    connection.set("scm:git:https://github.com/zahid4kh/motionstudio.git")
+                    developerConnection.set("scm:git:ssh://git@github.com/zahid4kh/motionstudio.git")
+                }
+            }
+        }
+    }
+    // Maven Central takes a zip of a Maven repository layout: built here, uploaded by hand
+    // at central.sonatype.com › Publish Component.
+    repositories { maven { name = "staging"; url = uri(layout.buildDirectory.dir("staging")) } }
+}
+
+// Signs with the gpg command and its agent: pass -Psigning.gnupg.keyName=<key id>
+// (or put it in ~/.gradle/gradle.properties).
+signing {
+    useGpgCmd()
+    sign(publishing.publications["maven"])
+}
+tasks.withType<Sign>().configureEach {
+    onlyIf { gradle.taskGraph.hasTask(":centralBundle") }
+    doFirst {
+        if (project.findProperty("signing.gnupg.keyName") == null)
+            throw GradleException("Set the signing key: -Psigning.gnupg.keyName=<gpg key id>")
+    }
+}
+
+tasks.register<Zip>("centralBundle") {
+    group = "publishing"
+    description = "Builds the signed bundle to upload to the Maven Central Portal"
+    val staging = layout.buildDirectory.dir("staging")
+    dependsOn("publishMavenPublicationToStagingRepository")
+    from(staging) {
+        include("${project.group.toString().replace('.', '/')}/${project.name}/${project.version}/**")
+    }
+    archiveFileName.set("${project.name}-${project.version}-bundle.zip")
+    destinationDirectory.set(layout.buildDirectory.dir("distributions"))
+}
+tasks.named("publishMavenPublicationToStagingRepository") {
+    doFirst { delete(layout.buildDirectory.dir("staging")) }
 }
