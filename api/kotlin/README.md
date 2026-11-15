@@ -3,7 +3,7 @@
 Control MotionStudio robots and stations from Kotlin, or any JVM language (JVM 17+). It has no runtime dependencies.
 
 ```kotlin
-dependencies { implementation("io.github.zahid4kh:motionstudio:0.1.0") }   // from Maven Central
+dependencies { implementation("io.github.zahid4kh:motionstudio:0.1.1") }   // from Maven Central
 ```
 
 Or build it from this folder: `./gradlew publishToMavenLocal`, then add `mavenLocal()` to your repositories.

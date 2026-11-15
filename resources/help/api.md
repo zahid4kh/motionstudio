@@ -12,7 +12,7 @@ The libraries are in the **api/** folder of the MotionStudio source:
 |---|---|---|
 | Python 3.8+ | `api/python` | `pip install api/python` |
 | C++17 | `api/cpp` | `add_subdirectory(api/cpp)`, link `motionstudio::motionstudio` |
-| Kotlin / JVM | `api/kotlin` | from Maven Central: `implementation("io.github.zahid4kh:motionstudio:0.1.0")` |
+| Kotlin / JVM | `api/kotlin` | from Maven Central: `implementation("io.github.zahid4kh:motionstudio:0.1.1")` |
 
 None of them needs anything else. To run programs without the app window (on a server, or in automated tests), use `motionstudio-server project.mstudio`. It can also build a robot from a preset: `motionstudio-server --robot "6-axis 0.9"`, or `--humanoid "Full-size"`.
 
