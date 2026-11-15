@@ -347,6 +347,7 @@ const std::map<QString, ApiServer::Handler>& ApiServer::handlers() {
         {"motion.status",    &ApiServer::motionStatus},
         {"motion.wait",      &ApiServer::motionWait},
         {"motion.cancel",    &ApiServer::motionCancel},
+        {"actuator.get",     &ApiServer::actuatorGet},
         {"actuator.run",     &ApiServer::actuatorRun},
         {"signal.list",      &ApiServer::signalList},
         {"signal.get",       &ApiServer::signalGet},
@@ -794,6 +795,12 @@ QJsonValue ApiServer::motionCancel(const QJsonObject& p, Call&) {
     if (!a->hasMotion(id)) fail("not_found", QString("there is no motion %1").arg(id));
     a->cancelMotion(id);
     return motionReply(id);
+}
+
+QJsonValue ApiServer::actuatorGet(const QJsonObject& p, Call&) {
+    const Joint& j = *m_scene->getJoint(jointByName(text(p, "name"), nullptr));
+    return QJsonObject{{"name", p.value("name")}, {"unit", j.type == JointType::Prismatic ? "mm" : "deg"},
+                       {"value", toApi(j, j.currentValue)}};
 }
 
 QJsonValue ApiServer::actuatorRun(const QJsonObject& p, Call&) {

@@ -2614,6 +2614,35 @@ TEST(apiServerAnswersOverTcp) {
     CHECK(!sim.isActive());
 }
 
+TEST(apiServerActuatorValueInMillimetres) {
+    SceneGraph g;
+    const int frame = g.addObject("Frame", PrimitiveType::ImportedMesh);
+    const int slide = g.addObject("Slide", PrimitiveType::ImportedMesh, frame);
+    Joint j;
+    j.type = JointType::Prismatic;
+    j.axis = {0, -1, 0};
+    j.parentBodyId = frame;
+    j.childBodyId = slide;
+    j.limitMin = 0;
+    j.limitMax = 0.4;
+    const int jid = g.addJoint(j);
+    g.getMotor(g.addActuatorForJoint(jid))->name = "Press";
+
+    SimulationEngine sim(&g);
+    sim.setSpeedFactor(20);
+    ApiServer server(&g, &sim);
+    CHECK(server.start(0));
+    ApiClient c;
+    CHECK(c.connectTo(server.port()));
+    CHECK(c.call("robot.moveJoints", {{"joints", QJsonObject{{"Press", 250}}}}).contains("result"));
+    // actuator.get answers in API units; the expression symbol stays in metres
+    const QJsonObject a = result(c.call("actuator.get", {{"name", "Press"}}));
+    CHECK(a.value("unit").toString() == "mm");
+    CHECK_NEAR(a.value("value").toDouble(), 250, 1e-3);
+    CHECK_NEAR(result(c.call("signal.get", {{"name", "Press.pos"}})).value("value").toDouble(), 0.25, 1e-6);
+    CHECK(errorCode(c.call("actuator.get", {{"name", "Nobody"}})) == "not_found");
+}
+
 TEST(robotBuilderArticulatedMatchesDimensions) {
     robot::Spec s = robot::defaultSpec(robot::Kind::Articulated);
     s.dims = {{"h0", .2}, {"h1", .5}, {"a1", .17}, {"a2", .6}, {"a3", .05}, {"d4", .55}, {"d6", .09}};

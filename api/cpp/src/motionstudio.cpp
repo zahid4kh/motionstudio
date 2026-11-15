@@ -340,7 +340,7 @@ Tool Robot::tool(const std::string& name, const std::string& base) const {
 // ── Actuator ────────────────────────────────────────────────────────────────
 
 double Actuator::value() const {
-    return conn_->call("signal.get", Json(Json::Object{{"name", name_ + ".pos"}}))["value"].number();
+    return conn_->call("actuator.get", Json(Json::Object{{"name", name_}}))["value"].number();
 }
 
 Motion Actuator::moveTo(double value, const MoveOptions& o) const {

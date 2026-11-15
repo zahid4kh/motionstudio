@@ -190,5 +190,35 @@ class HumanoidTests(unittest.TestCase):
         h.home()
 
 
+@unittest.skipUnless(os.path.exists(SERVER), "motionstudio-server is not built")
+class ActuatorTests(unittest.TestCase):
+    """A slide reports millimetres. The expression symbol stays in metres."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.server = Server(str(ROOT / "templates" / "indexing_table.mstudio"))
+        cls.studio = ms.connect(port=cls.server.port)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.studio.close()
+        cls.server.stop()
+
+    def test_slide_is_millimetres_and_table_is_degrees(self):
+        press, table = self.studio.actuator("Press"), self.studio.actuator("Table")
+        # actuator.get answers before the simulation runs; Press.pos does not
+        self.assertAlmostEqual(press.value, 0, delta=1e-6)
+        with self.assertRaises(ms.SimulationError):
+            _ = self.studio.signals["Press.pos"]
+        press.move_to(250)
+        table.move_to(90)
+        self.assertAlmostEqual(press.value, 250, delta=1e-3)
+        self.assertAlmostEqual(self.studio.signals["Press.pos"], 0.25, delta=1e-6)
+        self.assertAlmostEqual(table.value, 90, delta=1e-3)
+        self.assertAlmostEqual(self.studio.signals["Table.pos"], 90, delta=1e-3)
+        with self.assertRaises(ms.NotFoundError):
+            self.studio.actuator("Nobody").value
+
+
 if __name__ == "__main__":
     unittest.main()

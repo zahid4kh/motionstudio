@@ -115,6 +115,7 @@ private:
     QJsonValue motionStatus(const QJsonObject& p, Call& c);
     QJsonValue motionWait(const QJsonObject& p, Call& c);
     QJsonValue motionCancel(const QJsonObject& p, Call& c);
+    QJsonValue actuatorGet(const QJsonObject& p, Call& c);
     QJsonValue actuatorRun(const QJsonObject& p, Call& c);
     QJsonValue signalList(const QJsonObject& p, Call& c);
     QJsonValue signalGet(const QJsonObject& p, Call& c);

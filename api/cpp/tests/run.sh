@@ -12,3 +12,11 @@ pid=$!
 trap 'kill $pid 2>/dev/null' EXIT
 sleep 1
 "$here/build/live_test" $port
+
+# A slide must come back in millimetres, not the metres of its .pos symbol
+port=58124
+"$server" "$here/../../templates/indexing_table.mstudio" --port $port --speed 20 >/dev/null &
+pid2=$!
+trap 'kill $pid $pid2 2>/dev/null' EXIT
+sleep 1
+"$here/build/live_test" $port actuators

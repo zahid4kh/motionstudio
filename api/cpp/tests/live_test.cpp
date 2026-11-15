@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <string>
 #include <thread>
 
 namespace ms = motionstudio;
@@ -18,9 +19,28 @@ template <class E, class F> bool throws(F f) {
     return false;
 }
 
+// Indexing table: Press is a slide (mm) and Table turns (degrees).
+// The expression symbol Press.pos stays in metres, and only once the simulation runs.
+static int actuators(ms::Studio& studio) {
+    ms::Actuator press = studio.actuator("Press");
+    ms::Actuator table = studio.actuator("Table");
+    NEAR(press.value(), 0, 1e-6);
+    CHECK(throws<ms::SimulationError>([&] { studio.get("Press.pos"); }));
+    press.moveTo(250);
+    table.moveTo(90);
+    NEAR(press.value(), 250, 1e-3);
+    NEAR(studio.get("Press.pos"), 0.25, 1e-6);
+    NEAR(table.value(), 90, 1e-3);
+    NEAR(studio.get("Table.pos"), 90, 1e-3);
+    CHECK(throws<ms::NotFound>([&] { studio.actuator("Nobody").value(); }));
+    std::printf("%d checks, %d failures\n", checks, failures);
+    return failures == 0 ? 0 : 1;
+}
+
 int main(int argc, char** argv) {
     const int port = argc > 1 ? std::atoi(argv[1]) : ms::kDefaultPort;
     ms::Studio studio = ms::Studio::connect("localhost", port);
+    if (argc > 2 && std::string(argv[2]) == "actuators") return actuators(studio);
     studio.reset();
     ms::Robot robot = studio.robot();
     CHECK(robot.name() == "Robot");

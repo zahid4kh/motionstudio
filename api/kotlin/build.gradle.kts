@@ -33,6 +33,8 @@ tasks.test {
     useJUnitPlatform()
     systemProperty("motionstudio.server",
         System.getenv("MOTIONSTUDIO_SERVER") ?: rootDir.resolve("../../build/motionstudio-server").canonicalPath)
+    systemProperty("motionstudio.template",
+        rootDir.resolve("../../templates/indexing_table.mstudio").canonicalPath)
     testLogging { events("passed", "skipped", "failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
 }
 

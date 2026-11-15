@@ -89,6 +89,7 @@ Every move creates a **motion** with an id.
 | `scene.robots` | — | `[{name, path, joints: [names], tools: [names]}]` |
 | `robot.info` | `robot` | `{name, path, joints: [{name, type, unit, value, min, max \| continuous, speed, acceleration}], tools: [{name, path, joints}], poses: [names]}` |
 | `robot.joints` | `robot` | `{jointName: value, …}` |
+| `actuator.get` | `name` (any actuator in the scene) | `{name, unit, value}` (deg or mm) |
 | `tool.pose` | `robot?`, `tool?`, `frame?`, `base?` | a pose |
 
 ### Moves
@@ -125,7 +126,7 @@ Details for the moves:
 | Method | Params | Result |
 |---|---|---|
 | `signal.list` | — | `[{name, kind, type, writable, value}]` |
-| `signal.get` | `name` (any symbol: `Start`, `Box.count`, `J1.pos` …) | `{value}` |
+| `signal.get` | `name` (any symbol: `Start`, `Box.count`, `J1.pos` …) | `{value}` (in the automation's units: a prismatic `.pos` is in metres; use `actuator.get` for mm) |
 | `signal.set` | `name` (an Input or Internal signal), `value` (number or bool) | `{value}` (as coerced to the signal's type) |
 | `signal.waitUntil` | `condition` (an expression), `timeout?` | `{time}` once it is true |
 

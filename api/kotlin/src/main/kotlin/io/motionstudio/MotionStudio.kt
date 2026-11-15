@@ -342,7 +342,7 @@ class Robot internal constructor(internal val conn: Connection, info: Map<*, *>)
 /** One actuator by name, on any machine: a door, a turntable, a drive. */
 class Actuator internal constructor(private val conn: Connection, val name: String) {
     /** Its position (degrees or mm). */
-    val value: Double get() = conn.call("signal.get", mapOf("name" to "$name.pos")).num("value")
+    val value: Double get() = conn.call("actuator.get", mapOf("name" to name)).num("value")
 
     /** Moves to a position; [speed] is a percentage (default 100). */
     fun moveTo(value: Number, speed: Number? = null, wait: Boolean = true): Motion =

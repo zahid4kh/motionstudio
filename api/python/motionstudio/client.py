@@ -437,7 +437,7 @@ class Actuator:
     @property
     def value(self) -> float:
         """Its position (degrees or mm)."""
-        return float(self.studio.signals[self.name + ".pos"])
+        return float(self.studio._call("actuator.get", {"name": self.name})["value"])
 
     def move_to(self, value: Number, *, speed: Optional[Number] = None, wait: bool = True) -> Motion:
         """Moves to a position; ``speed`` is a percentage of its speed (default 100)."""
