@@ -559,6 +559,7 @@ void Viewport::paintGL() {
     drawSensorLabels(p);
     drawJointAxes(p);
     drawAxisPickBanner(p);
+    drawRouteLabels(p);
     drawMeasure(p);
     drawAssemble(p);
 }
@@ -1086,6 +1087,7 @@ void Viewport::drawPhysicsOverlays() {
 
     drawSensors();
     drawFootprints();
+    drawRoute();
     drawSectionOutline();
     glLineWidth(1.0f);
 }
@@ -1243,6 +1245,109 @@ void Viewport::drawFootprints() {
         drawWireLines(path, rgb(c.muted), QMatrix4x4(), 0.6f);
     }
     glLineWidth(1.5f);
+}
+
+// ── Floor points and routes ─────────────────────────────────────────────────
+
+bool Viewport::floorPoint(int x, int y, QPointF* xz) const {
+    const float aspect = float(m_vpW) / float(std::max(m_vpH, 1));
+    const float ndcX = (2.0f * x) / m_vpW - 1.0f, ndcY = 1.0f - (2.0f * y) / m_vpH;
+    QVector3D orig, dir;
+    m_camera.ray(ndcX, ndcY, aspect, &orig, &dir);
+    if (std::abs(dir.y()) < 1e-6f) return false;
+    const float t = -orig.y() / dir.y();
+    if (t <= 0) return false;
+    const QVector3D hit = orig + dir * t;
+    *xz = QPointF(hit.x(), hit.z());
+    return true;
+}
+
+void Viewport::beginFloorPick(const QString& banner) {
+    m_floorPick = true;
+    m_floorPickBanner = banner;
+    m_floorHover.reset();
+    setFocus();
+    setCursor(Qt::CrossCursor);
+    update();
+}
+
+void Viewport::endFloorPick() {
+    if (!m_floorPick) return;
+    m_floorPick = false;
+    m_floorHover.reset();
+    setCursor(Qt::ArrowCursor);
+    update();
+    emit floorPickEnded();
+}
+
+void Viewport::setRoute(const std::vector<QPointF>& points, std::optional<QPointF> from, std::optional<double> headingDeg) {
+    m_route = points;
+    m_routeFrom = from;
+    m_routeHeading = headingDeg;
+    update();
+}
+
+void Viewport::drawRoute() {
+    if (m_route.empty() && !m_floorHover) return;
+    const Theme::Colors& c = Theme::colors();
+    auto rgb = [](const QColor& q) { return QVector3D(q.redF(), q.greenF(), q.blueF()); };
+    const float y = 0.003f, r = 0.07f;
+    std::vector<float> line, rings;
+    auto ring = [&](const QPointF& p, float radius) {
+        for (int i = 0; i < 20; ++i) {
+            const float a0 = float(2 * M_PI * i / 20), a1 = float(2 * M_PI * (i + 1) / 20);
+            rings.insert(rings.end(), {float(p.x()) + radius * std::cos(a0), y, float(p.y()) + radius * std::sin(a0),
+                                       float(p.x()) + radius * std::cos(a1), y, float(p.y()) + radius * std::sin(a1)});
+        }
+    };
+    std::optional<QPointF> last = m_routeFrom;
+    for (const QPointF& p : m_route) {
+        if (last) line.insert(line.end(), {float(last->x()), y, float(last->y()), float(p.x()), y, float(p.y())});
+        ring(p, r);
+        last = p;
+    }
+    // The heading to face at the end
+    if (m_routeHeading && !m_route.empty()) {
+        const double h = qDegreesToRadians(*m_routeHeading);
+        const QPointF e = m_route.back();
+        const QPointF tip(e.x() + 0.35 * std::cos(h), e.y() - 0.35 * std::sin(h));
+        const QPointF l(tip.x() - 0.1 * std::cos(h - 0.5), tip.y() + 0.1 * std::sin(h - 0.5));
+        const QPointF rr(tip.x() - 0.1 * std::cos(h + 0.5), tip.y() + 0.1 * std::sin(h + 0.5));
+        for (const auto& [a, b] : {std::pair{e, tip}, std::pair{tip, l}, std::pair{tip, rr}})
+            line.insert(line.end(), {float(a.x()), y, float(a.y()), float(b.x()), y, float(b.y())});
+    }
+    glLineWidth(2.0f);
+    if (!line.empty()) drawWireLines(line, rgb(c.info), QMatrix4x4(), 0.9f);
+    if (!rings.empty()) drawWireLines(rings, rgb(c.info), QMatrix4x4(), 0.95f);
+    // Where a click would put the next point
+    if (m_floorPick && m_floorHover) {
+        rings.clear();
+        line.clear();
+        ring(*m_floorHover, r);
+        if (last) line.insert(line.end(), {float(last->x()), y, float(last->y()), float(m_floorHover->x()), y, float(m_floorHover->y())});
+        glLineWidth(1.0f);
+        drawWireLines(rings, rgb(c.warning), QMatrix4x4(), 0.8f);
+        if (!line.empty()) drawWireLines(line, rgb(c.muted), QMatrix4x4(), 0.6f);
+    }
+    glLineWidth(1.5f);
+}
+
+void Viewport::drawRouteLabels(QPainter& p) {
+    const Theme::Colors& c = Theme::colors();
+    for (size_t i = 0; i < m_route.size(); ++i) {
+        QPointF pt;
+        if (!toScreen(QVector3D(float(m_route[i].x()), 0, float(m_route[i].y())), &pt)) continue;
+        drawPill(p, pt + QPointF(8, -24), QString::number(i + 1), c.info);
+    }
+    if (!m_floorPick) return;
+    QString text = m_floorPickBanner;
+    if (m_floorHover)
+        text += QString("  ·  x %1  z %2 m").arg(m_floorHover->x(), 0, 'f', 2).arg(m_floorHover->y(), 0, 'f', 2);
+    QFont f = font(); f.setPointSize(9); f.setBold(true);
+    p.setFont(f);
+    const double pillW = QFontMetrics(f).horizontalAdvance(text) + 18;
+    const double x = std::max(8.0, std::min((m_vpW - pillW) / 2.0, m_viewCube->x() - pillW - 8.0));
+    drawPill(p, QPointF(x, 46), text, c.info);
 }
 
 void Viewport::drawSensorLabels(QPainter& p) {
@@ -1698,6 +1803,13 @@ void Viewport::mousePressEvent(QMouseEvent* e){
         return;
     }
 
+    if(m_floorPick && e->button()==Qt::LeftButton && !(e->modifiers()&Qt::AltModifier)){
+        QPointF xz;
+        if(floorPoint(e->pos().x(), e->pos().y(), &xz)) emit floorPointPicked(xz);
+        m_dragBtn = Qt::NoButton;
+        return;
+    }
+
     if(m_measureMode && e->button()==Qt::LeftButton && !(e->modifiers()&Qt::AltModifier)){
         const MeasurePoint p = measurePointAt(e->pos().x(), e->pos().y());
         if(p.valid){
@@ -1752,6 +1864,13 @@ void Viewport::mouseMoveEvent(QMouseEvent* e){
     QPoint pos   = e->pos();
     QPoint delta = pos - m_lastMouse;
     m_lastMouse  = pos;
+
+    if (m_floorPick) {
+        QPointF xz;
+        if (floorPoint(pos.x(), pos.y(), &xz)) m_floorHover = xz;
+        else m_floorHover.reset();
+        if (m_dragBtn == Qt::NoButton) { update(); return; }
+    }
 
     // Gizmo axis drag — highest priority, captures all LMB motion
     if (m_gizmoDragAxis != -1) {
@@ -1857,6 +1976,7 @@ void Viewport::wheelEvent(QWheelEvent* e){
 void Viewport::keyPressEvent(QKeyEvent* e){
     if(e->key() == Qt::Key_Escape){
         if(m_axisPickId != -1){ cancelAxisPick(); return; }
+        if(m_floorPick){ endFloorPick(); return; }
         if(m_measureMode){ setMeasureMode(false); return; }
         if(m_assembleMode){
             if(m_mateFirst.valid){ m_mateFirst = MatePick{}; m_assemblePanel->setStage(0); update(); }
@@ -1869,6 +1989,7 @@ void Viewport::keyPressEvent(QKeyEvent* e){
         m_assemblePanel->finishEdit();
         return;
     }
+    if(m_floorPick && (e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter)){ endFloorPick(); return; }
     if(e->key() == Qt::Key_F && e->modifiers() == Qt::NoModifier){ fitAll(); return; }
     QOpenGLWidget::keyPressEvent(e);
 }

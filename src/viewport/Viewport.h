@@ -1,4 +1,6 @@
 #pragma once
+#include <optional>
+#include <QPointF>
 #include <QOpenGLWidget>
 #include <QOpenGLFunctions_3_3_Core>
 #include <QOpenGLShaderProgram>
@@ -69,6 +71,18 @@ public:
     };
     void setFootprints(std::vector<Footprint> prints);
 
+    // Floor-pick mode: each left click on the floor (y = 0) emits
+    // floorPointPicked (x, z in m); Esc or Enter ends it (floorPickEnded).
+    // Orbit and pan work as usual.
+    void beginFloorPick(const QString& banner);
+    void endFloorPick();
+    bool floorPicking() const { return m_floorPick; }
+    // A route drawn on the floor (the Walk operation being edited): from
+    // `from` (the robot) through numbered points, with an arrow for the
+    // heading to face at the end (degrees, 0 = +X, positive towards −Z)
+    void setRoute(const std::vector<QPointF>& points, std::optional<QPointF> from = {},
+                  std::optional<double> headingDeg = {});
+
     // IK drag: with the IK button on, dragging the gizmo of an object that
     // actuated joints move (a robot's tool) moves the object by inverse
     // kinematics instead of editing its transform. Off while simulating.
@@ -93,6 +107,8 @@ signals:
     // Axis (and, when `setPivot`, rotation origin) in the parent's local frame
     void axisPicked(int objectId, const QVector3D& localAxis, const QVector3D& localPivot, bool setPivot);
     void measureModeChanged(bool on);
+    void floorPointPicked(const QPointF& xz);
+    void floorPickEnded();
     void assembleModeChanged(bool on);
 
 protected:
@@ -126,6 +142,9 @@ private:
     void drawPhysicsOverlays();
     void drawSensors();
     void drawFootprints();
+    void drawRoute();
+    void drawRouteLabels(QPainter& p);
+    bool floorPoint(int x, int y, QPointF* xz) const;   // where the mouse ray meets the floor
     void drawSensorLabels(QPainter& p);
     void drawKeyPoints (QPainter& p);
     void drawAxisPickBanner(QPainter& p);
@@ -277,6 +296,12 @@ private:
     QSet<int>        m_movingObjects;
     QSet<int>        m_interfering;      // tinted red: passing through another part
     std::vector<Footprint> m_footprints;
+    bool                   m_floorPick = false;
+    QString                m_floorPickBanner;
+    std::optional<QPointF> m_floorHover;
+    std::vector<QPointF>   m_route;
+    std::optional<QPointF> m_routeFrom;
+    std::optional<double>  m_routeHeading;
     QStringList      m_overlayLines;
     class QLabel*    m_simOverlay = nullptr;   // a widget, not QPainter text (renders reliably over GL)
     int              m_nearKeyPointIdx = -1;  // index into keyPointsFor(hovered obj type)
