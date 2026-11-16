@@ -91,6 +91,9 @@ private:
     QComboBox*      m_opMotion = nullptr;     // PlayMotion: the motion
     QComboBox*      m_opRobot = nullptr;      // PlayMotion: the robot (first: the one it was recorded on)
     QCheckBox*      m_opRelative = nullptr;   // PlayMotion: start where the robot stands
+    QComboBox*      m_opClip = nullptr;       // PlayMotion of a learned model: its clip
+    QComboBox*      m_opBlendClip = nullptr;  // ... blended with another
+    ExpressionEdit* m_opBlend = nullptr;      // ... by this much
     QToolButton*    m_opAfter = nullptr;
     ExpressionEdit* m_opStartCond = nullptr;
     ExpressionEdit* m_opOnStart = nullptr;

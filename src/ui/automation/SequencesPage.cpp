@@ -271,6 +271,12 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
         c->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
         c->setMinimumContentsLength(12);
     }
+    m_opClip = new QComboBox;
+    m_opClip->setToolTip("The clip of the trained model to play: one of the motions it learned");
+    m_opBlendClip = new QComboBox;
+    m_opBlendClip->setToolTip("Blend another clip in: the robot moves partly like one, partly like the other");
+    m_opBlend = autoui::makeExprEdit(scene, autoui::ExprKind::Value, "0.5");
+    m_opBlend->setHelpText("How much of the second clip, 0 to 1 (0.5 = half of each); an expression");
     m_opRelative = new QCheckBox("Start where the robot stands");
     m_opRelative->setToolTip("On: the motion is moved to start at the robot's place and heading on the floor.\n"
                              "Off: the robot goes where the motion was recorded.");
@@ -303,6 +309,9 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     m_opLayout->addRow("Sideways m", m_opSideways);
     m_opLayout->addRow("Turn °", m_opTurn);
     m_opLayout->addRow("Motion", m_opMotion);
+    m_opLayout->addRow("Clip", m_opClip);
+    m_opLayout->addRow("Blend with", m_opBlendClip);
+    m_opLayout->addRow("Blend", m_opBlend);
     m_opLayout->addRow("Played by", m_opRobot);
     m_opLayout->addRow("", m_opRelative);
     m_opLayout->addRow("Target", m_opTarget);
@@ -392,6 +401,13 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
         loadOpForm();   // the robot it was recorded on
     });
     connect(m_opRobot,    &QComboBox::currentIndexChanged, this, &SequencesPage::commitOpForm);
+    connect(m_opClip,     &QComboBox::currentIndexChanged, this, &SequencesPage::commitOpForm);
+    connect(m_opBlendClip, &QComboBox::currentIndexChanged, this, [this]{
+        if (m_loading) return;
+        updateOpFormVisibility(kTypes[std::max(0, m_opType->currentIndex())]);
+        commitOpForm();
+    });
+    connect(m_opBlend,    &ExpressionEdit::committed,      this, &SequencesPage::commitOpForm);
     connect(m_opRelative, &QCheckBox::toggled,             this, &SequencesPage::commitOpForm);
 
     refresh();
@@ -526,9 +542,18 @@ QString SequencesPage::describe(const Operation& op) const {
         }
         case OperationType::PlayMotion: {
             const MotionClip* clip = m_scene->getMotion(op.motionId);
-            const SceneObject* r = m_scene->getObject(op.walkerId != -1 ? op.walkerId : clip ? clip->robotId : -1);
+            const LearnedMotion* lm = m_scene->getLearned(op.motionId);
+            const SceneObject* r = m_scene->getObject(AutomationEngine::playMotionRobot(*m_scene, op));
             const QString speed = op.velocity.trimmed().isEmpty() ? QString() : QString(" × %1").arg(op.velocity.trimmed());
-            return QString("%1 plays %2%3").arg(r ? r->name : "?", clip ? clip->name : "?", speed);
+            QString what = clip ? clip->name : QString("?");
+            if (lm) {
+                const QString first = op.clip.isEmpty() && lm->model && !lm->model->clips.isEmpty() ? lm->model->clips.front() : op.clip;
+                what = first;
+                if (!op.blendClip.isEmpty())
+                    what += QString(" + %1 × %2").arg(op.blendClip, op.blend.trimmed().isEmpty() ? QString("0.5") : op.blend.trimmed());
+                if (!op.duration.trimmed().isEmpty()) what += QString(" in %1 s").arg(op.duration.trimmed());
+            }
+            return QString("%1 plays %2%3").arg(r ? r->name : "?", what, speed);
         }
     }
     return {};
@@ -596,10 +621,17 @@ void SequencesPage::updateOpFormVisibility(OperationType t) {
     m_opLayout->setRowVisible(m_opTurn, byDistance);
     if (walk) m_opLayout->setRowVisible(m_opVelocity, true);
     const bool play = t == OperationType::PlayMotion;
+    const bool learned = play && m_scene->getLearned(m_opMotion->currentData().toInt());
     m_opLayout->setRowVisible(m_opMotion, play);
     m_opLayout->setRowVisible(m_opRobot, play);
-    m_opLayout->setRowVisible(m_opRelative, play);
+    m_opLayout->setRowVisible(m_opRelative, play && !learned);   // a learned clip starts where it stands
+    m_opLayout->setRowVisible(m_opClip, learned);
+    m_opLayout->setRowVisible(m_opBlendClip, learned);
+    m_opLayout->setRowVisible(m_opBlend, learned && m_opBlendClip->currentIndex() > 0);
     if (play) m_opLayout->setRowVisible(m_opVelocity, true);
+    if (learned) m_opLayout->setRowVisible(m_opDuration, true);
+    if (auto* l = qobject_cast<QLabel*>(m_opLayout->labelForField(m_opDuration))) l->setText(learned ? "Length s" : "Duration");
+    m_opDuration->setPlaceholderText(learned ? "the clip's (or the blend's)" : "seconds, e.g. 0.5");
     // MoveL / MoveToPose to a pose taught on a part: which part this time
     const Pose* chosen = m_scene->getPose(m_opPose->currentData().toInt());
     const bool onPart = pose && chosen && chosen->isRelative();
@@ -719,15 +751,19 @@ void SequencesPage::loadOpForm() {
         m_opMotion->addItem("(choose)", -1);
         for (const auto& [mid, m] : m_scene->allMotions())
             m_opMotion->addItem(Theme::icon("film"), m.name, mid);
+        for (const auto& [mid, m] : m_scene->allLearned())
+            m_opMotion->addItem(Theme::icon("lightbulb"), m.name, mid);
         const int curMotion = op && op->type == OperationType::PlayMotion ? op->motionId : -1;
         int mi = m_opMotion->findData(curMotion);
         if (mi < 0 && curMotion != -1) { m_opMotion->addItem("(deleted motion)", curMotion); mi = m_opMotion->count() - 1; }
         m_opMotion->setCurrentIndex(std::max(0, mi));
         const MotionClip* clip = m_scene->getMotion(curMotion);
-        const SceneObject* recordedOn = clip ? m_scene->getObject(clip->robotId) : nullptr;
+        const LearnedMotion* lm = m_scene->getLearned(curMotion);
+        const int motionRobot = clip ? clip->robotId : lm ? lm->robotId : -1;
+        const SceneObject* recordedOn = m_scene->getObject(motionRobot);
         m_opRobot->clear();
-        m_opRobot->addItem(recordedOn ? QString("%1 (recorded on)").arg(recordedOn->name)
-                                      : clip ? QString("(choose: the robot it was recorded on is gone)") : QString("(the motion's robot)"),
+        m_opRobot->addItem(recordedOn ? QString("%1 (%2)").arg(recordedOn->name, lm ? "learned on" : "recorded on")
+                                      : clip || lm ? QString("(choose: the robot it was made on is gone)") : QString("(the motion's robot)"),
                            -1);
         for (const ApiServer::Robot& r : ApiServer::findRobots(*m_scene))
             m_opRobot->addItem(Theme::icon("bot"), r.name, r.root);
@@ -736,6 +772,23 @@ void SequencesPage::loadOpForm() {
         if (ri < 0 && curRobot != -1) { m_opRobot->addItem("(deleted object)", curRobot); ri = m_opRobot->count() - 1; }
         m_opRobot->setCurrentIndex(std::max(0, ri));
         m_opRelative->setChecked(!op || op->relative);
+        // A learned model's clips
+        const QSignalBlocker block3(m_opClip), block4(m_opBlendClip);
+        m_opClip->clear();
+        m_opBlendClip->clear();
+        m_opBlendClip->addItem("(none)");
+        if (lm && lm->model) {
+            m_opClip->addItems(lm->model->clips);
+            m_opBlendClip->addItems(lm->model->clips);
+        }
+        auto pick = [](QComboBox* c, const QString& name, int fallback) {
+            int i = name.isEmpty() ? fallback : c->findText(name);
+            if (i < 0) { c->addItem(name + " (not in the model)"); i = c->count() - 1; }
+            c->setCurrentIndex(i);
+        };
+        pick(m_opClip, op && lm ? op->clip : QString(), 0);
+        pick(m_opBlendClip, op && lm ? op->blendClip : QString(), 0);
+        m_opBlend->setExpression(op && lm ? op->blend : QString());
     }
     // Part: sensors first ("s<id>"), then objects ("o<id>")
     {
@@ -1094,6 +1147,14 @@ void SequencesPage::commitOpForm() {
         op->walkerId       = walk ? m_opWalker->currentData().toInt() : play ? m_opRobot->currentData().toInt() : -1;
         op->motionId       = play ? m_opMotion->currentData().toInt() : -1;
         op->relative       = !play || m_opRelative->isChecked();
+        const bool learned = play && m_scene->getLearned(op->motionId);
+        auto clipName = [](QComboBox* c, bool none) {
+            if (none && c->currentIndex() <= 0) return QString();
+            return c->currentText().remove(" (not in the model)");
+        };
+        op->clip           = learned ? clipName(m_opClip, false) : QString();
+        op->blendClip      = learned ? clipName(m_opBlendClip, true) : QString();
+        op->blend          = learned && !op->blendClip.isEmpty() ? m_opBlend->text() : QString();
         op->walkToId       = walk ? m_opWalkTo->currentData().toInt() : -1;
         op->forward        = walk ? m_opForward->text() : QString();
         op->sideways       = walk ? m_opSideways->text() : QString();
