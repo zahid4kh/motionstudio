@@ -17,7 +17,7 @@
 namespace {
 
 constexpr double kMm = 1000.0;                 // API lengths are millimetres
-constexpr int    kMaxLine = 1 << 20;           // a request longer than this closes the connection
+constexpr int    kMaxLine = 64 << 20;          // a request longer than this closes the connection (a long take is MBs)
 
 struct ApiError {
     QString code, message;
