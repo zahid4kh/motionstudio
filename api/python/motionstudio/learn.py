@@ -469,7 +469,7 @@ class WalkPolicy:
     places (``robot.record()`` or Record Values).
     """
 
-    def __init__(self, hidden: Sequence[int] = (256, 256), harmonics: int = 6, seed: int = 0):
+    def __init__(self, hidden: Sequence[int] = (512, 512), harmonics: int = 6, seed: int = 0):
         self.hidden = tuple(hidden)
         self.harmonics = harmonics
         self.seed = seed
@@ -502,7 +502,7 @@ class WalkPolicy:
 
     # ── Learning ─────────────────────────────────────────────────────────────
 
-    def fit(self, takes: Sequence[Take], *, epochs: int = 300, motion_epochs: int = 100, lr: float = 1e-3,
+    def fit(self, takes: Sequence[Take], *, epochs: int = 300, motion_epochs: int = 150, lr: float = 1e-3,
             validation: float = 0.1, verbose: bool = False) -> "WalkPolicy":
         """Learns from takes of one humanoid walking: ``epochs`` passes for the
         step policy, ``motion_epochs`` for the motion model (it sees many more

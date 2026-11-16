@@ -95,7 +95,7 @@ rec.take.save("a-to-b.csv")
 walker.play(ms.Take.load("a-to-b.csv"), relative=True)
 ```
 
-Examples (`examples/`): `square.py`, `two_motions.py`, `station.py`, `humanoid_wave.py`, `walk_square.py`, `walk_patrol.py`.
+Examples (`examples/`): `square.py`, `two_motions.py`, `station.py`, `humanoid_wave.py`, `walk_square.py`, `walk_patrol.py`, `learn_to_walk.py`.
 
 Errors derive from `MotionStudioError` (`.code`, `.message`). The subclasses are `NotFoundError`, `OutOfReachError`, `OutOfLimitsError`, `MotionCancelled`, `WaitTimeout` and `SimulationError`. Losing the connection raises the built-in `ConnectionError`.
 
@@ -110,7 +110,7 @@ Handles are thread-safe. A background thread reads the replies, so threads can s
 | `AnimationModel(hidden=(128, 128)).fit({name: take, …}, epochs=400)` | Learns each take as a clip: joint values (and how the robot moves on the floor) over the clip's time |
 | `.generate(clip, *, duration=None, rate=50, place=True)` → `Take` | A clip at any length, or a blend `{"wave": 0.7, "bow": 0.3}`; play it with `robot.play(take)` |
 | `.pose(clip, at=0.5)` | The joint values at a moment of a clip (0 = start, 1 = end) |
-| `WalkPolicy().fit(takes, epochs=300, motion_epochs=100, verbose=True)` | Learns to walk from takes of a humanoid walking to many goals |
+| `WalkPolicy(hidden=(512, 512)).fit(takes, epochs=300, motion_epochs=150, verbose=True)` | Learns to walk from takes of a humanoid walking to many goals |
 | `.walk(walker, x, z, heading=None)` | The robot steps where the policy decides; its own walking plants each foot exactly |
 | `.motion(x, z, heading=None, *, start=walker)` → `Take` | The whole walk from the networks, every joint included; `robot.play(take)` |
 | `.footsteps(start, x, z, heading=None, *, exact=True)` | Only the footsteps `[(x, z, heading), …]` |
