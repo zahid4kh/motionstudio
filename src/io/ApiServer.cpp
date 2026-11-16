@@ -1,12 +1,14 @@
 #include "ApiServer.h"
 #include "../automation/Kinematics.h"
 #include "../physics/SimulationEngine.h"
+#include "../robot/Gait.h"
 #include "../scene/SceneGraph.h"
 #include <QCoreApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QtMath>
 #include <algorithm>
 #include <cmath>
 #include <functional>
@@ -353,6 +355,11 @@ const std::map<QString, ApiServer::Handler>& ApiServer::handlers() {
         {"signal.get",       &ApiServer::signalGet},
         {"signal.set",       &ApiServer::signalSet},
         {"signal.waitUntil", &ApiServer::signalWaitUntil},
+        {"humanoid.walk",     &ApiServer::humanoidWalk},
+        {"humanoid.walkTo",   &ApiServer::humanoidWalkTo},
+        {"humanoid.walkPath", &ApiServer::humanoidWalkPath},
+        {"humanoid.stop",     &ApiServer::humanoidStop},
+        {"humanoid.state",    &ApiServer::humanoidState},
     };
     return h;
 }
@@ -607,7 +614,8 @@ QJsonValue ApiServer::sceneRobots(const QJsonObject&, Call&) {
         QJsonArray joints, tools;
         for (int j : r.joints) if (const Motor* m = m_scene->motorForJoint(j)) joints.append(m->name);
         for (int t : r.tools) tools.append(m_scene->getObject(t)->name);
-        out.append(QJsonObject{{"name", r.name}, {"path", r.path}, {"joints", joints}, {"tools", tools}});
+        out.append(QJsonObject{{"name", r.name}, {"path", r.path}, {"joints", joints}, {"tools", tools},
+                               {"walks", gait::canWalk(*m_scene, r.root)}});
     }
     return out;
 }
@@ -637,7 +645,8 @@ QJsonValue ApiServer::robotInfo(const QJsonObject& p, Call&) {
     for (const auto& [id, pose] : m_scene->allPoses())
         if (std::any_of(pose.jointValues.begin(), pose.jointValues.end(), [&](auto& kv) { return mine.count(kv.first) > 0; }))
             poses.append(pose.name);
-    return QJsonObject{{"name", r.name}, {"path", r.path}, {"joints", joints}, {"tools", tools}, {"poses", poses}};
+    return QJsonObject{{"name", r.name}, {"path", r.path}, {"joints", joints}, {"tools", tools}, {"poses", poses},
+                       {"walks", gait::canWalk(*m_scene, r.root)}};
 }
 
 QJsonValue ApiServer::robotJoints(const QJsonObject& p, Call&) {
@@ -865,4 +874,122 @@ QJsonValue ApiServer::signalWaitUntil(const QJsonObject& p, Call& c) {
     if (timeout >= 0) c.pending.timeoutAt = a->time() + timeout;
     c.deferred = true;
     return {};
+}
+
+// ── Walking ──────────────────────────────────────────────────────────────────
+
+AutomationEngine::WalkRequest ApiServer::walkRequest(const QJsonObject& p, const Robot& r) const {
+    AutomationEngine::WalkRequest w;
+    w.root = r.root;
+    const QString lf = text(p, "leftFoot", false), rf = text(p, "rightFoot", false);
+    if (!lf.isEmpty()) w.leftFoot = objectParam("left foot", lf, r.root);
+    if (!rf.isEmpty()) w.rightFoot = objectParam("right foot", rf, r.root);
+    // The gait: lengths in mm, angles in degrees; anything left out comes from the legs' size
+    gait::Params& g = w.params;
+    auto positive = [&](const char* key, double scale) {
+        const double v = number(p, key, 0);
+        if (v < 0) fail("bad_request", QString("\"%1\" must be positive").arg(key));
+        return v * scale;
+    };
+    g.stepLength  = positive("stepLength", 1 / kMm);
+    g.sideStep    = positive("sideStep", 1 / kMm);
+    g.turnPerStep = qDegreesToRadians(positive("turnPerStep", 1));
+    g.stepHeight  = positive("stepHeight", 1 / kMm);
+    g.stepTime    = positive("stepTime", 1);
+    g.speed       = positive("speed", 1 / kMm);
+    if (p.contains("crouch")) g.crouch = positive("crouch", 1 / kMm);
+    if (p.contains("sway")) g.sway = positive("sway", 1 / kMm);
+    if (p.contains("armSwing")) g.armSwing = qDegreesToRadians(positive("armSwing", 1));
+    return w;
+}
+
+QJsonValue ApiServer::submitWalk(const QJsonObject& p, Call& c, AutomationEngine::WalkRequest w, const QString& label) {
+    // Checked before the simulation starts, so a robot without legs fails at once
+    QString code, err;
+    if (!m_sim->automation()->makeWalker(w, &code, &err)) fail(code, err);
+    AutomationEngine::MotionRequest req;
+    req.kind = AutomationEngine::MotionKind::Walk;
+    req.walk = std::move(w);
+    req.label = label;
+    return submit(p, c, req);
+}
+
+QJsonValue ApiServer::humanoidWalk(const QJsonObject& p, Call& c) {
+    const Robot r = robotParam(p);
+    AutomationEngine::WalkRequest w = walkRequest(p, r);
+    w.forward = number(p, "forward", 0) / kMm;
+    w.left = number(p, "sideways", 0) / kMm;
+    w.turn = number(p, "turn", 0);
+    return submitWalk(p, c, std::move(w), "walk");
+}
+
+namespace {
+// x and z of a point: {"x": …, "z": …} or [x, z]
+QPointF pointOf(const QJsonValue& v, int index) {
+    if (v.isArray() && v.toArray().size() == 2 && v.toArray()[0].isDouble() && v.toArray()[1].isDouble())
+        return QPointF(v.toArray()[0].toDouble() / kMm, v.toArray()[1].toDouble() / kMm);
+    if (v.isObject() && v.toObject().value("x").isDouble() && v.toObject().value("z").isDouble())
+        return QPointF(v.toObject().value("x").toDouble() / kMm, v.toObject().value("z").toDouble() / kMm);
+    fail("bad_request", QString("point %1 must be {\"x\": …, \"z\": …} or [x, z] in mm").arg(index + 1));
+}
+} // namespace
+
+QJsonValue ApiServer::humanoidWalkTo(const QJsonObject& p, Call& c) {
+    QJsonObject q = p;
+    if (!p.value("x").isDouble() || !p.value("z").isDouble())
+        fail("bad_request", "give \"x\" and \"z\" (mm) of where to walk; \"heading\" (degrees) is optional");
+    q["points"] = QJsonArray{QJsonArray{p.value("x"), p.value("z")}};
+    return humanoidWalkPath(q, c);
+}
+
+QJsonValue ApiServer::humanoidWalkPath(const QJsonObject& p, Call& c) {
+    const Robot r = robotParam(p);
+    AutomationEngine::WalkRequest w = walkRequest(p, r);
+    w.path = true;
+    const QJsonValue pts = p.value("points");
+    if (!pts.isArray()) fail("bad_request", "\"points\" must be a list of {\"x\", \"z\"} (mm)");
+    const QJsonArray a = pts.toArray();
+    for (int i = 0; i < a.size(); ++i) w.points.push_back(pointOf(a[i], i));
+    if (p.contains("heading") && !p.value("heading").isNull()) w.heading = number(p, "heading", 0);
+    if (w.points.empty() && !w.heading) fail("bad_request", "\"points\" is empty");
+    const QString frame = text(p, "frame", false);
+    if (frame == "robot" || frame == "base") w.fromStart = true;
+    else if (!frame.isEmpty() && frame != "world") w.frameId = objectParam("frame", frame);
+    return submitWalk(p, c, std::move(w), "walkPath");
+}
+
+QJsonValue ApiServer::humanoidStop(const QJsonObject& p, Call&) {
+    const Robot r = robotParam(p);
+    AutomationEngine* a = m_sim->automation();
+    return QJsonObject{{"stopping", a->isActive() ? a->stopWalking(r.root) : 0}};
+}
+
+QJsonValue ApiServer::humanoidState(const QJsonObject& p, Call&) {
+    const Robot r = robotParam(p);
+    gait::Legs legs;
+    QString why;
+    if (!gait::findLegs(*m_scene, r.root, &legs, &why)) fail("bad_request", why);
+    const gait::Place at = gait::placeOf(kin::toolFrame(*m_scene, r.root));
+    QJsonObject o{{"x", round6(at.x * kMm)}, {"z", round6(at.z * kMm)}, {"heading", round6(qRadiansToDegrees(at.heading))},
+                  {"walking", false}};
+    AutomationEngine* a = m_sim->automation();
+    if (a->isActive())
+        for (const AutomationEngine::WalkView& v : a->walks()) {
+            if (v.root != r.root) continue;
+            o["walking"] = true;
+            if (v.motion) o["motion"] = v.motion;
+            o["step"] = std::min(v.stepsDone + 1, v.steps);
+            o["steps"] = v.steps;
+            break;
+        }
+    o["legs"] = QJsonObject{{"left", m_scene->getObject(legs.foot[0])->name}, {"right", m_scene->getObject(legs.foot[1])->name},
+                            {"length", round6(legs.legLength * kMm)}, {"hipWidth", round6(legs.hipWidth * kMm)}};
+    gait::Params g;
+    gait::resolve(g, legs);
+    o["gait"] = QJsonObject{{"stepLength", round6(g.stepLength * kMm)}, {"sideStep", round6(g.sideStep * kMm)},
+                            {"turnPerStep", round6(qRadiansToDegrees(g.turnPerStep))},
+                            {"stepHeight", round6(g.stepHeight * kMm)}, {"stepTime", round6(g.stepTime)},
+                            {"speed", round6(g.stepLength / g.stepTime * kMm)}, {"crouch", round6(g.crouch * kMm)},
+                            {"sway", round6(g.sway * kMm)}, {"armSwing", round6(qRadiansToDegrees(g.armSwing))}};
+    return o;
 }

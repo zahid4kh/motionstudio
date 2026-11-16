@@ -41,13 +41,13 @@ The Python, C++ and Kotlin libraries in this folder all speak this protocol. Use
 
 ## Simulation
 
-Commands that need the simulation start it when it isn't running. These are the moves, `signal.set`, `signal.waitUntil`, `sim.wait` and `actuator.run`. `timeout` and `seconds` are in **simulation** time. `sim.reset` cancels every motion, and every pending wait is answered with the error `reset`.
+Commands that need the simulation start it when it isn't running. These are the moves (walks included), `signal.set`, `signal.waitUntil`, `sim.wait` and `actuator.run`. `timeout` and `seconds` are in **simulation** time. `sim.reset` cancels every motion, and every pending wait is answered with the error `reset`.
 
 ## Error codes
 
 | Code | Meaning |
 |---|---|
-| `bad_request` | Malformed request, or a parameter of the wrong type or out of range |
+| `bad_request` | Malformed request, or a parameter of the wrong type or out of range (a robot without legs asked to walk) |
 | `unknown_method` | No such method |
 | `not_found` | No such robot, tool, frame, joint, pose, signal or motion |
 | `ambiguous` | Several objects (or tools) match; the message lists them |
@@ -86,8 +86,8 @@ Every move creates a **motion** with an id.
 
 | Method | Params | Result |
 |---|---|---|
-| `scene.robots` | — | `[{name, path, joints: [names], tools: [names]}]` |
-| `robot.info` | `robot` | `{name, path, joints: [{name, type, unit, value, min, max \| continuous, speed, acceleration}], tools: [{name, path, joints}], poses: [names]}` |
+| `scene.robots` | — | `[{name, path, joints: [names], tools: [names], walks}]` |
+| `robot.info` | `robot` | `{name, path, joints: [{name, type, unit, value, min, max \| continuous, speed, acceleration}], tools: [{name, path, joints}], poses: [names], walks}` |
 | `robot.joints` | `robot` | `{jointName: value, …}` |
 | `actuator.get` | `name` (any actuator in the scene) | `{name, unit, value}` (deg or mm) |
 | `tool.pose` | `robot?`, `tool?`, `frame?`, `base?` | a pose |
@@ -112,6 +112,31 @@ Details for the moves:
 - **tool.moveL straight line:** the tool moves along a line, and its orientation turns evenly (slerp) on the way. The motion eases in and out. Rotation is timed so that 1 rad takes as long as 300 mm of travel.
 - **tool.moveJ:** solves the target first (trying several start configurations if needed), then makes a synchronized joint move.
 - **Fewer than six joints:** a tool with fewer than six joints above it can't hold an orientation, and giving `rx`/`ry`/`rz` is a `bad_request`.
+
+### Walking
+
+`walks` in `scene.robots` and `robot.info` is true for a robot that can walk: objects called `Left Foot` and `Right Foot` below its root, each moved by at least three actuated joints of its own (a humanoid the Humanoid Builder makes on legs). A walk carries the robot's root object along the floor while the legs step: each foot is set down where the plan puts it and stays there until it lifts. It is kinematic and can't fall. The floor is the root's height when the walk starts.
+
+A place on the floor is `{x, z, heading}`: mm, and degrees about +Y (0 faces +X; positive turns to the robot's left, which is its −Z side).
+
+| Method | Params | Result |
+|---|---|---|
+| `humanoid.walk` | `robot`, `forward?` (mm, negative: back), `sideways?` (mm to its left), `turn?` (degrees to its left), gait, `wait?` | a motion |
+| `humanoid.walkTo` | `robot`, `x`, `z` (mm), `heading?` (degrees), `frame?`, gait, `wait?` | a motion |
+| `humanoid.walkPath` | `robot`, `points: [{x, z} \| [x, z], …]` (mm), `heading?`, `frame?`, gait, `wait?` | a motion |
+| `humanoid.stop` | `robot` | `{stopping: n}`: walks that end after the step under way, feet together (queued walks are cancelled) |
+| `humanoid.state` | `robot` | `{x, z, heading, walking, motion?, step?, steps?, legs: {left, right, length, hipWidth}, gait: {…}}` |
+
+Details:
+
+- **walk:** a turn given with a distance is spread over the walk, so the robot walks an arc. All zero: done at once.
+- **walkTo / walkPath:** the robot faces the way it goes; corners are rounded so it turns while it walks; a point behind it makes it turn on the spot first. With `heading`, it turns on the spot at the end to face that way.
+- **frame:** `"world"` (the default); `"robot"`: the robot's place when the walk starts (x ahead, z to its right; so queued walks chain); or any object's name or path: points are on the floor below that object, turned with it, and `heading` is relative to its heading.
+- **gait** (all optional, flat in `params`): `stepLength`, `sideStep`, `stepHeight`, `crouch`, `sway` (mm), `turnPerStep`, `armSwing` (degrees; 0 keeps the arms still), `stepTime` (s), `speed` (mm/s, sets the step time from the step length), `leftFoot` / `rightFoot` (object names, for a model whose feet are named differently). What is left out comes from the legs' size; `humanoid.state` returns the values.
+- **Queueing:** a walk moves the leg joints (and the shoulder pitch joints while the arms swing), so walks of one robot queue one after another, and a joint move of a leg waits for the walk.
+- **Errors:** a robot without legs, or a gait the legs can't do (steps too long, too fast), is a `bad_request` before anything moves. A foot that can't reach its spot on the way fails the walk with `out_of_reach`.
+- `robot.stop` and `motion.cancel` stop a walk at once, mid-step; `humanoid.stop` finishes the step first.
+- `humanoid.state` works while the simulation is stopped (`walking` is false then). `step` (1-based) and `steps` describe the walk under way; `motion` is absent for a sequence's Walk operation.
 
 ### Motions
 

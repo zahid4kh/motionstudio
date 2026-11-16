@@ -2651,6 +2651,98 @@ humanoid::Built walkingHumanoid(SceneGraph& g, bool demo = false) {
     return humanoid::build(g, spec);
 }
 
+TEST(apiServerWalksAHumanoid) {
+    SceneGraph g;
+    const humanoid::Built h = walkingHumanoid(g, false);
+    humanoid::Spec ps = humanoid::defaultSpec();
+    ps.base = humanoid::Base::Pedestal;
+    ps.name = "Bust";
+    ps.demo = false;
+    humanoid::build(g, ps);
+    const int spot = g.addObject("Spot", PrimitiveType::ImportedMesh);
+    g.getObject(spot)->transform.position = {0, 0, 1};
+    g.getObject(spot)->transform.rotation = {0, 90, 0};
+    SimulationEngine sim(&g);
+    sim.setSpeedFactor(20);
+    ApiServer server(&g, &sim);
+    CHECK(server.start(0));
+    ApiClient c;
+    CHECK(c.connectTo(server.port()));
+    const QString name = g.getObject(h.root)->name;
+
+    // Listed as walking; its state and gait before anything runs
+    bool walks = false, bustWalks = true;
+    for (auto v : c.call("scene.robots").value("result").toArray()) {
+        if (v.toObject().value("name").toString() == name) walks = v.toObject().value("walks").toBool();
+        if (v.toObject().value("name").toString() == "Bust") bustWalks = v.toObject().value("walks").toBool();
+    }
+    CHECK(walks && !bustWalks);
+    CHECK(result(c.call("robot.info", {{"robot", name}})).value("walks").toBool());
+    QJsonObject st = result(c.call("humanoid.state", {{"robot", name}}));
+    CHECK_NEAR(st.value("x").toDouble(), 0, 1e-6);
+    CHECK(!st.value("walking").toBool());
+    CHECK(st.value("gait").toObject().value("stepLength").toDouble() > 100);
+    CHECK(st.value("legs").toObject().value("left").toString() == "Left Foot");
+    CHECK(!sim.isActive());
+
+    // Half a metre ahead (mm), answered when it stands again
+    QJsonObject r = c.call("humanoid.walk", {{"robot", name}, {"forward", 500}});
+    CHECK(result(r).value("state").toString() == "done");
+    st = result(c.call("humanoid.state", {{"robot", name}}));
+    CHECK_NEAR(st.value("x").toDouble(), 500, 0.1);
+    CHECK_NEAR(st.value("z").toDouble(), 0, 0.1);
+
+    // To an object's spot, then a square in its own frame (z to its right)
+    r = c.call("humanoid.walkPath", {{"robot", name}, {"points", QJsonArray{QJsonArray{0, 0}}}, {"frame", "Spot"},
+                                     {"heading", 0}, {"speed", 400}});
+    CHECK(result(r).value("state").toString() == "done");
+    st = result(c.call("humanoid.state", {{"robot", name}}));
+    CHECK_NEAR(st.value("x").toDouble(), 0, 0.1);
+    CHECK_NEAR(st.value("z").toDouble(), 1000, 0.1);
+    CHECK_NEAR(st.value("heading").toDouble(), 90, 1e-3);
+    r = c.call("humanoid.walkPath", {{"robot", name}, {"frame", "robot"}, {"heading", 0},
+                                     {"points", QJsonArray{QJsonObject{{"x", 400}, {"z", 0}}, QJsonObject{{"x", 400}, {"z", 400}},
+                                                           QJsonObject{{"x", 0}, {"z", 400}}, QJsonObject{{"x", 0}, {"z", 0}}}}});
+    CHECK(result(r).value("state").toString() == "done");
+    st = result(c.call("humanoid.state", {{"robot", name}}));
+    CHECK_NEAR(st.value("x").toDouble(), 0, 0.1);
+    CHECK_NEAR(st.value("z").toDouble(), 1000, 0.1);
+    CHECK_NEAR(st.value("heading").toDouble(), 90, 1e-3);
+    r = c.call("humanoid.walkTo", {{"robot", name}, {"x", 300}, {"z", 1000}, {"heading", -90}});
+    CHECK(result(r).value("state").toString() == "done");
+    st = result(c.call("humanoid.state", {{"robot", name}}));
+    CHECK_NEAR(st.value("x").toDouble(), 300, 0.1);
+    CHECK_NEAR(st.value("heading").toDouble(), -90, 1e-3);
+
+    // Without waiting: walking, then a stop that finishes the step
+    r = c.call("humanoid.walk", {{"robot", name}, {"forward", 3000}, {"wait", false}});
+    const int motion = result(r).value("motion").toInt();
+    CHECK(motion > 0);
+    c.call("sim.wait", {{"seconds", 1.0}});
+    st = result(c.call("humanoid.state", {{"robot", name}}));
+    CHECK(st.value("walking").toBool());
+    CHECK(st.value("motion").toInt() == motion);
+    CHECK(st.value("steps").toInt() > 5);
+    CHECK(result(c.call("humanoid.stop", {{"robot", name}})).value("stopping").toInt() == 1);
+    CHECK(result(c.call("motion.wait", {{"motion", motion}})).value("state").toString() == "done");
+    st = result(c.call("humanoid.state", {{"robot", name}}));
+    CHECK(!st.value("walking").toBool());
+    CHECK(std::fabs(st.value("z").toDouble() - 1000) < 1500);
+
+    // What it can't do
+    CHECK(errorCode(c.call("humanoid.walk", {{"robot", "Bust"}, {"forward", 100}})) == "bad_request");
+    CHECK(errorCode(c.call("humanoid.walk", {{"robot", name}, {"forward", 100}, {"stepLength", 5000}})) == "bad_request");
+    CHECK(errorCode(c.call("humanoid.walkPath", {{"robot", name}, {"points", QJsonArray{1, 2}}})) == "bad_request");
+    CHECK(errorCode(c.call("humanoid.walkTo", {{"robot", name}, {"x", 1}})) == "bad_request");
+    CHECK(errorCode(c.call("humanoid.state", {{"robot", "Bust"}})) == "bad_request");
+    CHECK(errorCode(c.call("humanoid.walk", {{"forward", 100}})) == "bad_request");
+    // A reset puts it back where it started
+    c.call("sim.reset");
+    st = result(c.call("humanoid.state", {{"robot", name}}));
+    CHECK_NEAR(st.value("x").toDouble(), 0, 1e-3);
+    CHECK_NEAR(st.value("z").toDouble(), 0, 1e-3);
+}
+
 TEST(robotBuilderArticulatedMatchesDimensions) {
     robot::Spec s = robot::defaultSpec(robot::Kind::Articulated);
     s.dims = {{"h0", .2}, {"h1", .5}, {"a1", .17}, {"a2", .6}, {"a3", .05}, {"d4", .55}, {"d6", .09}};

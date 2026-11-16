@@ -121,6 +121,14 @@ private:
     QJsonValue signalGet(const QJsonObject& p, Call& c);
     QJsonValue signalSet(const QJsonObject& p, Call& c);
     QJsonValue signalWaitUntil(const QJsonObject& p, Call& c);
+    QJsonValue humanoidWalk(const QJsonObject& p, Call& c);
+    QJsonValue humanoidWalkTo(const QJsonObject& p, Call& c);
+    QJsonValue humanoidWalkPath(const QJsonObject& p, Call& c);
+    QJsonValue humanoidStop(const QJsonObject& p, Call& c);
+    QJsonValue humanoidState(const QJsonObject& p, Call& c);
+    // A walk request for the robot in `p` with the gait options in `p`
+    AutomationEngine::WalkRequest walkRequest(const QJsonObject& p, const Robot& r) const;
+    QJsonValue submitWalk(const QJsonObject& p, Call& c, AutomationEngine::WalkRequest w, const QString& label);
 
     SceneGraph*       m_scene;
     SimulationEngine* m_sim;

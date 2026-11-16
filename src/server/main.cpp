@@ -7,6 +7,7 @@
 #include <cstdio>
 #include "io/ApiServer.h"
 #include "physics/SimulationEngine.h"
+#include "robot/Gait.h"
 #include "robot/HumanoidBuilder.h"
 #include "robot/RobotBuilder.h"
 #include "scene/SceneGraph.h"
@@ -106,8 +107,9 @@ int main(int argc, char** argv) {
     for (const auto& r : ApiServer::findRobots(scene)) {
         QStringList tools;
         for (int t : r.tools) tools << scene.getObject(t)->name;
-        print(QString("  %1: %2 joints%3").arg(r.path).arg(r.joints.size())
-                  .arg(tools.isEmpty() ? QString() : ", tool " + tools.join(", ")));
+        print(QString("  %1: %2 joints%3%4").arg(r.path).arg(r.joints.size())
+                  .arg(tools.isEmpty() ? QString() : ", tool " + tools.join(", "))
+                  .arg(gait::canWalk(scene, r.root) ? ", walks" : ""));
     }
     QObject::connect(&server, &ApiServer::clientsChanged, [](int n) {
         print(QString("%1 client%2 connected").arg(n).arg(n == 1 ? "" : "s"));
