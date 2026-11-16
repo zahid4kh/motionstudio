@@ -9,6 +9,8 @@
 #include <map>
 #include <vector>
 #include "../automation/AutomationEngine.h"
+#include "../automation/Take.h"
+#include <memory>
 
 class QTcpServer;
 class QTcpSocket;
@@ -126,6 +128,11 @@ private:
     QJsonValue humanoidWalkPath(const QJsonObject& p, Call& c);
     QJsonValue humanoidStop(const QJsonObject& p, Call& c);
     QJsonValue humanoidState(const QJsonObject& p, Call& c);
+    QJsonValue robotPlay(const QJsonObject& p, Call& c);
+    QJsonValue takeStart(const QJsonObject& p, Call& c);
+    QJsonValue takeStop(const QJsonObject& p, Call& c);
+    QJsonValue takeStatus(const QJsonObject& p, Call& c);
+    void       sampleTakes();
     // A walk request for the robot in `p` with the gait options in `p`
     AutomationEngine::WalkRequest walkRequest(const QJsonObject& p, const Robot& r) const;
     QJsonValue submitWalk(const QJsonObject& p, Call& c, AutomationEngine::WalkRequest w, const QString& label);
@@ -136,6 +143,12 @@ private:
     std::vector<QTcpSocket*> m_clients;
     QHash<QTcpSocket*, QByteArray> m_buffers;
     std::vector<Pending> m_pending;
+    struct TakeRt {
+        QTcpSocket* socket = nullptr;            // dropped when it disconnects
+        std::unique_ptr<take::Recorder> recorder;
+    };
+    std::map<int, TakeRt> m_takes;
+    int               m_nextTake = 1;
     QString           m_error;
     long              m_requests = 0;
 };

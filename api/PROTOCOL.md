@@ -138,6 +138,28 @@ Details:
 - `robot.stop` and `motion.cancel` stop a walk at once, mid-step; `humanoid.stop` finishes the step first.
 - `humanoid.state` works while the simulation is stopped (`walking` is false then). `step` (1-based) and `steps` describe the walk under way; `motion` is absent for a sequence's Walk operation.
 
+### Takes: recording and playing motion
+
+| Method | Params | Result |
+|---|---|---|
+| `take.start` | `robot`, `rate?` (samples per second; 0 or absent: every scan) | `{take, robot, columns}` |
+| `take.status` | `take` | `{take, robot, frames, duration}` |
+| `take.stop` | `take` | `{take, robot, rate, columns, rows}` |
+| `robot.play` | `robot`, `columns`, `rows`, `relative?`, `speed?`, `place?`, `wait?` | a motion (see Motions) |
+
+Details:
+
+- **A take** samples the robot after every scan while the simulation runs (a stopped simulation adds nothing). Its rows hold one number per column, in API units (mm, degrees, seconds, rounded to 0.001):
+  - `t`: seconds since the first sample;
+  - `x`, `y`, `z`, `rx`, `ry`, `rz`: the robot's top object in the world;
+  - for a robot with legs: `heading`, `walking` (1 while it walks), `step` (the step under way, from 0; -1 while it crouches, stands up or stands), `swing` (the foot in the air: 0 left, 1 right, -1 none), `progress` (0–1 through the step), `goal_x`, `goal_z`, `goal_heading` (where the walk under way ends; its own place when standing);
+  - then one column per joint, named after its actuator.
+- A take belongs to the connection that started it, and is dropped when that connection closes.
+- **robot.play** plays rows like a take's: `t` (s, increasing) is required. Columns named after the robot's actuators set those joints; other columns are ignored. With `x y z rx ry rz` it also moves the robot's top object to that frame; with only `x`, `z`, `heading` it moves it on the floor, keeping its height and tilt. `place: false` plays the joints only. Between rows it interpolates. Joint values beyond a joint's range are clamped.
+- **relative:** the place columns start where the robot stands now (its x, z and heading on the floor), so a recorded walk can be repeated from anywhere.
+- **speed:** × the recorded pace (default 1).
+- A play moves its joints and, when it moves the top object, the legs, so it queues behind walks of the same robot (and they behind it).
+
 ### Motions
 
 | Method | Params | Result |

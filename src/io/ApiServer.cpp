@@ -124,6 +124,7 @@ struct ApiServer::Call {
 ApiServer::ApiServer(SceneGraph* scene, SimulationEngine* sim, QObject* parent)
     : QObject(parent), m_scene(scene), m_sim(sim)
 {
+    connect(m_sim->automation(), &AutomationEngine::scanned, this, &ApiServer::sampleTakes);
     connect(m_sim->automation(), &AutomationEngine::scanned, this, &ApiServer::checkPending);
     connect(m_sim, &SimulationEngine::activeChanged, this, [this](bool active) {
         if (!active) checkPending();
@@ -299,6 +300,8 @@ void ApiServer::onDisconnected(QTcpSocket* s) {
     m_pending.erase(std::remove_if(m_pending.begin(), m_pending.end(),
                                    [s](const Pending& p) { return p.socket == s; }),
                     m_pending.end());
+    for (auto it = m_takes.begin(); it != m_takes.end();)
+        it = it->second.socket == s ? m_takes.erase(it) : std::next(it);
     m_clients.erase(std::remove(m_clients.begin(), m_clients.end(), s), m_clients.end());
     m_buffers.remove(s);
     s->deleteLater();
@@ -360,6 +363,10 @@ const std::map<QString, ApiServer::Handler>& ApiServer::handlers() {
         {"humanoid.walkPath", &ApiServer::humanoidWalkPath},
         {"humanoid.stop",     &ApiServer::humanoidStop},
         {"humanoid.state",    &ApiServer::humanoidState},
+        {"robot.play",        &ApiServer::robotPlay},
+        {"take.start",        &ApiServer::takeStart},
+        {"take.stop",         &ApiServer::takeStop},
+        {"take.status",       &ApiServer::takeStatus},
     };
     return h;
 }
@@ -992,4 +999,119 @@ QJsonValue ApiServer::humanoidState(const QJsonObject& p, Call&) {
                             {"speed", round6(g.stepLength / g.stepTime * kMm)}, {"crouch", round6(g.crouch * kMm)},
                             {"sway", round6(g.sway * kMm)}, {"armSwing", round6(qRadiansToDegrees(g.armSwing))}};
     return o;
+}
+
+// ── Takes ────────────────────────────────────────────────────────────────────
+
+void ApiServer::sampleTakes() {
+    for (auto& [id, t] : m_takes) t.recorder->sample(*m_sim->automation());
+}
+
+QJsonValue ApiServer::takeStart(const QJsonObject& p, Call& c) {
+    const Robot r = robotParam(p);
+    const double rate = number(p, "rate", 0);
+    if (rate < 0 || !std::isfinite(rate)) fail("bad_request", "rate must be positive (samples per second), or 0 for every scan");
+    TakeRt t;
+    t.socket = c.socket;
+    t.recorder = std::make_unique<take::Recorder>(*m_scene, r.root, r.joints, rate);
+    const int id = m_nextTake++;
+    QJsonArray cols;
+    for (const QString& col : t.recorder->take().columns) cols.append(col);
+    m_takes[id] = std::move(t);
+    return QJsonObject{{"take", id}, {"robot", r.name}, {"columns", cols}};
+}
+
+QJsonValue ApiServer::takeStatus(const QJsonObject& p, Call&) {
+    const int id = int(number(p, "take", -1));
+    auto it = m_takes.find(id);
+    if (it == m_takes.end()) fail("not_found", QString("take %1 is not recording").arg(id));
+    const take::Take& t = it->second.recorder->take();
+    return QJsonObject{{"take", id}, {"robot", t.robot}, {"frames", int(t.rows.size())}, {"duration", round6(t.duration())}};
+}
+
+QJsonValue ApiServer::takeStop(const QJsonObject& p, Call&) {
+    const int id = int(number(p, "take", -1));
+    auto it = m_takes.find(id);
+    if (it == m_takes.end()) fail("not_found", QString("take %1 is not recording").arg(id));
+    const take::Take& t = it->second.recorder->take();
+    QJsonArray cols, rows;
+    for (const QString& col : t.columns) cols.append(col);
+    for (const std::vector<double>& row : t.rows) {
+        QJsonArray a;
+        for (double v : row) a.append(std::round(v * 1000.0) / 1000.0);
+        rows.append(a);
+    }
+    QJsonObject o{{"take", id}, {"robot", t.robot}, {"rate", round6(t.rate)}, {"columns", cols}, {"rows", rows}};
+    m_takes.erase(it);
+    return o;
+}
+
+QJsonValue ApiServer::robotPlay(const QJsonObject& p, Call& c) {
+    const Robot r = robotParam(p);
+    const QJsonArray cols = p.value("columns").toArray();
+    const QJsonArray rows = p.value("rows").toArray();
+    if (cols.isEmpty() || rows.isEmpty()) fail("bad_request", "\"columns\" and \"rows\" must be lists (a take)");
+    QStringList names;
+    for (const QJsonValue& v : cols) names << v.toString();
+    const int tCol = int(names.indexOf("t"));
+    if (tCol < 0) fail("bad_request", "a take needs a \"t\" column (seconds)");
+    auto play = std::make_shared<AutomationEngine::PlayRequest>();
+    play->root = r.root;
+    play->relative = flag(p, "relative", false);
+    play->speed = number(p, "speed", 1);
+    // The columns named after the robot's actuators are its joints
+    std::vector<int> jointCols;
+    for (int jid : r.joints) {
+        const Motor* m = m_scene->motorForJoint(jid);
+        const int k = m ? int(names.indexOf(m->name)) : -1;
+        if (k < 0) continue;
+        play->joints.push_back(jid);
+        jointCols.push_back(k);
+    }
+    // Its place: a whole frame, or on the floor
+    const int x = int(names.indexOf("x")), y = int(names.indexOf("y")), z = int(names.indexOf("z"));
+    const int rx = int(names.indexOf("rx")), ry = int(names.indexOf("ry")), rz = int(names.indexOf("rz"));
+    const int hd = int(names.indexOf("heading"));
+    const bool full = x >= 0 && y >= 0 && z >= 0 && rx >= 0 && ry >= 0 && rz >= 0;
+    const bool floor = !full && x >= 0 && z >= 0 && hd >= 0;
+    const bool moveRoot = flag(p, "place", true) && (full || floor);
+    if (play->joints.empty() && !moveRoot)
+        fail("bad_request", QString("no column names a joint of %1 (its actuators: %2)")
+                                .arg(r.name, listOf([&] { QStringList n; for (int j : r.joints)
+                                    if (const Motor* m = m_scene->motorForJoint(j)) n << m->name; return n; }())));
+    // On the floor: its top object keeps its height and tilt over its floor spot
+    const QMatrix4x4 now = kin::toolFrame(*m_scene, r.root);
+    const gait::Place here = gait::placeOf(now);
+    const QMatrix4x4 offset = gait::frameOf(here).inverted() * now;
+    for (int i = 0; i < rows.size(); ++i) {
+        const QJsonArray row = rows[i].toArray();
+        if (row.size() != cols.size()) fail("bad_request", QString("row %1 has %2 values for %3 columns").arg(i).arg(row.size()).arg(cols.size()));
+        auto at = [&](int k) {
+            const QJsonValue v = row[k];
+            if (!v.isDouble()) fail("bad_request", QString("row %1: \"%2\" is not a number").arg(i).arg(names[k]));
+            return v.toDouble();
+        };
+        play->times.push_back(at(tCol));
+        std::vector<double> v;
+        for (size_t j = 0; j < play->joints.size(); ++j) v.push_back(fromApi(*m_scene->getJoint(play->joints[j]), at(jointCols[j])));
+        play->values.push_back(std::move(v));
+        if (moveRoot) {
+            Transform f;
+            if (full) {
+                f.position = QVector3D(float(at(x) / kMm), float(at(y) / kMm), float(at(z) / kMm));
+                f.rotation = QVector3D(float(at(rx)), float(at(ry)), float(at(rz)));
+            } else {
+                const gait::Place place{at(x) / kMm, at(z) / kMm, qDegreesToRadians(at(hd))};
+                const Transform t = SceneGraph::toTransform(gait::frameOf(place) * offset);
+                f.position = t.position;
+                f.rotation = t.rotation;
+            }
+            play->frames.push_back(f);
+        }
+    }
+    AutomationEngine::MotionRequest req;
+    req.kind = AutomationEngine::MotionKind::Play;
+    req.play = play;
+    req.label = "play";
+    return submit(p, c, req);
 }

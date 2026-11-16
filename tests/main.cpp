@@ -2652,6 +2652,62 @@ humanoid::Built walkingHumanoid(SceneGraph& g, bool demo = false) {
     return humanoid::build(g, spec);
 }
 
+TEST(apiServerRecordsAndPlaysATake) {
+    SceneGraph g;
+    const humanoid::Built h = walkingHumanoid(g, false);
+    SimulationEngine sim(&g);
+    sim.setSpeedFactor(20);
+    ApiServer server(&g, &sim);
+    CHECK(server.start(0));
+    ApiClient c;
+    CHECK(c.connectTo(server.port()));
+    const QString name = g.getObject(h.root)->name;
+    auto place = [&] { return result(c.call("humanoid.state", {{"robot", name}})); };
+
+    QJsonObject st = result(c.call("take.start", {{"robot", name}, {"rate", 20}}));
+    const int take = st.value("take").toInt();
+    CHECK(take > 0);
+    CHECK(st.value("columns").toArray().contains(QJsonValue("LKnee")));
+    CHECK(result(c.call("humanoid.walk", {{"robot", name}, {"forward", 500}})).value("state").toString() == "done");
+    CHECK(result(c.call("sim.wait", {{"seconds", 0.2}})).contains("time"));
+    st = result(c.call("take.status", {{"take", take}}));
+    CHECK(st.value("frames").toInt() > 10);
+    const QJsonObject t = result(c.call("take.stop", {{"take", take}}));
+    CHECK(t.value("robot").toString() == name);
+    CHECK_NEAR(t.value("rate").toDouble(), 20, 1e-9);
+    const QJsonArray cols = t.value("columns").toArray(), rows = t.value("rows").toArray();
+    CHECK(rows.size() >= st.value("frames").toInt());
+    CHECK(rows.first().toArray().size() == cols.size());
+    CHECK(errorCode(c.call("take.stop", {{"take", take}})) == "not_found");
+    const int xCol = int(cols.toVariantList().indexOf("x"));
+    CHECK_NEAR(rows.last().toArray()[xCol].toDouble(), 500, 0.1);
+
+    // Again from where it stands, then the joints and its floor place only
+    QJsonObject r = c.call("robot.play", {{"robot", name}, {"columns", cols}, {"rows", rows}, {"relative", true}});
+    CHECK(result(r).value("state").toString() == "done");
+    CHECK_NEAR(place().value("x").toDouble(), 1000, 0.1);
+    QJsonArray few{"t", "x", "z", "heading", "LKnee", "RKnee", "Nonsense"}, fewRows;
+    for (const QJsonValue& v : rows) {
+        QJsonArray in = v.toArray(), out;
+        for (const QJsonValue& col : few) {
+            const int k = int(cols.toVariantList().indexOf(col.toString()));
+            out.append(k >= 0 ? in[k] : QJsonValue(0));
+        }
+        fewRows.append(out);
+    }
+    r = c.call("robot.play", {{"robot", name}, {"columns", few}, {"rows", fewRows}, {"speed", 2}});
+    CHECK(result(r).value("state").toString() == "done");
+    CHECK_NEAR(place().value("x").toDouble(), 500, 0.1);
+    CHECK_NEAR(place().value("z").toDouble(), 0, 0.1);
+
+    // Refused: no joint and no place, rows of the wrong length
+    CHECK(errorCode(c.call("robot.play", {{"robot", name}, {"columns", QJsonArray{"t", "foo"}},
+                                           {"rows", QJsonArray{QJsonArray{0, 1}}}})) == "bad_request");
+    CHECK(errorCode(c.call("robot.play", {{"robot", name}, {"columns", QJsonArray{"t", "LKnee"}},
+                                           {"rows", QJsonArray{QJsonArray{0}}}})) == "bad_request");
+    CHECK(errorCode(c.call("take.start", {{"robot", name}, {"rate", -1}})) == "bad_request");
+}
+
 TEST(apiServerWalksAHumanoid) {
     SceneGraph g;
     const humanoid::Built h = walkingHumanoid(g, false);
