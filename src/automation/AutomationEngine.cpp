@@ -917,6 +917,7 @@ void AutomationEngine::startOperation(SeqRt& seq, OpRt& op) {
                 op.status.detail = "walking";
             }
             if (!op.velocity.isEmpty()) w.params.speed = std::max(0.0, op.velocity.eval(c));
+            op.walkWhat = op.status.detail;
             QString code, err;
             op.walker = makeWalker(w, &code, &err);
             op.walkStart = m_time;
@@ -1020,7 +1021,8 @@ bool AutomationEngine::operationFinished(OpRt& op) {
             }
             op.status.progress = progress;
             const int done = op.walker->stepsDone(m_time + m_dt - op.walkStart), total = op.walker->stepCount();
-            if (total > 0) op.status.detail = QString("step %1 of %2").arg(std::min(done + 1, total)).arg(total);
+            if (total > 0)
+                op.status.detail = QString("%1, step %2 of %3").arg(op.walkWhat).arg(std::min(done + 1, total)).arg(total);
             if (progress < 1.0) return false;
             op.walker.reset();
             return true;
@@ -2215,10 +2217,20 @@ QStringList AutomationEngine::activeOperationLabels() const {
     QStringList out;
     for (const auto& s : m_sequences) {
         QStringList ops;
-        for (int i = 0; i < int(s.ops.size()); ++i)
-            if (s.ops[size_t(i)].status.state == OpState::Running)
-                ops << opLabel(s.ops[size_t(i)].def, i);
+        for (int i = 0; i < int(s.ops.size()); ++i) {
+            const OpRt& o = s.ops[size_t(i)];
+            if (o.status.state != OpState::Running) continue;
+            // What a walk or a motion is doing: the planner walking, or a motion playing
+            const bool says = (o.def.type == OperationType::Walk || o.def.type == OperationType::PlayMotion) &&
+                              !o.status.detail.isEmpty();
+            ops << opLabel(o.def, i) + (says ? " " + o.status.detail : QString());
+        }
         if (!ops.isEmpty()) out << s.name + ": " + ops.join(", ");
     }
+    // Motions a program (or the Motions tab) runs
+    QStringList program;
+    for (const MotionRt& m : m_motions)
+        if (m.status.state == MotionState::Running) program << m.req.label;
+    if (!program.isEmpty()) out << "Program: " + program.join(", ");
     return out;
 }

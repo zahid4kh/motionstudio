@@ -329,6 +329,7 @@ private:
         expr::Expression blend;           // PlayMotion of a learned model
         std::shared_ptr<gait::Walker> walker;
         double           walkStart = 0;
+        QString          walkWhat;          // "walking to Spot", shown with the step under way
         // PlayMotion
         PlayRt           play;
     };
