@@ -635,6 +635,14 @@ void MainWindow::buildDocks() {
     });
     connect(m_automation, &AutomationPanel::statusMessage, this, &MainWindow::showStatus);
     m_automation->setRecordAction(m_valueRecorder->action());
+    // A Walk operation's route: drawn on the floor, its points picked there
+    connect(m_automation, &AutomationPanel::routeChanged, m_viewport, &Viewport::setRoute);
+    connect(m_automation, &AutomationPanel::floorPickRequested, this, [this](bool on) {
+        if (on) m_viewport->beginFloorPick("Click the floor to add a point to the walk  ·  Enter or Esc ends");
+        else m_viewport->endFloorPick();
+    });
+    connect(m_viewport, &Viewport::floorPointPicked, m_automation, &AutomationPanel::addRoutePoint);
+    connect(m_viewport, &Viewport::floorPickEnded, m_automation, &AutomationPanel::floorPickEnded);
     connect(m_valueRecorder, &ValueRecorder::motionRecorded, this, [this](int id) {
         if (m_automationDock->isVisible()) m_automation->showMotion(id);
     });

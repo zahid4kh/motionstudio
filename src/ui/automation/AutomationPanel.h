@@ -1,6 +1,9 @@
 #pragma once
 #include <QWidget>
+#include <QPointF>
 #include <QTimer>
+#include <optional>
+#include <vector>
 
 class SceneGraph;
 class SimulationEngine;
@@ -33,10 +36,15 @@ public:
     // Motions tab: its Record button, and a motion selected there
     void setRecordAction(QAction* record);
     void showMotion(int motionId);
+    // Sequences tab: a point picked on the floor for a Walk's route, or picking ended
+    void addRoutePoint(const QPointF& xz);
+    void floorPickEnded();
 
 signals:
     void statusMessage(const QString& msg, bool ok);
     void externalIoRequested();
+    void floorPickRequested(bool on);
+    void routeChanged(const std::vector<QPointF>& points, std::optional<QPointF> from, std::optional<double> heading);
 
 private:
     void setLocked(bool locked);

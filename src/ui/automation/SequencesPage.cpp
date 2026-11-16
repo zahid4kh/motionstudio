@@ -3,6 +3,7 @@
 #include "automation/Expression.h"
 #include "io/ApiServer.h"
 #include "physics/SimulationEngine.h"
+#include "automation/Kinematics.h"
 #include "robot/Gait.h"
 #include "ui/Theme.h"
 #include <QCheckBox>
@@ -257,6 +258,30 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     m_opWalkTo->setMinimumContentsLength(12);
     m_opWalkTo->setToolTip("Walk to where this object stands on the floor and face the way it faces (its +X). "
                            "Add an empty frame as a marker and place it. Or walk by the distances below");
+    m_opRoute = new QWidget;
+    {
+        auto* rl = new QHBoxLayout(m_opRoute);
+        rl->setContentsMargins(0, 0, 0, 0);
+        m_opRouteText = new QLabel;
+        m_opRouteText->setObjectName("hint");
+        m_opRouteText->setWordWrap(true);
+        m_opRoutePick = new QToolButton;
+        m_opRoutePick->setText("Pick on floor");
+        m_opRoutePick->setIcon(Theme::icon("crosshair"));
+        m_opRoutePick->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+        m_opRoutePick->setCheckable(true);
+        m_opRoutePick->setToolTip("Click the floor in the viewport to add points, in order; Enter or Esc ends");
+        m_opRouteClear = new QPushButton(Theme::icon("eraser"), "");
+        m_opRouteClear->setObjectName("iconButton");
+        m_opRouteClear->setFixedWidth(30);
+        m_opRouteClear->setToolTip("Remove the points");
+        rl->addWidget(m_opRouteText, 1);
+        rl->addWidget(m_opRoutePick);
+        rl->addWidget(m_opRouteClear);
+    }
+    m_opRouteHeading = autoui::makeExprEdit(scene, autoui::ExprKind::Value, "the way it arrives");
+    m_opRouteHeading->setHelpText("Degrees to face at the last point: 0 = +X, 90 = −Z (counter-clockwise seen from "
+                                  "above); empty keeps the way it arrives");
     m_opForward  = autoui::makeExprEdit(scene, autoui::ExprKind::Value, "metres ahead, e.g. 1.5");
     m_opSideways = autoui::makeExprEdit(scene, autoui::ExprKind::Value, "metres to its left (− right)");
     m_opTurn     = autoui::makeExprEdit(scene, autoui::ExprKind::Value, "degrees to its left (− right)");
@@ -305,6 +330,8 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     m_opLayout->addRow("Part", m_opPart);
     m_opLayout->addRow("Robot", m_opWalker);
     m_opLayout->addRow("Walk to", m_opWalkTo);
+    m_opLayout->addRow("Points", m_opRoute);
+    m_opLayout->addRow("Face °", m_opRouteHeading);
     m_opLayout->addRow("Forward m", m_opForward);
     m_opLayout->addRow("Sideways m", m_opSideways);
     m_opLayout->addRow("Turn °", m_opTurn);
@@ -401,6 +428,14 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
         loadOpForm();   // the robot it was recorded on
     });
     connect(m_opRobot,    &QComboBox::currentIndexChanged, this, &SequencesPage::commitOpForm);
+    connect(m_opRoutePick, &QToolButton::toggled, this, [this](bool on) { emit floorPickRequested(on); });
+    connect(m_opRouteClear, &QPushButton::clicked, this, [this] {
+        Operation* op = currentOperation();
+        if (!op || m_locked) return;
+        edit([&] { op->route.clear(); m_scene->notifyAutomationChanged(); });
+        loadOpForm();
+    });
+    connect(m_opRouteHeading, &ExpressionEdit::committed, this, &SequencesPage::commitOpForm);
     connect(m_opClip,     &QComboBox::currentIndexChanged, this, &SequencesPage::commitOpForm);
     connect(m_opBlendClip, &QComboBox::currentIndexChanged, this, [this]{
         if (m_loading) return;
@@ -534,6 +569,11 @@ QString SequencesPage::describe(const Operation& op) const {
             const QString speed = op.velocity.trimmed().isEmpty() ? QString() : QString(" @ %1 m/s").arg(op.velocity.trimmed());
             if (const SceneObject* to = m_scene->getObject(op.walkToId))
                 return QString("%1 walks to %2%3").arg(w ? w->name : "?", to->name, speed);
+            if (op.walkRoute)
+                return QString("%1 walks through %2 point%3%4%5").arg(w ? w->name : "?").arg(op.route.size())
+                    .arg(op.route.size() == 1 ? "" : "s")
+                    .arg(op.routeHeading.trimmed().isEmpty() ? QString() : QString(", faces %1°").arg(op.routeHeading.trimmed()))
+                    .arg(speed);
             QStringList parts;
             if (!op.forward.trimmed().isEmpty()) parts << op.forward.trimmed() + " m";
             if (!op.sideways.trimmed().isEmpty()) parts << op.sideways.trimmed() + " m left";
@@ -614,6 +654,10 @@ void SequencesPage::updateOpFormVisibility(OperationType t) {
     m_opLayout->setRowVisible(m_opPart, t == OperationType::Grip);
     const bool walk = t == OperationType::Walk;
     const bool byDistance = walk && m_opWalkTo->currentData().toInt() == -1;
+    const bool route = walk && m_opWalkTo->currentData().toInt() == -3;
+    m_opLayout->setRowVisible(m_opRoute, route);
+    m_opLayout->setRowVisible(m_opRouteHeading, route);
+    if (!route && m_opRoutePick->isChecked()) m_opRoutePick->setChecked(false);
     m_opLayout->setRowVisible(m_opWalker, walk);
     m_opLayout->setRowVisible(m_opWalkTo, walk);
     m_opLayout->setRowVisible(m_opForward, byDistance);
@@ -744,6 +788,11 @@ void SequencesPage::loadOpForm() {
         }
     }
     autoui::fillObjectCombo(m_opWalkTo, *m_scene, op ? op->walkToId : -1, "(by distance)");
+    {
+        const QSignalBlocker block(m_opWalkTo);
+        m_opWalkTo->insertItem(1, Theme::icon("crosshair"), "Points on the floor", -3);
+        if (op && op->walkRoute && op->walkToId == -1) m_opWalkTo->setCurrentIndex(1);
+    }
     // Play Motion: the project's motions, and the robots that can play them
     {
         const QSignalBlocker block(m_opMotion), block2(m_opRobot);
@@ -825,6 +874,7 @@ void SequencesPage::loadOpForm() {
         m_opAfter->setText("");
         m_opStatus->setText(s ? "Add an operation with “+ Operation”." : "Create a sequence with “+”.");
         m_loading = false;
+        publishRoute();
         return;
     }
     int idx = currentOpIndex();
@@ -840,6 +890,15 @@ void SequencesPage::loadOpForm() {
     m_opForward->setExpression(op->forward);
     m_opSideways->setExpression(op->sideways);
     m_opTurn->setExpression(op->turn);
+    m_opRouteHeading->setExpression(op->routeHeading);
+    {
+        QStringList pts;
+        for (const QPointF& p : op->route) pts << QString("(%1, %2)").arg(p.x(), 0, 'f', 2).arg(p.y(), 0, 'f', 2);
+        m_opRouteText->setText(op->route.empty() ? QString("none yet: pick them on the floor")
+                               : QString("%1 point%2: %3").arg(op->route.size()).arg(op->route.size() == 1 ? "" : "s")
+                                     .arg(pts.size() > 4 ? pts.mid(0, 2).join(" → ") + " → … → " + pts.back() : pts.join(" → ")));
+        m_opRouteClear->setEnabled(!op->route.empty());
+    }
     m_opStartCond->setExpression(op->startCondition);
     m_opOnStart->setExpression(op->onStart);
     m_opOnFinish->setExpression(op->onFinish);
@@ -848,6 +907,7 @@ void SequencesPage::loadOpForm() {
     updateOpFormVisibility(op->type);
     m_opStatus->setText(typeHelp(op->type));
     m_loading = false;
+    publishRoute();
 }
 
 void SequencesPage::refreshRuntime() {
@@ -1155,7 +1215,10 @@ void SequencesPage::commitOpForm() {
         op->clip           = learned ? clipName(m_opClip, false) : QString();
         op->blendClip      = learned ? clipName(m_opBlendClip, true) : QString();
         op->blend          = learned && !op->blendClip.isEmpty() ? m_opBlend->text() : QString();
-        op->walkToId       = walk ? m_opWalkTo->currentData().toInt() : -1;
+        const int walkTo   = walk ? m_opWalkTo->currentData().toInt() : -1;
+        op->walkToId       = walkTo >= 0 ? walkTo : -1;
+        op->walkRoute      = walk && walkTo == -3;
+        op->routeHeading   = op->walkRoute ? m_opRouteHeading->text() : QString();
         op->forward        = walk ? m_opForward->text() : QString();
         op->sideways       = walk ? m_opSideways->text() : QString();
         op->turn           = walk ? m_opTurn->text() : QString();
@@ -1174,4 +1237,59 @@ void SequencesPage::commitOpForm() {
         m_loading = false;
     }
     m_opStatus->setText(typeHelp(op->type));
+    publishRoute();
+}
+
+void SequencesPage::publishRoute() {
+    const Operation* op = currentOperation();
+    if (!isVisible() || !op || op->type != OperationType::Walk || !op->walkRoute) {
+        if (m_opRoutePick->isChecked()) m_opRoutePick->setChecked(false);
+        emit routeChanged({}, std::nullopt, std::nullopt);
+        return;
+    }
+    std::optional<QPointF> from;
+    if (m_scene->getObject(op->walkerId)) {
+        const gait::Place at = gait::placeOf(kin::toolFrame(*m_scene, op->walkerId));
+        from = QPointF(at.x, at.z);
+    }
+    std::optional<double> heading;
+    bool ok = false;
+    const double h = op->routeHeading.trimmed().toDouble(&ok);
+    if (ok) heading = h;
+    emit routeChanged(op->route, from, heading);
+}
+
+void SequencesPage::addRoutePoint(const QPointF& xz) {
+    Operation* op = currentOperation();
+    if (!op || m_locked || op->type != OperationType::Walk || !op->walkRoute) return;
+    edit([&] {
+        op->route.push_back(QPointF(std::round(xz.x() * 1000) / 1000, std::round(xz.y() * 1000) / 1000));
+        m_scene->notifyAutomationChanged();
+    });
+    const bool picking = m_opRoutePick->isChecked();
+    loadOpForm();
+    if (picking && !m_opRoutePick->isChecked()) {
+        const QSignalBlocker block(m_opRoutePick);
+        m_opRoutePick->setChecked(true);
+    }
+    // Update the row in place
+    Sequence* s = currentSequence();
+    const int i = currentOpIndex();
+    if (s && i >= 0 && i < m_ops->rowCount()) m_ops->item(i, C_What)->setText(describe(*op));
+}
+
+void SequencesPage::floorPickEnded() {
+    const QSignalBlocker block(m_opRoutePick);
+    m_opRoutePick->setChecked(false);
+}
+
+void SequencesPage::showEvent(QShowEvent* e) {
+    Page::showEvent(e);
+    publishRoute();
+}
+
+void SequencesPage::hideEvent(QHideEvent* e) {
+    Page::hideEvent(e);
+    if (m_opRoutePick->isChecked()) m_opRoutePick->setChecked(false);
+    emit routeChanged({}, std::nullopt, std::nullopt);
 }

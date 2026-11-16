@@ -1,5 +1,8 @@
 #pragma once
 #include "AutomationCommon.h"
+#include <QPointF>
+#include <optional>
+#include <vector>
 
 class QListWidget;
 class QTableWidget;
@@ -24,6 +27,19 @@ public:
     void refreshRuntime() override;
     void setLocked(bool locked) override;
     void selectSequence(int sequenceId);
+    // A point picked on the floor (x, z in m): added to the Walk operation's route
+    void addRoutePoint(const QPointF& xz);
+    void floorPickEnded();
+
+signals:
+    // Ask the viewport to pick points on the floor, or stop
+    void floorPickRequested(bool on);
+    // The route of the Walk operation being edited, to draw (empty: none)
+    void routeChanged(const std::vector<QPointF>& points, std::optional<QPointF> from, std::optional<double> heading);
+
+protected:
+    void showEvent(QShowEvent* e) override;
+    void hideEvent(QHideEvent* e) override;
 
 private:
     Sequence*  currentSequence();
@@ -52,6 +68,7 @@ private:
     // " on <part>" for a move to a pose taught on a part, else empty
     QString partText(const Operation& op) const;
     QString predecessorText(const Sequence& seq, const Operation& op) const;
+    void    publishRoute();       // routeChanged for the current operation
 
     // Sequence list + props
     QListWidget*    m_seqList = nullptr;
@@ -88,6 +105,11 @@ private:
     ExpressionEdit* m_opForward = nullptr;
     ExpressionEdit* m_opSideways = nullptr;
     ExpressionEdit* m_opTurn = nullptr;
+    QWidget*        m_opRoute = nullptr;      // Walk through points: the points and the pick / clear buttons
+    QLabel*         m_opRouteText = nullptr;
+    QToolButton*    m_opRoutePick = nullptr;
+    QPushButton*    m_opRouteClear = nullptr;
+    ExpressionEdit* m_opRouteHeading = nullptr;
     QComboBox*      m_opMotion = nullptr;     // PlayMotion: the motion
     QComboBox*      m_opRobot = nullptr;      // PlayMotion: the robot (first: the one it was recorded on)
     QCheckBox*      m_opRelative = nullptr;   // PlayMotion: start where the robot stands

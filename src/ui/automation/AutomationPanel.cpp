@@ -103,6 +103,8 @@ AutomationPanel::AutomationPanel(SceneGraph* scene, SimulationEngine* sim, QWidg
     });
     connect(scene, &SceneGraph::jointsMoved, m_actuators, &ActuatorsPage::refreshRuntime);
     connect(m_signals, &SignalsPage::externalIoRequested, this, &AutomationPanel::externalIoRequested);
+    connect(m_sequences, &SequencesPage::floorPickRequested, this, &AutomationPanel::floorPickRequested);
+    connect(m_sequences, &SequencesPage::routeChanged, this, &AutomationPanel::routeChanged);
     connect(m_actuators, &ActuatorsPage::sequenceCreated, this, [this](int id){
         m_sequences->selectSequence(id);
         m_tabs->setCurrentWidget(m_sequences);
@@ -169,6 +171,10 @@ void AutomationPanel::addSinkOn(int objectId) {
 }
 
 void AutomationPanel::setRecordAction(QAction* record) { m_motions->setRecordAction(record); }
+
+void AutomationPanel::addRoutePoint(const QPointF& xz) { m_sequences->addRoutePoint(xz); }
+
+void AutomationPanel::floorPickEnded() { m_sequences->floorPickEnded(); }
 
 void AutomationPanel::showMotion(int motionId) {
     m_tabs->setCurrentWidget(m_motions);
