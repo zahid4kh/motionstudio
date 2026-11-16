@@ -3583,6 +3583,90 @@ TEST(walkOperationInASequence) {
     CHECK(AutomationEngine::validateAll(g).join(" ").contains("no legs"));
 }
 
+TEST(takePlaysBackAWalk) {
+    SceneGraph g;
+    const humanoid::Built b = walkingHumanoid(g);
+    AutomationEngine e(&g);
+    CHECK(e.start(nullptr));
+    std::vector<int> joints;
+    for (auto& [name, jid] : b.joints) joints.push_back(jid);
+    take::Recorder rec(g, b.root, joints);
+    AutomationEngine::MotionRequest r;
+    r.kind = AutomationEngine::MotionKind::Walk;
+    r.walk.root = b.root;
+    r.walk.forward = 0.6;
+    r.walk.turn = 45;
+    CHECK(runMotion(e, e.submitMotion(r), 30, [&] { rec.sample(e); }).state == AutomationEngine::MotionState::Done);
+    const take::Take& t = rec.take();
+    const gait::Place walked = placeNow(g, b.root);
+
+    // A take as a play request: absolute frames start where it started
+    auto request = [&](bool relative) {
+        auto p = std::make_shared<AutomationEngine::PlayRequest>();
+        p->root = b.root;
+        p->joints = joints;
+        p->relative = relative;
+        for (const auto& row : t.rows) {
+            p->times.push_back(row[0]);
+            Transform f;
+            f.position = QVector3D(float(row[1] / 1000), float(row[2] / 1000), float(row[3] / 1000));
+            f.rotation = QVector3D(float(row[4]), float(row[5]), float(row[6]));
+            p->frames.push_back(f);
+            std::vector<double> v;
+            for (size_t j = 0; j < joints.size(); ++j) v.push_back(row[15 + j]);
+            p->values.push_back(v);
+        }
+        AutomationEngine::MotionRequest m;
+        m.kind = AutomationEngine::MotionKind::Play;
+        m.play = p;
+        return m;
+    };
+    // Relative: the same walk again from where it stands
+    take::Recorder again(g, b.root, joints);
+    CHECK(runMotion(e, e.submitMotion(request(true)), 30, [&] { again.sample(e); }).state == AutomationEngine::MotionState::Done);
+    gait::Place end = placeNow(g, b.root);
+    CHECK_NEAR(gait::angleDiff(end.heading, walked.heading), qDegreesToRadians(45.0), 1e-4);
+    // the second walk is the first one turned by 45° and moved to `walked`
+    const double dx = walked.x, dz = walked.z, h = walked.heading;
+    CHECK_NEAR(end.x, walked.x + dx * std::cos(h) + dz * std::sin(h), 1e-4);
+    CHECK_NEAR(end.z, walked.z - dx * std::sin(h) + dz * std::cos(h), 1e-4);
+    CHECK(std::abs(again.frames() - rec.frames()) <= 2);
+    // the joints went the same way, scan by scan
+    double worst = 0;
+    for (int i = 1; i + 1 < std::min(again.frames(), rec.frames()); ++i)
+        for (size_t j = 0; j < joints.size(); ++j) {
+            const double a = again.take().rows[size_t(i)][15 + j];
+            double best = 1e9;
+            for (int k = i - 1; k <= i + 1; ++k) best = std::min(best, std::abs(a - t.rows[size_t(k)][15 + j]));
+            worst = std::max(worst, best);
+        }
+    CHECK(worst < 1e-3);
+    for (size_t j = 0; j < joints.size(); ++j) CHECK_NEAR(g.getJoint(joints[j])->currentValue, t.rows.back()[15 + j], 1e-3);
+
+    // Absolute: back to where the take was recorded
+    CHECK(runMotion(e, e.submitMotion(request(false)), 30).state == AutomationEngine::MotionState::Done);
+    end = placeNow(g, b.root);
+    CHECK_NEAR(end.x, walked.x, 1e-4);
+    CHECK_NEAR(end.z, walked.z, 1e-4);
+    CHECK_NEAR(gait::angleDiff(end.heading, walked.heading), 0, 1e-4);
+
+    // Joints only, at twice the pace; a bad request is refused
+    auto half = std::make_shared<AutomationEngine::PlayRequest>(*request(false).play);
+    half->frames.clear();
+    half->speed = 2;
+    AutomationEngine::MotionRequest m;
+    m.kind = AutomationEngine::MotionKind::Play;
+    m.play = half;
+    int scans = 0;
+    CHECK(runMotion(e, e.submitMotion(m), 30, [&] { ++scans; }).state == AutomationEngine::MotionState::Done);
+    CHECK(std::abs(scans - rec.frames() / 2) <= 2);
+    end = placeNow(g, b.root);
+    CHECK_NEAR(end.x, walked.x, 1e-4);
+    half->times[3] = half->times[2];
+    QString code, err;
+    CHECK(e.submitMotion(m, &code, &err) == 0 && code == "bad_request");
+}
+
 TEST(takeRecordsAWalk) {
     SceneGraph g;
     const humanoid::Built b = walkingHumanoid(g);

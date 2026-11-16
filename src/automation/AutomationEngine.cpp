@@ -1404,6 +1404,45 @@ int AutomationEngine::submitMotion(const MotionRequest& r, QString* code, QStrin
         for (int jid : m.joints)
             if (actIndexForJoint(jid) < 0)
                 return reject("not_actuated", QString("%1 has no actuator").arg(jointLabel(*m_scene, jid)));
+    } else if (r.kind == MotionKind::Play) {
+        if (!r.play) return reject("bad_request", "nothing to play");
+        const PlayRequest& p = *r.play;
+        const size_t n = p.times.size();
+        if (n == 0) return reject("bad_request", "nothing to play");
+        if (p.values.size() != n || (!p.frames.empty() && p.frames.size() != n))
+            return reject("bad_request", "every sample needs a time, the joint values and (if any) a frame");
+        if (!(p.speed > 0) || !std::isfinite(p.speed)) return reject("bad_request", "speed must be positive");
+        for (size_t i = 0; i < n; ++i) {
+            if (!std::isfinite(p.times[i]) || (i && p.times[i] <= p.times[i - 1]))
+                return reject("bad_request", "the times must be numbers that increase");
+            if (p.values[i].size() != p.joints.size())
+                return reject("bad_request", QString("sample %1 has %2 values for %3 joints")
+                                                 .arg(i).arg(p.values[i].size()).arg(p.joints.size()));
+            for (double v : p.values[i])
+                if (!std::isfinite(v)) return reject("bad_request", QString("sample %1: a value is not a number").arg(i));
+            if (!p.frames.empty()) {
+                const Transform& f = p.frames[i];
+                for (float v : {f.position.x(), f.position.y(), f.position.z(), f.rotation.x(), f.rotation.y(), f.rotation.z()})
+                    if (!std::isfinite(v)) return reject("bad_request", QString("sample %1: the frame is not a number").arg(i));
+            }
+        }
+        if (!p.frames.empty() && !m_scene->getObject(p.root)) return reject("not_found", "the robot does not exist");
+        if (p.joints.empty() && p.frames.empty()) return reject("bad_request", "nothing to play");
+        for (int jid : p.joints) {
+            if (!m_scene->getJoint(jid)) return reject("not_found", QString("joint %1 does not exist").arg(jid));
+            if (actIndexForJoint(jid) < 0)
+                return reject("not_actuated", QString("%1 has no actuator").arg(jointLabel(*m_scene, jid)));
+        }
+        m.joints = p.joints;
+        // Moving the top object: it waits for the robot's walks, and they for it
+        if (!p.frames.empty()) {
+            gait::Legs legs;
+            QString why;
+            if (gait::findLegs(*m_scene, p.root, &legs, &why))
+                for (int side = 0; side < 2; ++side)
+                    for (int jid : legs.chain[side])
+                        if (std::find(m.joints.begin(), m.joints.end(), jid) == m.joints.end()) m.joints.push_back(jid);
+        }
     } else {
         if (!m_scene->getObject(r.tool)) return reject("not_found", "the tool does not exist");
         if (m.req.chain.empty()) m.req.chain = kin::chainTo(*m_scene, r.tool);
@@ -1424,7 +1463,7 @@ int AutomationEngine::submitMotion(const MotionRequest& r, QString* code, QStrin
     }
     if (m.req.label.isEmpty())
         m.req.label = r.kind == MotionKind::Linear ? "moveL" : r.kind == MotionKind::JointsToPose ? "moveJ"
-                    : r.kind == MotionKind::Walk ? "walk" : "moveJoints";
+                    : r.kind == MotionKind::Walk ? "walk" : r.kind == MotionKind::Play ? "play" : "moveJoints";
     m.id = m_nextMotionId++;
     m_motions.push_back(std::move(m));
     return m_motions.back().id;
@@ -1563,6 +1602,25 @@ bool AutomationEngine::startMotion(MotionRt& m) {
         m.status.state = MotionState::Running;
         return true;
     }
+    if (r.kind == MotionKind::Play) {
+        const PlayRequest& p = *r.play;
+        m.walkStart = m_time;
+        if (!p.frames.empty()) {
+            const QMatrix4x4 now = kin::toolFrame(*m_scene, p.root);
+            m.playScale = now.inverted() * m_scene->worldTransform(p.root);
+            m.playShift = QMatrix4x4();
+            if (p.relative) {
+                QMatrix4x4 first;
+                first.translate(p.frames.front().position);
+                first.rotate(p.frames.front().rotation.x(), 1, 0, 0);
+                first.rotate(p.frames.front().rotation.y(), 0, 1, 0);
+                first.rotate(p.frames.front().rotation.z(), 0, 0, 1);
+                m.playShift = gait::frameOf(gait::placeOf(now)) * gait::frameOf(gait::placeOf(first)).inverted();
+            }
+        }
+        m.status.state = MotionState::Running;
+        return true;
+    }
     if (r.kind == MotionKind::Joints) {
         std::map<int, double> values;
         for (auto& [jid, v] : r.joints) {
@@ -1677,6 +1735,12 @@ void AutomationEngine::advanceMotions() {
                         finished = true;
                     }
                 }
+            } else if (m.req.kind == MotionKind::Play) {
+                m.status.progress = stepPlay(m);
+                if (m.status.progress >= 1.0) {
+                    finishMotion(m, MotionState::Done);
+                    finished = true;
+                }
             } else if (m.req.kind == MotionKind::Linear) {
                 kin::Result res;
                 const double s = stepPath(m.path, &res);
@@ -1768,6 +1832,49 @@ bool AutomationEngine::stepWalk(gait::Walker& w, double start, double* error, do
         for (auto& [jid, v] : values)
             if (const int idx = actIndexForJoint(jid); idx >= 0) m_actuators[size_t(idx)].st.vel = 0;
     return ok;
+}
+
+double AutomationEngine::stepPlay(MotionRt& m) {
+    const PlayRequest& p = *m.req.play;
+    const double t = p.times.front() + (m_time + m_dt - m.walkStart) * p.speed;
+    // The sample before t and how far towards the next one
+    const size_t n = p.times.size();
+    size_t i = size_t(std::upper_bound(p.times.begin(), p.times.end(), t) - p.times.begin());
+    i = i == 0 ? 0 : i - 1;
+    double f = 0;
+    if (i + 1 >= n) i = n - 1;
+    else f = std::clamp((t - p.times[i]) / (p.times[i + 1] - p.times[i]), 0.0, 1.0);
+    const size_t k = std::min(i + 1, n - 1);
+    for (size_t j = 0; j < p.joints.size(); ++j) {
+        const int idx = actIndexForJoint(p.joints[j]);
+        if (idx < 0) continue;
+        ActuatorRt& ax = m_actuators[size_t(idx)];
+        const double c = clampToLimits(ax, p.values[i][j] + (p.values[k][j] - p.values[i][j]) * f);
+        ax.st.vel = m_dt > 0 ? (c - ax.st.pos) / m_dt : 0.0;
+        ax.st.pos = c;
+        ax.target = c;
+        ax.mode   = ActuatorMode::Position;
+        ax.active = true;
+        ax.direct = true;
+    }
+    if (!p.frames.empty() && m_scene->getObject(p.root)) {
+        auto quat = [](const QVector3D& e) {
+            return QQuaternion::fromAxisAndAngle(1, 0, 0, e.x()) * QQuaternion::fromAxisAndAngle(0, 1, 0, e.y())
+                 * QQuaternion::fromAxisAndAngle(0, 0, 1, e.z());
+        };
+        const Transform& a = p.frames[i];
+        const Transform& b = p.frames[k];
+        QMatrix4x4 frame;
+        frame.translate(a.position + (b.position - a.position) * float(f));
+        frame.rotate(QQuaternion::slerp(quat(a.rotation), quat(b.rotation), float(f)));
+        m_scene->setWorldTransform(p.root, m.playShift * frame * m.playScale);
+    }
+    const double span = p.times.back() - p.times.front();
+    const double progress = span > 1e-9 ? std::clamp((t - p.times.front()) / span, 0.0, 1.0) : 1.0;
+    if (progress >= 1.0)
+        for (int jid : p.joints)
+            if (const int idx = actIndexForJoint(jid); idx >= 0) m_actuators[size_t(idx)].st.vel = 0;
+    return progress;
 }
 
 int AutomationEngine::stopWalking(int root) {

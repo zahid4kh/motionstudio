@@ -148,7 +148,7 @@ public:
                                             // tool's orientation, some missing keep theirs
         bool hasRotation() const { return rx || ry || rz; }
     };
-    enum class MotionKind { Joints, JointsToPose, Linear, Walk };
+    enum class MotionKind { Joints, JointsToPose, Linear, Walk, Play };
     // A legged robot walks (see gait::): by distances and a turn from where
     // it stands, or through points on the floor
     struct WalkRequest {
@@ -164,6 +164,20 @@ public:
                                            //     (x ahead, z to its right)
         gait::Params params;
     };
+    // Motion played back over time (a take, or one a program made): joint
+    // values and, optionally, the frame of the robot's top object, at sample
+    // times; in between it interpolates
+    struct PlayRequest {
+        int root = -1;                          // the robot's top object (moved when `frames` is given)
+        std::vector<double> times;              // s, increasing
+        std::vector<int> joints;                // joint ids
+        std::vector<std::vector<double>> values;// per sample, one value per joint (deg or m)
+        std::vector<Transform> frames;          // per sample, the top object in the world (m, Euler XYZ);
+                                                // empty = it stays where it is
+        bool relative = false;                  // the frames start where the robot stands now (its x, z
+                                                // and heading on the floor)
+        double speed = 1;                       // × the recorded pace
+    };
     struct MotionRequest {
         MotionKind kind = MotionKind::Joints;
         std::map<int, double> joints;   // Joints: joint id → target (deg or m)
@@ -176,6 +190,7 @@ public:
         double speed = 0;
         QString label;                  // what to call it in messages ("moveL")
         WalkRequest walk;               // Walk
+        std::shared_ptr<const PlayRequest> play;   // Play
     };
     enum class MotionState { Queued, Running, Done, Failed, Cancelled };
     struct MotionStatus {
@@ -294,7 +309,8 @@ private:
         std::vector<double> from;
         LinearPath    path;
         std::shared_ptr<gait::Walker> walker;   // Walk
-        double        walkStart = 0;
+        double        walkStart = 0;            // Walk, Play: when it started
+        QMatrix4x4    playShift, playScale;     // Play: relative shift, the top object's scale
     };
 
     struct SeqRt {
@@ -388,6 +404,7 @@ private:
     // One scan of a walk: the root and the legs where the plan has them now;
     // false when a foot can't reach (`error` m off)
     bool stepWalk(gait::Walker& w, double start, double* error, double* progress);
+    double stepPlay(MotionRt& m);   // returns the progress
     bool startMotion(MotionRt& m);
     void finishMotion(MotionRt& m, MotionState state, const QString& code = {}, const QString& error = {});
     void holdJoints(const std::vector<int>& joints);
