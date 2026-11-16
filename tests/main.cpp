@@ -15,6 +15,7 @@
 #include "automation/AutomationEngine.h"
 #include "automation/Sensors.h"
 #include "automation/Kinematics.h"
+#include "automation/Learn.h"
 #include "automation/Take.h"
 #include "physics/SimulationEngine.h"
 #include "serialization/ProjectSerializer.h"
@@ -3928,6 +3929,110 @@ TEST(takePlayedByAnOperation) {
     CHECK(AutomationEngine::validateAll(g).join(" ").contains("choose a robot"));
     g.getSequence(seq)->operations[0].walkerId = b.root;
     CHECK(AutomationEngine::validateAll(g).isEmpty());
+}
+
+TEST(learnMlpFitsACurve) {
+    // y = sin(3x), x² on [-1, 1]
+    std::vector<float> X, Y;
+    const int n = 400;
+    for (int i = 0; i < n; ++i) {
+        const float x = -1.f + 2.f * float(i) / (n - 1);
+        X.push_back(x);
+        Y.push_back(std::sin(3 * x));
+        Y.push_back(x * x);
+    }
+    learn::Mlp net(1, 2, {32, 32}, 1);
+    learn::Mlp::Fit f;
+    f.epochs = 300;
+    f.batch = 32;
+    f.lr = 3e-3;
+    int calls = 0;
+    f.progress = [&](int, double) { ++calls; return true; };
+    CHECK(net.fit(X, Y, n, f));
+    CHECK(calls == 300);
+    CHECK(net.loss() < 1e-3);
+    double worst = 0;
+    for (int i = 0; i < n; i += 7) {
+        float y[2];
+        net.predict(&X[size_t(i)], y);
+        worst = std::max({worst, std::abs(double(y[0]) - Y[size_t(2 * i)]), std::abs(double(y[1]) - Y[size_t(2 * i + 1)])});
+    }
+    CHECK(worst < 0.05);
+    // Saved and loaded, it predicts the same
+    learn::Mlp back;
+    CHECK(learn::Mlp::fromJson(net.toJson(), &back));
+    float a[2], b[2];
+    const float x = 0.3f;
+    net.predict(&x, a);
+    back.predict(&x, b);
+    CHECK(a[0] == b[0] && a[1] == b[1]);
+    // Stopped early
+    learn::Mlp other(1, 2, {8}, 2);
+    f.progress = [](int epoch, double) { return epoch < 4; };
+    CHECK(!other.fit(X, Y, n, f));
+}
+
+namespace {
+// A take of an arm with joints J1 and J2 (degrees) moving along a curve,
+// and its root moving over the floor
+take::Take curveTake(double seconds, const std::function<std::array<double, 5>(double)>& f) {
+    take::Take t;
+    t.robot = "Arm";
+    t.rate = 50;
+    t.columns = QStringList{"t", "x", "y", "z", "heading", "J1", "J2"};
+    for (int i = 0; i <= int(seconds * 50); ++i) {
+        const double tt = i / 50.0;
+        const auto v = f(tt / seconds);
+        t.rows.push_back({tt, v[0], 0, v[1], v[2], v[3], v[4]});
+    }
+    return t;
+}
+} // namespace
+
+TEST(learnAnimationModelPlaysAndBlendsClips) {
+    // wave: J1 swings twice; nod: J2 rises; walk: 1 m ahead while turning 90° left
+    std::vector<std::pair<QString, take::Take>> takes;
+    takes.push_back({"wave", curveTake(2, [](double u) { return std::array<double, 5>{0, 0, 0, 40 * std::sin(4 * M_PI * u), 0}; })});
+    takes.push_back({"nod", curveTake(1, [](double u) { return std::array<double, 5>{0, 0, 0, 0, 30 * u}; })});
+    takes.push_back({"walk", curveTake(3, [](double u) { return std::array<double, 5>{1000 * u, 0, 90 * u, 0, 0}; })});
+    learn::AnimationModel::Options o;
+    o.hidden = {64, 64};
+    o.epochs = 300;
+    learn::AnimationModel m;
+    QString err;
+    int last = 0;
+    CHECK(learn::AnimationModel::train(takes, o, &m, &err, [&](int e, int total, double) { last = e; return total == 300; }));
+    CHECK(last == 300);
+    CHECK(m.clips == QStringList({"wave", "nod", "walk"}) && m.joints == QStringList({"J1", "J2"}) && m.place);
+    CHECK_NEAR(m.durationOf(m.weights("nod")), 1, 1e-9);
+
+    // The wave at twice its length: the same curve, slower
+    const take::Take wave = m.generate(m.weights("wave"), 4, 25);
+    CHECK(wave.columns == QStringList({"t", "x", "y", "z", "heading", "J1", "J2"}));
+    CHECK(wave.rows.size() == 101);
+    CHECK_NEAR(wave.duration(), 4, 1e-9);
+    double worst = 0;
+    for (const auto& row : wave.rows) worst = std::max(worst, std::abs(row[5] - 40 * std::sin(4 * M_PI * row[0] / 4)));
+    CHECK(worst < 3);
+    // Half nod, half wave: J2 ends near half the nod's
+    const take::Take mix = m.generate(m.weights("wave", "nod", 0.5));
+    CHECK_NEAR(mix.duration(), 1.5, 1e-9);
+    CHECK(std::abs(mix.rows.back()[6] - 15) < 6);
+    // The walk from a robot at x 2 m facing +Z (heading -90°): it ends 1 m along +Z, turned 90° left
+    const take::Take walk = m.generate(m.weights("walk"), 0, 50, 2000, 500, 0, -90);
+    CHECK_NEAR(walk.rows.back()[1], 2000, 40);
+    CHECK_NEAR(walk.rows.back()[3], 1000, 40);
+    CHECK_NEAR(walk.rows.back()[4], 0, 4);
+    CHECK_NEAR(walk.rows.back()[2], 500, 5);
+    // Unknown clips
+    CHECK(m.weights("dance").empty() && m.weights("wave", "dance").empty());
+    // Saved and loaded, it makes the same motion
+    learn::AnimationModel back;
+    CHECK(learn::AnimationModel::fromJson(m.toJson(), &back));
+    CHECK(back.generate(back.weights("wave"), 4, 25).rows == wave.rows);
+    // Takes of different robots don't mix
+    takes[1].second.columns[5] = "K1";
+    CHECK(!learn::AnimationModel::train(takes, o, &m, &err) && err.contains("lacks the joints"));
 }
 
 TEST(takeKeptInTheProject) {
