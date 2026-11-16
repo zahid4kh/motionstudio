@@ -47,6 +47,8 @@ Units are mm, degrees and seconds, and Y is up. See [../README.md](../README.md)
 | `stop()` | Stops this robot's motions |
 | `tool(name=None, *, base=None)` | A tool frame → `Tool` |
 | `pose()`, `move_l()`, `move_j()`, `move_by()` | The only tool's methods |
+| `record(rate=None)` → `Recording` | Records a take: joint values and place after every scan (or `rate`/s); `.stop()` → `Take`, or use `with` |
+| `play(take, *, relative=False, speed=None, place=True, wait=True)` | Plays a `Take` (or a CSV path) back; `relative`: from where it stands |
 
 | `Humanoid` (a `Robot` that walks) | |
 |---|---|
@@ -76,6 +78,21 @@ Gait options, as keywords (`step_length=250, speed=400`) or `gait=Gait(...)`: `s
 | `value`, `move_to(v)`, `move_by(d)`, `run(speed)`, `stop()` | |
 
 `Pose(x, y, z, rx, ry, rz)` is frozen, with `.offset(...)` and `.replace(...)`.
+
+| `Take` (a recording) | |
+|---|---|
+| `columns`, `rows`, `robot`, `rate`, `duration`, `len(take)` | `t`, `x y z rx ry rz`, for legs `heading walking step swing progress goal_x goal_z goal_heading`, then the joints |
+| `take["x"]`, `frame(i)`, `joints(i)`, `joint_names`, `walks` | Columns and rows |
+| `between(t0, t1)`, `select(columns)` | Parts of it |
+| `save(path)`, `Take.load(path)` | The CSV that MotionStudio's **Record Values** writes |
+| `array(columns=None)` | A NumPy array (needs NumPy) |
+
+```python
+with walker.record() as rec:
+    walker.walk_to(2000, 500)
+rec.take.save("a-to-b.csv")
+walker.play(ms.Take.load("a-to-b.csv"), relative=True)
+```
 
 Examples (`examples/`): `square.py`, `two_motions.py`, `station.py`, `humanoid_wave.py`, `walk_square.py`, `walk_patrol.py`.
 

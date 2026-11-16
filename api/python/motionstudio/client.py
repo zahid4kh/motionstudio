@@ -12,10 +12,14 @@ from __future__ import annotations
 
 import itertools
 import json
+import os
 import socket
 import threading
 from dataclasses import dataclass, fields, replace
-from typing import Any, Dict, Iterable, Iterator, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, Iterable, Iterator, List, Mapping, Optional, Sequence, Tuple, Union
+
+if TYPE_CHECKING:
+    from .take import Recording, Take
 
 DEFAULT_HOST = "localhost"
 DEFAULT_PORT = 5800
@@ -487,6 +491,32 @@ class Robot:
     def move_by(self, *args: Number, **kwargs: Any) -> Motion:
         """Relative move of the robot's tool (see ``Tool.move_by``)."""
         return self.tool().move_by(*args, **kwargs)
+
+    # Takes
+
+    def record(self, rate: Optional[Number] = None) -> "Recording":
+        """Starts recording a take of this robot: its joint values and where it
+        stands after every scan (or ``rate`` times a second). Stop it with
+        ``.stop()``, or use it in a ``with`` block. See ``motionstudio.Take``."""
+        from .take import Recording
+        reply = self.studio._call("take.start", _drop_none({"robot": self.path, "rate": rate}))
+        return Recording(self.studio, self.name, reply)
+
+    def play(self, take: Union["Take", str, "os.PathLike[str]"], *, relative: bool = False,
+             speed: Optional[Number] = None, place: bool = True, wait: bool = True) -> Motion:
+        """Plays a take back: the columns named after this robot's actuators set
+        its joints, and ``x y z rx ry rz`` (or ``x z heading``) move it.
+
+        ``relative=True`` starts it where the robot stands now; ``speed`` is ×
+        the recorded pace; ``place=False`` plays the joints only. ``take`` may
+        be a ``Take`` or the path of a CSV file."""
+        from .take import Take
+        if not isinstance(take, Take):
+            take = Take.load(take)
+        reply = self.studio._call("robot.play", _drop_none({
+            "robot": self.path, "columns": take.columns, "rows": take.rows, "relative": relative,
+            "speed": speed, "place": place, "wait": wait}))
+        return Motion(self.studio, reply)
 
     def __repr__(self) -> str:
         return f"<Robot {self.path}: {len(self.joint_names)} joints>"

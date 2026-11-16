@@ -14,6 +14,11 @@
         walker.turn(90)                  # a quarter turn to its left
         walker.walk_path([(1000, 0), (1000, 1000), (0, 1000)])
 
+        with walker.record() as rec:     # its joint values and place, every scan
+            walker.walk_to(2000, 0)
+        rec.take.save("walk.csv")        # the CSV that Record Values writes
+        walker.play(rec.take, relative=True)   # again, from where it stands
+
 Units are millimetres, degrees and seconds; Y is up, as in MotionStudio.
 """
 
@@ -42,12 +47,13 @@ from .client import (
     WalkState,
     connect,
 )
+from .take import Recording, Take
 
 __version__ = "0.2.0"
 
 __all__ = [
     "connect", "Studio", "Robot", "Humanoid", "Tool", "Actuator", "Motion", "Pose", "Place", "Gait", "WalkState",
-    "JointInfo", "Signals",
+    "JointInfo", "Signals", "Take", "Recording",
     "MotionStudioError", "NotFoundError", "OutOfReachError", "OutOfLimitsError", "MotionCancelled",
     "WaitTimeout", "SimulationError", "DEFAULT_HOST", "DEFAULT_PORT", "PROTOCOL",
 ]

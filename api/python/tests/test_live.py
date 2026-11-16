@@ -6,6 +6,7 @@ The server is found through $MOTIONSTUDIO_SERVER, else build/motionstudio-server
 at the top of the repository.
 """
 import os
+import tempfile
 import socket
 import subprocess
 import sys
@@ -267,6 +268,42 @@ class WalkingTests(unittest.TestCase):
             self.studio.sleep(0.5)
             self.h.stop()                                   # a hard stop: the robot halts mid-step
             m.wait()
+
+    def test_record_save_load_and_play(self):
+        with self.h.record(rate=25) as rec:
+            self.h.walk_to(600, 0)
+            self.assertGreater(rec.frames, 5)
+        take = rec.take
+        self.assertIsInstance(take, ms.Take)
+        self.assertEqual(take.robot, "Humanoid")
+        self.assertAlmostEqual(take.rate, 25)
+        self.assertTrue(take.walks)
+        self.assertIn("LKnee", take.joint_names)
+        self.assertNotIn("walking", take.joint_names)
+        self.assertAlmostEqual(take["x"][-1], 600, delta=0.5)
+        self.assertEqual(max(take["walking"]), 1)
+        self.assertEqual(set(take["swing"]) - {-1}, {0, 1})
+        self.assertAlmostEqual(take.frame(len(take) // 2)["goal_x"], 600, delta=0.5)
+        self.assertIs(rec.stop(), take)
+
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "walk.csv")
+            take.save(path)
+            again = ms.Take.load(path)
+        self.assertEqual(again.columns, take.columns)
+        self.assertEqual(again.robot, "Humanoid")
+        self.assertEqual(len(again), len(take))
+        self.assertAlmostEqual(again.rows[-1][1], take.rows[-1][1], places=3)
+
+        self.h.play(take, relative=True)                    # the same walk again, from 600
+        self.assertPlace(self.h.place, 1200, 0, 0)
+        self.h.play(take.select(["x", "z", "heading"] + take.joint_names), speed=3)   # back to where it was recorded
+        self.assertPlace(self.h.place, 600, 0, 0)
+        half = take.between(0, take.duration / 2)
+        self.assertAlmostEqual(half.rows[0][0], 0)
+        self.assertLess(len(half), len(take))
+        with self.assertRaises(ms.MotionStudioError):
+            self.h.play(ms.Take(["t", "nothing"], [[0, 1]]))
 
 
 @unittest.skipUnless(os.path.exists(SERVER), "motionstudio-server is not built")
