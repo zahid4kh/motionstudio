@@ -27,8 +27,8 @@ namespace {
 enum Col { C_Num, C_Name, C_Type, C_What, C_After, C_When, C_State, C_Count };
 
 const OperationType kTypes[] = {
-    OperationType::Move, OperationType::MoveToPose, OperationType::MoveL, OperationType::Walk, OperationType::Run,
-    OperationType::Stop,
+    OperationType::Move, OperationType::MoveToPose, OperationType::MoveL, OperationType::Walk,
+    OperationType::PlayMotion, OperationType::Run, OperationType::Stop,
     OperationType::Set, OperationType::Wait, OperationType::WaitFor,
     OperationType::Grip, OperationType::Release,
 };
@@ -51,6 +51,9 @@ QString typeHelp(OperationType t) {
         case OperationType::Walk:       return "A humanoid on legs walks: ahead, sideways and turning by the amounts "
                                                "given, or to an object's place, facing its way. It crouches, steps "
                                                "and stands up; finishes when it stands";
+        case OperationType::PlayMotion: return "A robot plays a motion kept in the project (Motions tab: recorded "
+                                               "with Record Values, imported, or made by a trained model), from "
+                                               "where it stands; finishes at the motion's end";
     }
     return {};
 }
@@ -68,6 +71,7 @@ QIcon typeIcon(OperationType t) {
         case OperationType::MoveL:      return Theme::icon("move-diagonal-2");
         case OperationType::Release:    return Theme::icon("hand");
         case OperationType::Walk:       return Theme::icon("footprints");
+        case OperationType::PlayMotion: return Theme::icon("film");
     }
     return {};
 }
@@ -259,6 +263,17 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     m_opForward->setHelpText("Metres ahead; negative walks backwards. A turn given with it makes the walk an arc");
     m_opSideways->setHelpText("Metres to its left (its −Z); negative steps to its right");
     m_opTurn->setHelpText("Degrees to its left (counter-clockwise seen from above); negative turns right");
+    m_opMotion = new QComboBox;
+    m_opMotion->setToolTip("The motion to play: one recorded with Record Values or imported (Motions tab)");
+    m_opRobot = new QComboBox;
+    m_opRobot->setToolTip("The robot that plays it: its actuators are matched to the motion's columns by name");
+    for (QComboBox* c : {m_opMotion, m_opRobot}) {
+        c->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+        c->setMinimumContentsLength(12);
+    }
+    m_opRelative = new QCheckBox("Start where the robot stands");
+    m_opRelative->setToolTip("On: the motion is moved to start at the robot's place and heading on the floor.\n"
+                             "Off: the robot goes where the motion was recorded.");
     m_opAfter = new QToolButton;
     m_opAfter->setPopupMode(QToolButton::InstantPopup);
     m_opAfter->setObjectName("menuButton");
@@ -287,6 +302,9 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     m_opLayout->addRow("Forward m", m_opForward);
     m_opLayout->addRow("Sideways m", m_opSideways);
     m_opLayout->addRow("Turn °", m_opTurn);
+    m_opLayout->addRow("Motion", m_opMotion);
+    m_opLayout->addRow("Played by", m_opRobot);
+    m_opLayout->addRow("", m_opRelative);
     m_opLayout->addRow("Target", m_opTarget);
     m_opLayout->addRow(m_opVelLabel, m_opVelocity);
     m_opLayout->addRow("Duration", m_opDuration);
@@ -368,6 +386,13 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     for (auto* e : {m_opTarget, m_opVelocity, m_opDuration, m_opCondition, m_opStartCond, m_opOnStart, m_opOnFinish,
                     m_opForward, m_opSideways, m_opTurn})
         connect(e, &ExpressionEdit::committed, this, &SequencesPage::commitOpForm);
+    connect(m_opMotion, &QComboBox::currentIndexChanged, this, [this]{
+        if (m_loading) return;
+        commitOpForm();
+        loadOpForm();   // the robot it was recorded on
+    });
+    connect(m_opRobot,    &QComboBox::currentIndexChanged, this, &SequencesPage::commitOpForm);
+    connect(m_opRelative, &QCheckBox::toggled,             this, &SequencesPage::commitOpForm);
 
     refresh();
 }
@@ -499,6 +524,12 @@ QString SequencesPage::describe(const Operation& op) const {
             if (!op.turn.trimmed().isEmpty()) parts << "turns " + op.turn.trimmed() + "°";
             return QString("%1 walks %2%3").arg(w ? w->name : "?", parts.isEmpty() ? QString("?") : parts.join(", "), speed);
         }
+        case OperationType::PlayMotion: {
+            const MotionClip* clip = m_scene->getMotion(op.motionId);
+            const SceneObject* r = m_scene->getObject(op.walkerId != -1 ? op.walkerId : clip ? clip->robotId : -1);
+            const QString speed = op.velocity.trimmed().isEmpty() ? QString() : QString(" × %1").arg(op.velocity.trimmed());
+            return QString("%1 plays %2%3").arg(r ? r->name : "?", clip ? clip->name : "?", speed);
+        }
     }
     return {};
 }
@@ -564,6 +595,11 @@ void SequencesPage::updateOpFormVisibility(OperationType t) {
     m_opLayout->setRowVisible(m_opSideways, byDistance);
     m_opLayout->setRowVisible(m_opTurn, byDistance);
     if (walk) m_opLayout->setRowVisible(m_opVelocity, true);
+    const bool play = t == OperationType::PlayMotion;
+    m_opLayout->setRowVisible(m_opMotion, play);
+    m_opLayout->setRowVisible(m_opRobot, play);
+    m_opLayout->setRowVisible(m_opRelative, play);
+    if (play) m_opLayout->setRowVisible(m_opVelocity, true);
     // MoveL / MoveToPose to a pose taught on a part: which part this time
     const Pose* chosen = m_scene->getPose(m_opPose->currentData().toInt());
     const bool onPart = pose && chosen && chosen->isRelative();
@@ -585,6 +621,9 @@ void SequencesPage::updateOpFormVisibility(OperationType t) {
     } else if (walk) {
         m_opVelLabel->setText("Speed m/s");
         m_opVelocity->setPlaceholderText("from its legs");
+    } else if (play) {
+        m_opVelLabel->setText("Speed ×");
+        m_opVelocity->setPlaceholderText("1 = as recorded, 2 = twice as fast");
     } else if (pose) {
         m_opVelLabel->setText("Speed %");
         m_opVelocity->setPlaceholderText("100");
@@ -673,6 +712,31 @@ void SequencesPage::loadOpForm() {
         }
     }
     autoui::fillObjectCombo(m_opWalkTo, *m_scene, op ? op->walkToId : -1, "(by distance)");
+    // Play Motion: the project's motions, and the robots that can play them
+    {
+        const QSignalBlocker block(m_opMotion), block2(m_opRobot);
+        m_opMotion->clear();
+        m_opMotion->addItem("(choose)", -1);
+        for (const auto& [mid, m] : m_scene->allMotions())
+            m_opMotion->addItem(Theme::icon("film"), m.name, mid);
+        const int curMotion = op && op->type == OperationType::PlayMotion ? op->motionId : -1;
+        int mi = m_opMotion->findData(curMotion);
+        if (mi < 0 && curMotion != -1) { m_opMotion->addItem("(deleted motion)", curMotion); mi = m_opMotion->count() - 1; }
+        m_opMotion->setCurrentIndex(std::max(0, mi));
+        const MotionClip* clip = m_scene->getMotion(curMotion);
+        const SceneObject* recordedOn = clip ? m_scene->getObject(clip->robotId) : nullptr;
+        m_opRobot->clear();
+        m_opRobot->addItem(recordedOn ? QString("%1 (recorded on)").arg(recordedOn->name)
+                                      : clip ? QString("(choose: the robot it was recorded on is gone)") : QString("(the motion's robot)"),
+                           -1);
+        for (const ApiServer::Robot& r : ApiServer::findRobots(*m_scene))
+            m_opRobot->addItem(Theme::icon("bot"), r.name, r.root);
+        const int curRobot = op && op->type == OperationType::PlayMotion ? op->walkerId : -1;
+        int ri = m_opRobot->findData(curRobot);
+        if (ri < 0 && curRobot != -1) { m_opRobot->addItem("(deleted object)", curRobot); ri = m_opRobot->count() - 1; }
+        m_opRobot->setCurrentIndex(std::max(0, ri));
+        m_opRelative->setChecked(!op || op->relative);
+    }
     // Part: sensors first ("s<id>"), then objects ("o<id>")
     {
         const QSignalBlocker block(m_opPart);
@@ -912,6 +976,9 @@ void SequencesPage::addOperation(OperationType t) {
             op.forward = "1";
             break;
         }
+        case OperationType::PlayMotion:
+            if (!m_scene->allMotions().empty()) op.motionId = m_scene->allMotions().rbegin()->first;   // the newest
+            break;
         case OperationType::Wait:    op.duration = "1"; break;
         case OperationType::WaitFor: op.condition = "true"; break;
         case OperationType::Set:     break;
@@ -1023,7 +1090,10 @@ void SequencesPage::commitOpForm() {
             const QSignalBlocker block(m_opWalker);
             m_opWalker->setCurrentIndex(1);
         }
-        op->walkerId       = walk ? m_opWalker->currentData().toInt() : -1;
+        const bool play    = op->type == OperationType::PlayMotion;
+        op->walkerId       = walk ? m_opWalker->currentData().toInt() : play ? m_opRobot->currentData().toInt() : -1;
+        op->motionId       = play ? m_opMotion->currentData().toInt() : -1;
+        op->relative       = !play || m_opRelative->isChecked();
         op->walkToId       = walk ? m_opWalkTo->currentData().toInt() : -1;
         op->forward        = walk ? m_opForward->text() : QString();
         op->sideways       = walk ? m_opSideways->text() : QString();

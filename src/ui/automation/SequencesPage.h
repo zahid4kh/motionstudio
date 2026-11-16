@@ -88,6 +88,9 @@ private:
     ExpressionEdit* m_opForward = nullptr;
     ExpressionEdit* m_opSideways = nullptr;
     ExpressionEdit* m_opTurn = nullptr;
+    QComboBox*      m_opMotion = nullptr;     // PlayMotion: the motion
+    QComboBox*      m_opRobot = nullptr;      // PlayMotion: the robot (first: the one it was recorded on)
+    QCheckBox*      m_opRelative = nullptr;   // PlayMotion: start where the robot stands
     QToolButton*    m_opAfter = nullptr;
     ExpressionEdit* m_opStartCond = nullptr;
     ExpressionEdit* m_opOnStart = nullptr;
