@@ -1111,6 +1111,7 @@ void MainWindow::onSimActiveChanged(bool active) {
     updateUndoActions();
     if (!active) {
         m_viewport->setSimulationOverlay({}, {});
+        m_viewport->setFootprints({});
         showStatus("Reset — scene restored, definitions editable");
     }
 }
@@ -1129,8 +1130,9 @@ void MainWindow::onSimStartFailed(const QStringList& errors) {
 
 void MainWindow::updateSimulationOverlay() {
     AutomationEngine* ae = m_sim->automation();
-    if (!ae->isActive()) { m_viewport->setSimulationOverlay({}, {}); return; }
+    if (!ae->isActive()) { m_viewport->setSimulationOverlay({}, {}); m_viewport->setFootprints({}); return; }
     if (m_sim->isScrubbing()) {
+        m_viewport->setFootprints({});
         m_viewport->setSimulationOverlay({}, {QString("Recorded run at t = %1 s — Play or Live to continue")
                                                   .arg(m_sim->recording().time(m_sim->viewFrame()), 0, 'f', 2)});
         return;
@@ -1151,6 +1153,16 @@ void MainWindow::updateSimulationOverlay() {
         if (j) addRigid(j->childBodyId);
     }
     QStringList lines = ae->activeOperationLabels();
+    // Walks: their footprints on the floor, and a line for each a program commanded
+    std::vector<Viewport::Footprint> prints;
+    for (const AutomationEngine::WalkView& w : ae->walks()) {
+        for (const gait::Walker::Print& p : w.prints)
+            prints.push_back({p.frame, float(w.footLength), float(w.footWidth), p.side, p.done});
+        const SceneObject* robot = m_scene->getObject(w.root);
+        if (w.motion && robot)
+            lines << QString("%1 walking: step %2 of %3").arg(robot->name).arg(std::min(w.stepsDone + 1, w.steps)).arg(w.steps);
+    }
+    m_viewport->setFootprints(std::move(prints));
     QStringList flow;
     for (auto& [id, src] : m_scene->allSources())
         flow << QString("%1 %2 made").arg(src.name).arg(ae->sourceCount(id));

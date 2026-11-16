@@ -1085,6 +1085,7 @@ void Viewport::drawPhysicsOverlays() {
     }
 
     drawSensors();
+    drawFootprints();
     drawSectionOutline();
     glLineWidth(1.0f);
 }
@@ -1203,6 +1204,45 @@ void Viewport::drawSensors() {
         drawWireLines(wireBox(z.half.x() * 1.01f, z.half.y() * 1.01f, z.half.z() * 1.01f), rgb(c.danger), obbMatrix(z));
         glLineWidth(1.5f);
     }
+}
+
+void Viewport::setFootprints(std::vector<Footprint> prints) {
+    if (prints.empty() && m_footprints.empty()) return;
+    m_footprints = std::move(prints);
+    update();
+}
+
+void Viewport::drawFootprints() {
+    if (m_footprints.empty()) return;
+    const Theme::Colors& c = Theme::colors();
+    auto rgb = [](const QColor& q) { return QVector3D(q.redF(), q.greenF(), q.blueF()); };
+    // The left foot in the info colour, the right in the warning colour, so
+    // the alternation reads at a glance; a notch marks the toes
+    for (const Footprint& f : m_footprints) {
+        const float hl = f.length / 2, hw = f.width / 2, y = 0.002f;
+        std::vector<float> v = {
+            -hl, y, -hw,  hl, y, -hw,   hl, y, -hw,  hl, y, hw,   hl, y, hw,  -hl, y, hw,   -hl, y, hw,  -hl, y, -hw,
+            hl * 0.55f, y, -hw,  hl, y, 0,   hl, y, 0,  hl * 0.55f, y, hw,
+        };
+        glLineWidth(f.done ? 1.0f : 2.0f);
+        drawWireLines(v, rgb(f.side == 0 ? c.info : c.warning), f.frame, f.done ? 0.35f : 0.95f);
+    }
+    // The way: a line through the footprints still to come
+    std::vector<float> path;
+    QVector3D last;
+    bool first = true;
+    for (const Footprint& f : m_footprints) {
+        if (f.done) continue;
+        const QVector3D p = f.frame.map(QVector3D(0, 0.002f, 0));
+        if (!first) path.insert(path.end(), {last.x(), last.y(), last.z(), p.x(), p.y(), p.z()});
+        last = p;
+        first = false;
+    }
+    if (!path.empty()) {
+        glLineWidth(1.0f);
+        drawWireLines(path, rgb(c.muted), QMatrix4x4(), 0.6f);
+    }
+    glLineWidth(1.5f);
 }
 
 void Viewport::drawSensorLabels(QPainter& p) {

@@ -59,6 +59,15 @@ public:
     // the running automation operations in the top-left corner.
     void setSimulationOverlay(const QSet<int>& movingObjects, const QStringList& lines,
                               const QSet<int>& interfering = {});
+    // A walking robot's footprints on the floor: where each foot is set down
+    // (`frame` is the sole on the floor, x along the foot). Faint once taken.
+    struct Footprint {
+        QMatrix4x4 frame;
+        float length = 0, width = 0;
+        int   side = 0;       // 0 left, 1 right
+        bool  done = false;
+    };
+    void setFootprints(std::vector<Footprint> prints);
 
     // IK drag: with the IK button on, dragging the gizmo of an object that
     // actuated joints move (a robot's tool) moves the object by inverse
@@ -116,6 +125,7 @@ private:
     void drawPill(QPainter& p, const QPointF& topLeft, const QString& text, const QColor& border = QColor());
     void drawPhysicsOverlays();
     void drawSensors();
+    void drawFootprints();
     void drawSensorLabels(QPainter& p);
     void drawKeyPoints (QPainter& p);
     void drawAxisPickBanner(QPainter& p);
@@ -266,6 +276,7 @@ private:
     int              m_hoveredId = -1;
     QSet<int>        m_movingObjects;
     QSet<int>        m_interfering;      // tinted red: passing through another part
+    std::vector<Footprint> m_footprints;
     QStringList      m_overlayLines;
     class QLabel*    m_simOverlay = nullptr;   // a widget, not QPainter text (renders reliably over GL)
     int              m_nearKeyPointIdx = -1;  // index into keyPointsFor(hovered obj type)
