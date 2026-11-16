@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 #include "ui/TimelineBar.h"
+#include "ui/ValueRecorder.h"
 #include "ui/ModbusDialog.h"
 #include "io/ModbusServer.h"
 #include "io/ApiServer.h"
@@ -71,6 +72,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     centralLayout->addWidget(m_timeline);
     setCentralWidget(central);
     connect(m_timeline, &TimelineBar::statusMessage, this, &MainWindow::showStatus);
+    m_valueRecorder = new ValueRecorder(m_scene, m_sim, this);
+    connect(m_valueRecorder, &ValueRecorder::statusMessage, this, &MainWindow::showStatus);
 
     buildMenu();
     buildToolbar();
@@ -316,6 +319,7 @@ void MainWindow::buildToolsMenu() {
         tools->addAction(Theme::icon("gauge"), "Analy&ze Robot…", this, [this]{ openRobotAnalyzer(m_scene->selectedObjectId()); })
             ->setToolTip("Workspace, reach, DH parameters, dexterity and singularities of the selected robot");
     }
+    tools->addAction(m_valueRecorder->action());
     tools->addSeparator();
     tools->addAction(Theme::icon("network"), "External &I/O (Modbus TCP)…", this, &MainWindow::openExternalIo);
     tools->addAction(Theme::icon("square-terminal"), "Robot &API (Python, C++, Kotlin)…", this, &MainWindow::openRobotApi)
@@ -500,6 +504,7 @@ void MainWindow::buildToolbar() {
     connect(pauseA, &QAction::triggered, m_sim, &SimulationEngine::pause);
     connect(stepA,  &QAction::triggered, m_sim, &SimulationEngine::step);
     connect(resetA, &QAction::triggered, m_sim, &SimulationEngine::reset);
+    sim->addAction(m_valueRecorder->action());
 
     // Speed and time, captioned like the text-under-icon buttons
     auto captioned = [](QWidget* w, const QString& caption) {

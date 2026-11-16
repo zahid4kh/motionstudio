@@ -101,6 +101,7 @@ private:
     PropertiesPanel*  m_properties = nullptr;
     AutomationPanel*  m_automation = nullptr;
     class TimelineBar* m_timeline  = nullptr;
+    class ValueRecorder* m_valueRecorder = nullptr;   // Record Values
     class ModbusServer* m_modbus   = nullptr;
     QLabel*  m_modbusLabel = nullptr;   // status bar: server state
     class ApiServer* m_api = nullptr;   // the robot API (Tools › Robot API)

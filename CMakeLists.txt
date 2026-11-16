@@ -116,6 +116,7 @@ set(SOURCES
     src/ui/Theme.cpp
     src/ui/Island.cpp
     src/ui/TimelineBar.cpp
+    src/ui/ValueRecorder.cpp
     src/ui/ModbusDialog.cpp
     src/ui/ApiServerDialog.cpp
     src/ui/robot/RobotSketch.cpp
