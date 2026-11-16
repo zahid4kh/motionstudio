@@ -27,6 +27,7 @@ The sequence publishes `Cycle.running`, `Cycle.done` and `Cycle.cycles` for othe
 | **Move** | One actuator to *Target* (absolute) | it is in position |
 | **MoveToPose** | Every actuated joint to a pose, synchronised. To a pose taught on a part: the joints that put the tool there, on the part chosen in *On part* | all are in position |
 | **MoveL** | A *Tool* in a straight line to where it is in a pose; joints by inverse kinematics ([Robot Tools & IK](help:kinematics)). To a pose taught on a part, the line ends on the part in *On part*, following it if it moves | the tool has arrived |
+| **Walk** | A humanoid on legs (*Robot*) walks *Forward* and *Sideways* metres and turns *Turn* degrees (to its left; negative: back, right), or walks to an object's place (*Walk to*) and faces its way; *Speed* in m/s is optional ([Humanoid Builder](help:humanoids)) | it stands again |
 | **Run** | Switches an actuator to Speed mode at *Speed* (signed) | immediately |
 | **Stop** | Decelerates an actuator to rest | it has stopped |
 | **Set** | Only runs its *On start* actions | immediately |

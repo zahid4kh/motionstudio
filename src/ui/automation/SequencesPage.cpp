@@ -1,7 +1,9 @@
 #include "SequencesPage.h"
 #include "GanttView.h"
 #include "automation/Expression.h"
+#include "io/ApiServer.h"
 #include "physics/SimulationEngine.h"
+#include "robot/Gait.h"
 #include "ui/Theme.h"
 #include <QCheckBox>
 #include <QComboBox>
@@ -25,7 +27,8 @@ namespace {
 enum Col { C_Num, C_Name, C_Type, C_What, C_After, C_When, C_State, C_Count };
 
 const OperationType kTypes[] = {
-    OperationType::Move, OperationType::MoveToPose, OperationType::MoveL, OperationType::Run, OperationType::Stop,
+    OperationType::Move, OperationType::MoveToPose, OperationType::MoveL, OperationType::Walk, OperationType::Run,
+    OperationType::Stop,
     OperationType::Set, OperationType::Wait, OperationType::WaitFor,
     OperationType::Grip, OperationType::Release,
 };
@@ -45,6 +48,9 @@ QString typeHelp(OperationType t) {
                                                "detects, or a fixed object; finishes when the part is held";
         case OperationType::Release:    return "Let go of everything the gripper holds (a rigid body then falls); "
                                                "finishes immediately";
+        case OperationType::Walk:       return "A humanoid on legs walks: ahead, sideways and turning by the amounts "
+                                               "given, or to an object's place, facing its way. It crouches, steps "
+                                               "and stands up; finishes when it stands";
     }
     return {};
 }
@@ -61,8 +67,17 @@ QIcon typeIcon(OperationType t) {
         case OperationType::Grip:       return Theme::icon("hand-grab");
         case OperationType::MoveL:      return Theme::icon("move-diagonal-2");
         case OperationType::Release:    return Theme::icon("hand");
+        case OperationType::Walk:       return Theme::icon("footprints");
     }
     return {};
+}
+
+// Objects that can walk: robots with a left and a right foot
+std::vector<int> walkers(SceneGraph& scene) {
+    std::vector<int> out;
+    for (const ApiServer::Robot& r : ApiServer::findRobots(scene))
+        if (gait::canWalk(scene, r.root)) out.push_back(r.root);
+    return out;
 }
 
 QString opDisplayName(const Operation& op, int index) {
@@ -230,6 +245,20 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     m_opVelocity  = autoui::makeExprEdit(scene, autoui::ExprKind::Value, "actuator default");
     m_opDuration  = autoui::makeExprEdit(scene, autoui::ExprKind::Value, "seconds, e.g. 0.5");
     m_opCondition = autoui::makeExprEdit(scene, autoui::ExprKind::Value, "e.g. PartPresent && !EStop");
+    m_opWalker = new QComboBox;
+    m_opWalker->setToolTip("The humanoid that walks: a robot with a Left Foot and a Right Foot (Tools › Humanoid "
+                           "Builder, built on legs)");
+    m_opWalkTo = new QComboBox;
+    m_opWalkTo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    m_opWalkTo->setMinimumContentsLength(12);
+    m_opWalkTo->setToolTip("Walk to where this object stands on the floor and face the way it faces (its +X). "
+                           "Add an empty frame as a marker and place it. Or walk by the distances below");
+    m_opForward  = autoui::makeExprEdit(scene, autoui::ExprKind::Value, "metres ahead, e.g. 1.5");
+    m_opSideways = autoui::makeExprEdit(scene, autoui::ExprKind::Value, "metres to its left (− right)");
+    m_opTurn     = autoui::makeExprEdit(scene, autoui::ExprKind::Value, "degrees to its left (− right)");
+    m_opForward->setHelpText("Metres ahead; negative walks backwards. A turn given with it makes the walk an arc");
+    m_opSideways->setHelpText("Metres to its left (its −Z); negative steps to its right");
+    m_opTurn->setHelpText("Degrees to its left (counter-clockwise seen from above); negative turns right");
     m_opAfter = new QToolButton;
     m_opAfter->setPopupMode(QToolButton::InstantPopup);
     m_opAfter->setObjectName("menuButton");
@@ -253,6 +282,11 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     m_opLayout->addRow("On part", m_opOnPart);
     m_opLayout->addRow("Gripper", m_opGripper);
     m_opLayout->addRow("Part", m_opPart);
+    m_opLayout->addRow("Robot", m_opWalker);
+    m_opLayout->addRow("Walk to", m_opWalkTo);
+    m_opLayout->addRow("Forward m", m_opForward);
+    m_opLayout->addRow("Sideways m", m_opSideways);
+    m_opLayout->addRow("Turn °", m_opTurn);
     m_opLayout->addRow("Target", m_opTarget);
     m_opLayout->addRow(m_opVelLabel, m_opVelocity);
     m_opLayout->addRow("Duration", m_opDuration);
@@ -325,7 +359,14 @@ SequencesPage::SequencesPage(SceneGraph* scene, SimulationEngine* sim, QWidget* 
     connect(m_opGripper,  &QComboBox::currentIndexChanged, this, &SequencesPage::commitOpForm);
     connect(m_opPart,     &QComboBox::currentIndexChanged, this, &SequencesPage::commitOpForm);
     connect(m_opOnPart,   &QComboBox::currentIndexChanged, this, &SequencesPage::commitOpForm);
-    for (auto* e : {m_opTarget, m_opVelocity, m_opDuration, m_opCondition, m_opStartCond, m_opOnStart, m_opOnFinish})
+    connect(m_opWalker,   &QComboBox::currentIndexChanged, this, &SequencesPage::commitOpForm);
+    connect(m_opWalkTo,   &QComboBox::currentIndexChanged, this, [this]{
+        if (m_loading) return;
+        updateOpFormVisibility(kTypes[std::max(0, m_opType->currentIndex())]);
+        commitOpForm();
+    });
+    for (auto* e : {m_opTarget, m_opVelocity, m_opDuration, m_opCondition, m_opStartCond, m_opOnStart, m_opOnFinish,
+                    m_opForward, m_opSideways, m_opTurn})
         connect(e, &ExpressionEdit::committed, this, &SequencesPage::commitOpForm);
 
     refresh();
@@ -447,6 +488,17 @@ QString SequencesPage::describe(const Operation& op) const {
             return QString("%1 → %2%3 linear%4").arg(t ? t->name : "?", p ? p->name : "?", partText(op),
                        op.velocity.trimmed().isEmpty() ? QString() : QString(" @ %1 m/s").arg(op.velocity.trimmed()));
         }
+        case OperationType::Walk: {
+            const SceneObject* w = m_scene->getObject(op.walkerId);
+            const QString speed = op.velocity.trimmed().isEmpty() ? QString() : QString(" @ %1 m/s").arg(op.velocity.trimmed());
+            if (const SceneObject* to = m_scene->getObject(op.walkToId))
+                return QString("%1 walks to %2%3").arg(w ? w->name : "?", to->name, speed);
+            QStringList parts;
+            if (!op.forward.trimmed().isEmpty()) parts << op.forward.trimmed() + " m";
+            if (!op.sideways.trimmed().isEmpty()) parts << op.sideways.trimmed() + " m left";
+            if (!op.turn.trimmed().isEmpty()) parts << "turns " + op.turn.trimmed() + "°";
+            return QString("%1 walks %2%3").arg(w ? w->name : "?", parts.isEmpty() ? QString("?") : parts.join(", "), speed);
+        }
     }
     return {};
 }
@@ -504,6 +556,14 @@ void SequencesPage::updateOpFormVisibility(OperationType t) {
         ? "The object whose frame is the tool centre point; the actuated joints above it move it"
         : "The object that holds the part, e.g. the robot's tool flange or gripper body");
     m_opLayout->setRowVisible(m_opPart, t == OperationType::Grip);
+    const bool walk = t == OperationType::Walk;
+    const bool byDistance = walk && m_opWalkTo->currentData().toInt() == -1;
+    m_opLayout->setRowVisible(m_opWalker, walk);
+    m_opLayout->setRowVisible(m_opWalkTo, walk);
+    m_opLayout->setRowVisible(m_opForward, byDistance);
+    m_opLayout->setRowVisible(m_opSideways, byDistance);
+    m_opLayout->setRowVisible(m_opTurn, byDistance);
+    if (walk) m_opLayout->setRowVisible(m_opVelocity, true);
     // MoveL / MoveToPose to a pose taught on a part: which part this time
     const Pose* chosen = m_scene->getPose(m_opPose->currentData().toInt());
     const bool onPart = pose && chosen && chosen->isRelative();
@@ -522,6 +582,9 @@ void SequencesPage::updateOpFormVisibility(OperationType t) {
     } else if (t == OperationType::MoveL) {
         m_opVelLabel->setText("Speed m/s");
         m_opVelocity->setPlaceholderText("0.25");
+    } else if (walk) {
+        m_opVelLabel->setText("Speed m/s");
+        m_opVelocity->setPlaceholderText("from its legs");
     } else if (pose) {
         m_opVelLabel->setText("Speed %");
         m_opVelocity->setPlaceholderText("100");
@@ -591,6 +654,25 @@ void SequencesPage::loadOpForm() {
     for (auto& [pid, p] : m_scene->allPoses()) m_opPose->addItem(p.name, pid);
     autoui::fillObjectCombo(m_opGripper, *m_scene,
                             !op ? -1 : op->type == OperationType::MoveL ? op->toolId : op->gripperId, "(choose)");
+    // Walk: robots with legs, and where to
+    {
+        const QSignalBlocker block(m_opWalker);
+        m_opWalker->clear();
+        m_opWalker->addItem("(choose)", -1);
+        {
+            for (int id : walkers(*m_scene))
+                m_opWalker->addItem(Theme::icon("person-standing"), m_scene->getObject(id)->name, id);
+            const int cur = op ? op->walkerId : -1;
+            int idx = m_opWalker->findData(cur);
+            if (idx < 0 && cur != -1) {
+                const SceneObject* o = m_scene->getObject(cur);
+                m_opWalker->addItem(o ? o->name + " (no legs)" : QString("(deleted object)"), cur);
+                idx = m_opWalker->count() - 1;
+            }
+            m_opWalker->setCurrentIndex(std::max(0, idx));
+        }
+    }
+    autoui::fillObjectCombo(m_opWalkTo, *m_scene, op ? op->walkToId : -1, "(by distance)");
     // Part: sensors first ("s<id>"), then objects ("o<id>")
     {
         const QSignalBlocker block(m_opPart);
@@ -620,7 +702,8 @@ void SequencesPage::loadOpForm() {
     if (!op) {
         m_opForm->setTitle("Operation");
         m_opName->clear();
-        for (auto* e : {m_opTarget, m_opVelocity, m_opDuration, m_opCondition, m_opStartCond, m_opOnStart, m_opOnFinish})
+        for (auto* e : {m_opTarget, m_opVelocity, m_opDuration, m_opCondition, m_opStartCond, m_opOnStart, m_opOnFinish,
+                        m_opForward, m_opSideways, m_opTurn})
             e->setExpression({});
         m_opAfter->setText("");
         m_opStatus->setText(s ? "Add an operation with “+ Operation”." : "Create a sequence with “+”.");
@@ -637,6 +720,9 @@ void SequencesPage::loadOpForm() {
     m_opVelocity->setExpression(op->velocity);
     m_opDuration->setExpression(op->duration);
     m_opCondition->setExpression(op->condition);
+    m_opForward->setExpression(op->forward);
+    m_opSideways->setExpression(op->sideways);
+    m_opTurn->setExpression(op->turn);
     m_opStartCond->setExpression(op->startCondition);
     m_opOnStart->setExpression(op->onStart);
     m_opOnFinish->setExpression(op->onFinish);
@@ -820,6 +906,12 @@ void SequencesPage::addOperation(OperationType t) {
             if (!m_scene->allPoses().empty()) op.poseId = m_scene->allPoses().begin()->first;
             op.toolId = m_scene->selectedObjectId();
             break;
+        case OperationType::Walk: {
+            const std::vector<int> w = walkers(*m_scene);
+            if (!w.empty()) op.walkerId = w.front();
+            op.forward = "1";
+            break;
+        }
         case OperationType::Wait:    op.duration = "1"; break;
         case OperationType::WaitFor: op.condition = "true"; break;
         case OperationType::Set:     break;
@@ -925,6 +1017,17 @@ void SequencesPage::commitOpForm() {
         op->startCondition = m_opStartCond->text();
         op->onStart        = m_opOnStart->text();
         op->onFinish       = m_opOnFinish->text();
+        const bool walk    = op->type == OperationType::Walk;
+        // Switched to Walk: the first robot with legs
+        if (walk && m_opWalker->currentData().toInt() == -1 && m_opWalker->count() > 1) {
+            const QSignalBlocker block(m_opWalker);
+            m_opWalker->setCurrentIndex(1);
+        }
+        op->walkerId       = walk ? m_opWalker->currentData().toInt() : -1;
+        op->walkToId       = walk ? m_opWalkTo->currentData().toInt() : -1;
+        op->forward        = walk ? m_opForward->text() : QString();
+        op->sideways       = walk ? m_opSideways->text() : QString();
+        op->turn           = walk ? m_opTurn->text() : QString();
         m_scene->notifyAutomationChanged();
     });
     // Update the row in place so the form keeps focus

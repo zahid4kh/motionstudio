@@ -83,6 +83,11 @@ private:
     ExpressionEdit* m_opVelocity = nullptr;
     ExpressionEdit* m_opDuration = nullptr;
     ExpressionEdit* m_opCondition = nullptr;
+    QComboBox*      m_opWalker = nullptr;     // Walk: the robot with legs
+    QComboBox*      m_opWalkTo = nullptr;     // Walk: an object's place, or by distance
+    ExpressionEdit* m_opForward = nullptr;
+    ExpressionEdit* m_opSideways = nullptr;
+    ExpressionEdit* m_opTurn = nullptr;
     QToolButton*    m_opAfter = nullptr;
     ExpressionEdit* m_opStartCond = nullptr;
     ExpressionEdit* m_opOnStart = nullptr;
