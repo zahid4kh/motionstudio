@@ -1806,6 +1806,8 @@ std::vector<AutomationEngine::WalkView> AutomationEngine::walks() const {
         v.prints = w.prints(v.elapsed);
         v.footLength = w.legs().footLength;
         v.footWidth = w.legs().footWidth;
+        v.phase = w.phaseAt(v.elapsed);
+        v.goal = w.plan().end();
         out.push_back(std::move(v));
     };
     for (const MotionRt& m : m_motions)

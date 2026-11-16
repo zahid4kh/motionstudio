@@ -436,6 +436,18 @@ int Walker::stepsDone(double t) const {
     return std::clamp(int(std::floor(s + 1e-9)), 0, int(m_plan.steps.size()));
 }
 
+Walker::Phase Walker::phaseAt(double t) const {
+    Phase ph;
+    const int n = int(m_plan.steps.size());
+    if (n == 0 || m_plan.params.stepTime <= 0) return ph;
+    const double s = (t - m_plan.prep) / m_plan.params.stepTime;
+    if (s < 0 || s >= n) return ph;
+    ph.step = int(std::floor(s));
+    ph.side = m_plan.steps[size_t(ph.step)].side;
+    ph.progress = s - ph.step;
+    return ph;
+}
+
 void Walker::stopAfter(double t) {
     const int n = int(m_plan.steps.size());
     const double s = (t - m_plan.prep) / m_plan.params.stepTime;

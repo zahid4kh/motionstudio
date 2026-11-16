@@ -67,6 +67,7 @@ public:
 
     // ── Runtime queries ─────────────────────────────────────────────────────
     double time() const { return m_time; }
+    double dt() const { return m_dt; }         // the last scan's length (s)
     long   scanCount() const { return m_scanCount; }
     const std::vector<Symbol>& symbols() const { return m_symbols; }
     int    slotOf(const QString& name) const { return m_slotIndex.value(name, -1); }
@@ -213,6 +214,8 @@ public:
         double elapsed = 0, duration = 0;
         std::vector<gait::Walker::Print> prints;
         double footLength = 0, footWidth = 0;
+        gait::Walker::Phase phase;      // the step under way
+        gait::Place goal;               // where the walk ends
     };
     std::vector<WalkView> walks() const;
     // Checks a walk request and makes its walker from where the robot is now

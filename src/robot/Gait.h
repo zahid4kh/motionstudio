@@ -123,6 +123,11 @@ public:
 
     double duration() const { return m_plan.duration(); }
     int    stepsDone(double t) const;
+    // Where the walk is at `t`: the step under way (-1 while it crouches
+    // before the first or stands up after the last), the foot that swings in
+    // it (0 left, 1 right, -1 none) and how far through the step it is (0..1)
+    struct Phase { int step = -1; int side = -1; double progress = 0; };
+    Phase  phaseAt(double t) const;
     int    stepCount() const { return int(m_plan.steps.size()); }
     const Plan& plan() const { return m_plan; }
     const Legs& legs() const { return m_legs; }

@@ -66,6 +66,7 @@ add_library(MotionStudioCore STATIC
     src/automation/AutomationEngine.cpp
     src/automation/Sensors.cpp
     src/automation/Kinematics.cpp
+    src/automation/Take.cpp
     src/serialization/ProjectSerializer.cpp
     src/import/StepImporter.cpp
     src/io/ModbusServer.cpp

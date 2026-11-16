@@ -15,6 +15,7 @@
 #include "automation/AutomationEngine.h"
 #include "automation/Sensors.h"
 #include "automation/Kinematics.h"
+#include "automation/Take.h"
 #include "physics/SimulationEngine.h"
 #include "serialization/ProjectSerializer.h"
 #include "scene/Interference.h"
@@ -3580,6 +3581,73 @@ TEST(walkOperationInASequence) {
     CHECK(AutomationEngine::validateAll(g).join(" ").contains("nothing to walk"));
     g.getSequence(seq)->operations[0].walkerId = mark;
     CHECK(AutomationEngine::validateAll(g).join(" ").contains("no legs"));
+}
+
+TEST(takeRecordsAWalk) {
+    SceneGraph g;
+    const humanoid::Built b = walkingHumanoid(g);
+    AutomationEngine e(&g);
+    CHECK(e.start(nullptr));
+    std::vector<int> joints;
+    for (auto& [name, jid] : b.joints) joints.push_back(jid);
+    take::Recorder every(g, b.root, joints), tenth(g, b.root, joints, 10);
+    const take::Take& t = every.take();
+    CHECK(t.column("t") == 0 && t.column("x") == 1 && t.column("heading") == 7);
+    CHECK(t.column("goal_heading") == 14);
+    CHECK(t.columns.size() == 15 + int(joints.size()));
+    CHECK(t.column(g.motorForJoint(joints.front())->name) == 15);
+
+    AutomationEngine::MotionRequest r;
+    r.kind = AutomationEngine::MotionKind::Walk;
+    r.walk.root = b.root;
+    r.walk.forward = 1.0;
+    const int id = e.submitMotion(r);
+    const auto st = runMotion(e, id, 30, [&] { every.sample(e); tenth.sample(e); });
+    CHECK(st.state == AutomationEngine::MotionState::Done);
+    for (int i = 0; i < 20; ++i) { e.scan(0.016); every.sample(e); tenth.sample(e); }   // standing at the end
+
+    CHECK_NEAR(t.rate, 62.5, 1e-9);
+    CHECK(every.frames() > 100);
+    CHECK_NEAR(t.duration(), 0.016 * (every.frames() - 1), 1e-6);
+    CHECK_NEAR(tenth.take().duration(), t.duration(), 0.1);
+    CHECK(std::abs(tenth.frames() - int(t.duration() * 10) - 1) <= 1);
+    const int walking = t.column("walking"), step = t.column("step"), swing = t.column("swing");
+    int walked = 0, maxStep = -1;
+    std::set<int> sides;
+    double lastT = -1;
+    for (const auto& row : t.rows) {
+        CHECK(row.size() == size_t(t.columns.size()));
+        CHECK(row[0] > lastT);
+        lastT = row[0];
+        if (row[size_t(walking)] > 0) {
+            ++walked;
+            CHECK_NEAR(row[size_t(t.column("goal_x"))], 1000, 0.1);
+            CHECK_NEAR(row[size_t(t.column("goal_z"))], 0, 0.1);
+        }
+        maxStep = std::max(maxStep, int(row[size_t(step)]));
+        if (row[size_t(swing)] >= 0) sides.insert(int(row[size_t(swing)]));
+        const double p = row[size_t(t.column("progress"))];
+        CHECK(p >= 0 && p < 1);
+    }
+    CHECK(walked > 50);
+    CHECK(sides.size() == 2);
+    CHECK(maxStep >= 2);
+    const auto& last = t.rows.back();
+    CHECK_NEAR(last[1], 1000, 0.1);
+    CHECK_NEAR(last[3], 0, 0.1);
+    CHECK(last[size_t(walking)] == 0 && last[size_t(step)] == -1);
+    CHECK_NEAR(last[size_t(t.column("goal_x"))], 1000, 0.1);   // standing: its own place
+
+    const QString csv = t.toCsv();
+    const QStringList lines = csv.split('\n', Qt::SkipEmptyParts);
+    CHECK(lines.size() == every.frames() + 5);
+    CHECK(lines[0] == "# MotionStudio take" && lines[2] == "# rate: 62.5");
+    CHECK(lines[4].startsWith("t,x,y,z,rx,ry,rz,heading,walking"));
+    CHECK(lines[5].split(',').size() == t.columns.size());
+    QTemporaryDir dir;
+    CHECK(t.save(dir.filePath("walk.csv")));
+    QFile f(dir.filePath("walk.csv"));
+    CHECK(f.open(QIODevice::ReadOnly) && QString::fromUtf8(f.readAll()) == csv);
 }
 
 int main(int argc, char** argv) {
