@@ -12,6 +12,8 @@ class ActuatorsPage;
 class SequencesPage;
 class RuntimePage;
 class PartFlowPage;
+class MotionsPage;
+class QAction;
 
 // Dockable automation environment: Signals / Actuators / Sequences / Runtime
 // tabs, with a live problem indicator that compiles all definitions.
@@ -28,6 +30,9 @@ public:
     // Part Flow tab: a new source copying `objectId` / sink on it, settings open
     void addSourceFor(int objectId);
     void addSinkOn(int objectId);
+    // Motions tab: its Record button, and a motion selected there
+    void setRecordAction(QAction* record);
+    void showMotion(int motionId);
 
 signals:
     void statusMessage(const QString& msg, bool ok);
@@ -48,6 +53,7 @@ private:
     SequencesPage*    m_sequences = nullptr;
     RuntimePage*      m_runtime = nullptr;
     PartFlowPage*     m_flow = nullptr;
+    MotionsPage*      m_motions = nullptr;
     QTimer            m_runtimeTimer;
     QTimer            m_validateTimer;
     QStringList       m_problemList;
