@@ -91,6 +91,7 @@ enum class OperationType {
     Release,     // gripper lets go of everything it holds; done immediately
     MoveL,       // tool moves in a straight line to where it is in a pose (inverse kinematics)
     Walk,        // a legged robot walks by distances and a turn, or to an object's place; done when it stands
+    PlayMotion,  // a robot plays a motion kept in the project (see MotionClip); done at its end
 };
 
 struct Operation {
@@ -106,12 +107,16 @@ struct Operation {
                                      // MoveL / MoveToPose to a pose taught on a part: the part
                                      // (partId, or what sensorId detects; neither = the pose's own)
     int           toolId     = -1;   // MoveL: object whose frame is the tool centre point
-    int           walkerId   = -1;   // Walk: the legged robot (its root object)
+    int           walkerId   = -1;   // Walk: the legged robot (its root object); PlayMotion: the robot
+                                     // (-1 = the one the motion was recorded on)
+    int           motionId   = -1;   // PlayMotion: the motion
+    bool          relative   = true; // PlayMotion: start where the robot stands (else where it was recorded)
     int           walkToId   = -1;   // Walk: walk to this object's place and face its way (-1 = by distance)
 
     // All numeric/boolean fields are expressions (a constant is a valid expression)
     QString       target;            // Move: position
-    QString       velocity;          // Move / Run: speed; MoveToPose: speed % (empty = actuator default / 100)
+    QString       velocity;          // Move / Run: speed; MoveToPose: speed % (empty = actuator default / 100);
+                                     // Walk: m/s; PlayMotion: × the recorded pace (empty = 1)
     QString       duration;          // Wait: seconds
     QString       condition;         // WaitFor
     QString       startCondition;    // extra gate before starting (empty = true)
@@ -235,6 +240,7 @@ inline QString operationTypeName(OperationType t) {
         case OperationType::Release:    return "Release";
         case OperationType::MoveL:      return "MoveL";
         case OperationType::Walk:       return "Walk";
+        case OperationType::PlayMotion: return "PlayMotion";
     }
     return "Move";
 }
@@ -250,6 +256,7 @@ inline OperationType operationTypeFromName(const QString& s) {
     if (s == "Release")    return OperationType::Release;
     if (s == "MoveL")      return OperationType::MoveL;
     if (s == "Walk")       return OperationType::Walk;
+    if (s == "PlayMotion") return OperationType::PlayMotion;
     return OperationType::Move;
 }
 

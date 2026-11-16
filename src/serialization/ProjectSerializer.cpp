@@ -282,6 +282,8 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene, MeshPool* pool) {
             if (op.toolId != -1)    oo["toolId"]    = op.toolId;
             if (op.walkerId != -1)  oo["walkerId"]  = op.walkerId;
             if (op.walkToId != -1)  oo["walkToId"]  = op.walkToId;
+            if (op.motionId != -1)  oo["motionId"]  = op.motionId;
+            if (!op.relative)       oo["relative"]  = false;
             if (!op.forward.isEmpty())  oo["forward"]  = op.forward;
             if (!op.sideways.isEmpty()) oo["sideways"] = op.sideways;
             if (!op.turn.isEmpty())     oo["turn"]     = op.turn;
@@ -697,6 +699,8 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root, con
             op.toolId         = ref(idMap, oo["toolId"]);
             op.walkerId       = ref(idMap, oo["walkerId"]);
             op.walkToId       = ref(idMap, oo["walkToId"]);
+            op.motionId       = ref(motionIdMap, oo["motionId"]);
+            op.relative       = oo["relative"].toBool(true);
             op.forward        = oo["forward"].toString();
             op.sideways       = oo["sideways"].toString();
             op.turn           = oo["turn"].toString();

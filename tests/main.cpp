@@ -3854,6 +3854,82 @@ TEST(takeRecordsAWalk) {
     CHECK(f.open(QIODevice::ReadOnly) && QString::fromUtf8(f.readAll()) == csv);
 }
 
+TEST(takePlayedByAnOperation) {
+    SceneGraph g;
+    const humanoid::Built b = walkingHumanoid(g);
+    std::vector<int> joints = AutomationEngine::actuatedJointsBelow(g, b.root);
+    for (auto& [name, jid] : b.joints) CHECK(std::count(joints.begin(), joints.end(), jid) == 1);
+    // Record a walk forward and a turn
+    take::Take recorded;
+    {
+        AutomationEngine e(&g);
+        CHECK(e.start(nullptr));
+        take::Recorder rec(g, b.root, joints);
+        AutomationEngine::MotionRequest r;
+        r.kind = AutomationEngine::MotionKind::Walk;
+        r.walk.root = b.root;
+        r.walk.forward = 0.6;
+        r.walk.turn = 30;
+        CHECK(runMotion(e, e.submitMotion(r), 30, [&] { rec.sample(e); }).state == AutomationEngine::MotionState::Done);
+        recorded = rec.take();
+        e.stop();
+    }
+    const gait::Place walked = placeNow(g, b.root);
+    MotionClip clip;
+    clip.name = "Stroll";
+    clip.robotId = b.root;
+    clip.take = std::make_shared<take::Take>(recorded);
+    const int motion = g.addMotion(clip);
+
+    Sequence q;
+    q.name = "Show";
+    Operation a;
+    a.id = g.allocateId();
+    a.type = OperationType::PlayMotion;
+    a.motionId = motion;
+    a.velocity = "2";
+    q.operations = {a};
+    const int seq = g.addSequence(q);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+    SceneGraph loaded;
+    roundTrip(g, loaded);
+    CHECK(AutomationEngine::validateAll(loaded).isEmpty());
+    CHECK(loaded.allSequences().begin()->second.operations[0].motionId == loaded.allMotions().begin()->first);
+
+    // From where it stands: the same walk again, turned by its heading, twice as fast
+    AutomationEngine e(&g);
+    CHECK(e.start(nullptr));
+    int scans = 0;
+    for (; scans < 3000 && e.seqStatus(seq).state != AutomationEngine::SeqState::Finished; ++scans) e.scan(0.016);
+    CHECK(e.seqStatus(seq).state == AutomationEngine::SeqState::Finished);
+    CHECK(std::abs(scans - int(recorded.rows.size()) / 2) <= 3);
+    CHECK(e.warnings().isEmpty());
+    const gait::Place end = placeNow(g, b.root);
+    const double h = walked.heading;
+    CHECK_NEAR(end.x, walked.x + walked.x * std::cos(h) + walked.z * std::sin(h), 1e-3);
+    CHECK_NEAR(end.z, walked.z - walked.x * std::sin(h) + walked.z * std::cos(h), 1e-3);
+    CHECK_NEAR(gait::angleDiff(end.heading, 2 * walked.heading), 0, 1e-3);
+    e.stop();
+
+    // Where it was recorded: it ends where the take ended
+    g.getSequence(seq)->operations[0].relative = false;
+    CHECK(e.start(nullptr));
+    for (int i = 0; i < 3000 && e.seqStatus(seq).state != AutomationEngine::SeqState::Finished; ++i) e.scan(0.016);
+    const gait::Place there = placeNow(g, b.root);
+    CHECK_NEAR(there.x, walked.x, 1e-3);
+    CHECK_NEAR(there.z, walked.z, 1e-3);
+    e.stop();
+
+    // Problems are reported
+    g.getSequence(seq)->operations[0].motionId = -1;
+    CHECK(AutomationEngine::validateAll(g).join(" ").contains("no motion selected"));
+    g.getSequence(seq)->operations[0].motionId = motion;
+    g.getMotion(motion)->robotId = -2;
+    CHECK(AutomationEngine::validateAll(g).join(" ").contains("choose a robot"));
+    g.getSequence(seq)->operations[0].walkerId = b.root;
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+}
+
 TEST(takeKeptInTheProject) {
     SceneGraph g;
     const int robot = g.addObject("Arm", PrimitiveType::Cube);

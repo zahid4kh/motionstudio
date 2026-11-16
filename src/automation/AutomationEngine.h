@@ -209,6 +209,15 @@ public:
     };
     static QString motionStateName(MotionState s);
 
+    // A take as a play request for the robot at `root`: the columns named
+    // after the actuators of `joints` drive them (API units: mm, degrees),
+    // and with `place` its x y z rx ry rz (or x z heading, and y when
+    // given) carry the top object. Null with a message when nothing fits.
+    static std::shared_ptr<PlayRequest> playRequestFor(const SceneGraph& scene, int root, const std::vector<int>& joints,
+                                                       const take::Take& take, bool place, QString* error = nullptr);
+    // The actuated joints that move parts below `root`
+    static std::vector<int> actuatedJointsBelow(const SceneGraph& scene, int root);
+
     // Checks the request and queues it; returns the motion's id (> 0), or 0
     // with an error code (not_running, bad_request, not_actuated,
     // out_of_limits) and message. Applies from the next scan.
@@ -281,6 +290,13 @@ private:
         double           start = 0, duration = 0;
     };
 
+    // Motion played back: where it started and how it is placed
+    struct PlayRt {
+        std::shared_ptr<const PlayRequest> req;
+        double     start = 0;
+        QMatrix4x4 shift, scale;          // relative shift, the top object's scale
+    };
+
     struct OpRt {
         Operation def;
         expr::Expression target, velocity, duration, condition, startCond;
@@ -305,6 +321,8 @@ private:
         expr::Expression forward, sideways, turn;
         std::shared_ptr<gait::Walker> walker;
         double           walkStart = 0;
+        // PlayMotion
+        PlayRt           play;
     };
 
     struct MotionRt {
@@ -316,8 +334,8 @@ private:
         std::vector<double> from;
         LinearPath    path;
         std::shared_ptr<gait::Walker> walker;   // Walk
-        double        walkStart = 0;            // Walk, Play: when it started
-        QMatrix4x4    playShift, playScale;     // Play: relative shift, the top object's scale
+        double        walkStart = 0;            // Walk: when it started
+        PlayRt        play;                     // Play
     };
 
     struct SeqRt {
@@ -411,7 +429,8 @@ private:
     // One scan of a walk: the root and the legs where the plan has them now;
     // false when a foot can't reach (`error` m off)
     bool stepWalk(gait::Walker& w, double start, double* error, double* progress);
-    double stepPlay(MotionRt& m);   // returns the progress
+    void   beginPlay(PlayRt& p);
+    double stepPlay(PlayRt& p);     // returns the progress
     bool startMotion(MotionRt& m);
     void finishMotion(MotionRt& m, MotionState state, const QString& code = {}, const QString& error = {});
     void holdJoints(const std::vector<int>& joints);

@@ -296,6 +296,23 @@ QStringList AutomationEngine::validateAll(const SceneGraph& scene) {
                     chk(where + " speed", op.velocity);
                     break;
                 }
+                case OperationType::PlayMotion: {
+                    const MotionClip* clip = scene.getMotion(op.motionId);
+                    if (!clip || !clip->take)
+                        errs << where + (op.motionId == -1 ? ": no motion selected" : ": the motion no longer exists");
+                    const int root = op.walkerId != -1 ? op.walkerId : clip ? clip->robotId : -1;
+                    if (clip && clip->take) {
+                        QString why;
+                        if (!scene.getObject(root))
+                            errs << where + (op.walkerId != -1 ? QString(": the robot no longer exists")
+                                                               : QString(": the robot %1 was recorded on is gone; choose a robot")
+                                                                     .arg(clip->name));
+                        else if (!playRequestFor(scene, root, actuatedJointsBelow(scene, root), *clip->take, true, &why))
+                            errs << where + ": " + why;
+                    }
+                    chk(where + " speed", op.velocity);
+                    break;
+                }
             }
             // The part a pose taught on a part is applied to
             if (const Pose* pose = scene.getPose(op.poseId);
@@ -892,6 +909,28 @@ void AutomationEngine::startOperation(SeqRt& seq, OpRt& op) {
             else m_warnings << QString("%1: %2").arg(op.def.name.isEmpty() ? QString("Walk") : op.def.name, err);
             break;
         }
+        case OperationType::PlayMotion: {
+            op.play = PlayRt();
+            const MotionClip* clip = m_scene->getMotion(op.def.motionId);
+            const int root = op.def.walkerId != -1 ? op.def.walkerId : clip ? clip->robotId : -1;
+            if (!clip || !clip->take || !m_scene->getObject(root)) break;
+            QString err;
+            std::shared_ptr<PlayRequest> req =
+                playRequestFor(*m_scene, root, actuatedJointsBelow(*m_scene, root), *clip->take, true, &err);
+            if (!req) {
+                m_warnings << QString("%1: %2").arg(op.def.name.isEmpty() ? clip->name : op.def.name, err);
+                break;
+            }
+            req->relative = op.def.relative;
+            if (!op.def.velocity.trimmed().isEmpty()) {
+                const double v = op.velocity.eval(c);
+                req->speed = std::isfinite(v) && v > 0.01 ? v : 0.01;
+            }
+            op.play.req = std::move(req);
+            beginPlay(op.play);
+            op.status.detail = "playing " + clip->name;
+            break;
+        }
         case OperationType::Release:
             m_holds.erase(std::remove_if(m_holds.begin(), m_holds.end(),
                                          [&](const Hold& h) { return h.gripperId == op.def.gripperId; }),
@@ -966,6 +1005,13 @@ bool AutomationEngine::operationFinished(OpRt& op) {
             if (total > 0) op.status.detail = QString("step %1 of %2").arg(std::min(done + 1, total)).arg(total);
             if (progress < 1.0) return false;
             op.walker.reset();
+            return true;
+        }
+        case OperationType::PlayMotion: {
+            if (!op.play.req) return true;
+            op.status.progress = stepPlay(op.play);
+            if (op.status.progress < 1.0) return false;
+            op.play = PlayRt();
             return true;
         }
     }
@@ -1603,21 +1649,8 @@ bool AutomationEngine::startMotion(MotionRt& m) {
         return true;
     }
     if (r.kind == MotionKind::Play) {
-        const PlayRequest& p = *r.play;
-        m.walkStart = m_time;
-        if (!p.frames.empty()) {
-            const QMatrix4x4 now = kin::toolFrame(*m_scene, p.root);
-            m.playScale = now.inverted() * m_scene->worldTransform(p.root);
-            m.playShift = QMatrix4x4();
-            if (p.relative) {
-                QMatrix4x4 first;
-                first.translate(p.frames.front().position);
-                first.rotate(p.frames.front().rotation.x(), 1, 0, 0);
-                first.rotate(p.frames.front().rotation.y(), 0, 1, 0);
-                first.rotate(p.frames.front().rotation.z(), 0, 0, 1);
-                m.playShift = gait::frameOf(gait::placeOf(now)) * gait::frameOf(gait::placeOf(first)).inverted();
-            }
-        }
+        m.play.req = r.play;
+        beginPlay(m.play);
         m.status.state = MotionState::Running;
         return true;
     }
@@ -1736,7 +1769,7 @@ void AutomationEngine::advanceMotions() {
                     }
                 }
             } else if (m.req.kind == MotionKind::Play) {
-                m.status.progress = stepPlay(m);
+                m.status.progress = stepPlay(m.play);
                 if (m.status.progress >= 1.0) {
                     finishMotion(m, MotionState::Done);
                     finished = true;
@@ -1856,9 +1889,115 @@ bool AutomationEngine::stepWalk(gait::Walker& w, double start, double* error, do
     return ok;
 }
 
-double AutomationEngine::stepPlay(MotionRt& m) {
-    const PlayRequest& p = *m.req.play;
-    const double t = p.times.front() + (m_time + m_dt - m.walkStart) * p.speed;
+std::vector<int> AutomationEngine::actuatedJointsBelow(const SceneGraph& scene, int root) {
+    std::vector<int> out;
+    for (int mid : scene.motorIdsSorted()) {
+        const Motor* m = scene.getMotor(mid);
+        const Joint* j = m ? scene.getJoint(m->jointId) : nullptr;
+        if (j && scenequery::inSubtree(scene, j->childBodyId, root)) out.push_back(j->id);
+    }
+    return out;
+}
+
+std::shared_ptr<AutomationEngine::PlayRequest> AutomationEngine::playRequestFor(
+    const SceneGraph& scene, int root, const std::vector<int>& joints, const take::Take& t, bool place, QString* error)
+{
+    auto fail = [&](const QString& why) {
+        if (error) *error = why;
+        return std::shared_ptr<PlayRequest>();
+    };
+    const QStringList& names = t.columns;
+    const int tCol = int(names.indexOf("t"));
+    if (tCol < 0) return fail("a take needs a \"t\" column (seconds)");
+    if (t.rows.empty()) return fail("the take has no rows");
+    auto play = std::make_shared<PlayRequest>();
+    play->root = root;
+    // The columns named after the robot's actuators are its joints
+    std::vector<int> jointCols;
+    QStringList actuators;
+    for (int jid : joints) {
+        const Motor* m = scene.motorForJoint(jid);
+        if (!m) continue;
+        actuators << m->name;
+        const int k = int(names.indexOf(m->name));
+        if (k < 0) continue;
+        play->joints.push_back(jid);
+        jointCols.push_back(k);
+    }
+    // Its place: a whole frame, or on the floor
+    const int x = int(names.indexOf("x")), y = int(names.indexOf("y")), z = int(names.indexOf("z"));
+    const int rx = int(names.indexOf("rx")), ry = int(names.indexOf("ry")), rz = int(names.indexOf("rz"));
+    const int hd = int(names.indexOf("heading"));
+    const bool full = x >= 0 && y >= 0 && z >= 0 && rx >= 0 && ry >= 0 && rz >= 0;
+    const bool floor = !full && x >= 0 && z >= 0 && hd >= 0;
+    const bool moveRoot = place && (full || floor) && scene.getObject(root);
+    if (play->joints.empty() && !moveRoot) {
+        actuators.sort(Qt::CaseInsensitive);
+        if (actuators.size() > 12) { actuators = actuators.mid(0, 12); actuators << "…"; }
+        const SceneObject* o = scene.getObject(root);
+        return fail(QString("no column names a joint of %1 (its actuators: %2)")
+                        .arg(o ? o->name : QString("the robot"), actuators.join(", ")));
+    }
+    // On the floor: its top object keeps its tilt (and, without a y column,
+    // its height) over its floor spot
+    QMatrix4x4 offset;
+    if (moveRoot && floor) {
+        const QMatrix4x4 now = kin::toolFrame(scene, root);
+        offset = gait::frameOf(gait::placeOf(now)).inverted() * now;
+    }
+    play->times.reserve(t.rows.size());
+    play->values.reserve(t.rows.size());
+    for (size_t i = 0; i < t.rows.size(); ++i) {
+        const std::vector<double>& row = t.rows[i];
+        if (row.size() != size_t(names.size()))
+            return fail(QString("row %1 has %2 values for %3 columns").arg(i).arg(row.size()).arg(names.size()));
+        play->times.push_back(row[size_t(tCol)]);
+        std::vector<double> v;
+        v.reserve(play->joints.size());
+        for (size_t j = 0; j < play->joints.size(); ++j) {
+            const double raw = row[size_t(jointCols[j])];
+            v.push_back(scene.getJoint(play->joints[j])->type == JointType::Prismatic ? raw / 1000.0 : raw);
+        }
+        play->values.push_back(std::move(v));
+        if (moveRoot) {
+            Transform f;
+            if (full) {
+                f.position = QVector3D(float(row[size_t(x)] / 1000), float(row[size_t(y)] / 1000), float(row[size_t(z)] / 1000));
+                f.rotation = QVector3D(float(row[size_t(rx)]), float(row[size_t(ry)]), float(row[size_t(rz)]));
+            } else {
+                const gait::Place at{row[size_t(x)] / 1000, row[size_t(z)] / 1000, qDegreesToRadians(row[size_t(hd)])};
+                QMatrix4x4 m = gait::frameOf(at) * offset;
+                if (y >= 0) m(1, 3) = float(row[size_t(y)] / 1000);   // its height, when given
+                const Transform tf = SceneGraph::toTransform(m);
+                f.position = tf.position;
+                f.rotation = tf.rotation;
+            }
+            play->frames.push_back(f);
+        }
+    }
+    return play;
+}
+
+void AutomationEngine::beginPlay(PlayRt& r) {
+    const PlayRequest& p = *r.req;
+    r.start = m_time;
+    r.shift = r.scale = QMatrix4x4();
+    if (p.frames.empty() || !m_scene->getObject(p.root)) return;
+    const QMatrix4x4 now = kin::toolFrame(*m_scene, p.root);
+    r.scale = now.inverted() * m_scene->worldTransform(p.root);
+    if (p.relative) {
+        QMatrix4x4 first;
+        first.translate(p.frames.front().position);
+        first.rotate(p.frames.front().rotation.x(), 1, 0, 0);
+        first.rotate(p.frames.front().rotation.y(), 0, 1, 0);
+        first.rotate(p.frames.front().rotation.z(), 0, 0, 1);
+        r.shift = gait::frameOf(gait::placeOf(now)) * gait::frameOf(gait::placeOf(first)).inverted();
+    }
+}
+
+double AutomationEngine::stepPlay(PlayRt& r) {
+    const PlayRequest& p = *r.req;
+    const double t = p.times.front() + (m_time + m_dt - r.start) * p.speed;
     // The sample before t and how far towards the next one
     const size_t n = p.times.size();
     size_t i = size_t(std::upper_bound(p.times.begin(), p.times.end(), t) - p.times.begin());
@@ -1889,7 +2028,7 @@ double AutomationEngine::stepPlay(MotionRt& m) {
         QMatrix4x4 frame;
         frame.translate(a.position + (b.position - a.position) * float(f));
         frame.rotate(QQuaternion::slerp(quat(a.rotation), quat(b.rotation), float(f)));
-        m_scene->setWorldTransform(p.root, m.playShift * frame * m.playScale);
+        m_scene->setWorldTransform(p.root, r.shift * frame * r.scale);
     }
     const double span = p.times.back() - p.times.front();
     const double progress = span > 1e-9 ? std::clamp((t - p.times.front()) / span, 0.0, 1.0) : 1.0;

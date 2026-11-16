@@ -1079,67 +1079,27 @@ QJsonValue ApiServer::robotPlay(const QJsonObject& p, Call& c) {
     const QJsonArray cols = p.value("columns").toArray();
     const QJsonArray rows = p.value("rows").toArray();
     if (cols.isEmpty() || rows.isEmpty()) fail("bad_request", "\"columns\" and \"rows\" must be lists (a take)");
-    QStringList names;
-    for (const QJsonValue& v : cols) names << v.toString();
-    const int tCol = int(names.indexOf("t"));
-    if (tCol < 0) fail("bad_request", "a take needs a \"t\" column (seconds)");
-    auto play = std::make_shared<AutomationEngine::PlayRequest>();
-    play->root = r.root;
-    play->relative = flag(p, "relative", false);
-    play->speed = number(p, "speed", 1);
-    // The columns named after the robot's actuators are its joints
-    std::vector<int> jointCols;
-    for (int jid : r.joints) {
-        const Motor* m = m_scene->motorForJoint(jid);
-        const int k = m ? int(names.indexOf(m->name)) : -1;
-        if (k < 0) continue;
-        play->joints.push_back(jid);
-        jointCols.push_back(k);
-    }
-    // Its place: a whole frame, or on the floor
-    const int x = int(names.indexOf("x")), y = int(names.indexOf("y")), z = int(names.indexOf("z"));
-    const int rx = int(names.indexOf("rx")), ry = int(names.indexOf("ry")), rz = int(names.indexOf("rz"));
-    const int hd = int(names.indexOf("heading"));
-    const bool full = x >= 0 && y >= 0 && z >= 0 && rx >= 0 && ry >= 0 && rz >= 0;
-    const bool floor = !full && x >= 0 && z >= 0 && hd >= 0;
-    const bool moveRoot = flag(p, "place", true) && (full || floor);
-    if (play->joints.empty() && !moveRoot)
-        fail("bad_request", QString("no column names a joint of %1 (its actuators: %2)")
-                                .arg(r.name, listOf([&] { QStringList n; for (int j : r.joints)
-                                    if (const Motor* m = m_scene->motorForJoint(j)) n << m->name; return n; }())));
-    // On the floor: its top object keeps its tilt (and, without a y column,
-    // its height) over its floor spot
-    const QMatrix4x4 now = kin::toolFrame(*m_scene, r.root);
-    const gait::Place here = gait::placeOf(now);
-    const QMatrix4x4 offset = gait::frameOf(here).inverted() * now;
+    take::Take t;
+    for (const QJsonValue& v : cols) t.columns << v.toString();
+    if (!t.columns.contains("t")) fail("bad_request", "a take needs a \"t\" column (seconds)");
+    t.rows.reserve(size_t(rows.size()));
     for (int i = 0; i < rows.size(); ++i) {
         const QJsonArray row = rows[i].toArray();
         if (row.size() != cols.size()) fail("bad_request", QString("row %1 has %2 values for %3 columns").arg(i).arg(row.size()).arg(cols.size()));
-        auto at = [&](int k) {
-            const QJsonValue v = row[k];
-            if (!v.isDouble()) fail("bad_request", QString("row %1: \"%2\" is not a number").arg(i).arg(names[k]));
-            return v.toDouble();
-        };
-        play->times.push_back(at(tCol));
         std::vector<double> v;
-        for (size_t j = 0; j < play->joints.size(); ++j) v.push_back(fromApi(*m_scene->getJoint(play->joints[j]), at(jointCols[j])));
-        play->values.push_back(std::move(v));
-        if (moveRoot) {
-            Transform f;
-            if (full) {
-                f.position = QVector3D(float(at(x) / kMm), float(at(y) / kMm), float(at(z) / kMm));
-                f.rotation = QVector3D(float(at(rx)), float(at(ry)), float(at(rz)));
-            } else {
-                const gait::Place place{at(x) / kMm, at(z) / kMm, qDegreesToRadians(at(hd))};
-                QMatrix4x4 m = gait::frameOf(place) * offset;
-                if (y >= 0) m(1, 3) = float(at(y) / kMm);   // its height, when given
-                const Transform t = SceneGraph::toTransform(m);
-                f.position = t.position;
-                f.rotation = t.rotation;
-            }
-            play->frames.push_back(f);
+        v.reserve(size_t(row.size()));
+        for (int k = 0; k < row.size(); ++k) {
+            if (!row[k].isDouble()) fail("bad_request", QString("row %1: \"%2\" is not a number").arg(i).arg(t.columns[k]));
+            v.push_back(row[k].toDouble());
         }
+        t.rows.push_back(std::move(v));
     }
+    QString err;
+    std::shared_ptr<AutomationEngine::PlayRequest> play =
+        AutomationEngine::playRequestFor(*m_scene, r.root, r.joints, t, flag(p, "place", true), &err);
+    if (!play) fail("bad_request", err);
+    play->relative = flag(p, "relative", false);
+    play->speed = number(p, "speed", 1);
     AutomationEngine::MotionRequest req;
     req.kind = AutomationEngine::MotionKind::Play;
     req.play = play;
