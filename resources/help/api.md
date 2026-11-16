@@ -108,6 +108,7 @@ walker.walk_to(2000, 500, heading=180)  # to x, z (mm, world), then face -X
 walker.walk_path([(1000, 0), (1000, 1000), (0, 1000), (0, 0)], heading=0)
 walker.walk_path([(500, 0), (500, 500)], frame="robot")   # x ahead, z to its right
 walker.walk(3000, speed=600, step_length=300, arm_swing=0)
+walker.walk_steps([(200, 0, 0), (400, 0, 0), (550, -50, 20)])   # footsteps you choose
 print(walker.place)                     # Place(x, z, heading): where it stands
 ```
 
@@ -136,6 +137,29 @@ println(walker.place)
 - **The gait**: `step_length`, `side_step`, `step_height`, `crouch` and `sway` in mm, `turn_per_step` and `arm_swing` in degrees, `step_time` in seconds or `speed` in mm/s. Anything you leave out comes from the size of its legs; `walker.default_gait` shows the values. Steps that are too long for the legs are refused before the robot moves.
 - **Waiting**: a walk waits until the humanoid stands again. With `wait=False` you get a **Motion**. Walks of one humanoid queue one after another, and a joint move of a leg waits for the walk. `walker.state()` says whether it walks and which step it is on.
 - **Stopping**: `walker.stop_walking()` finishes the step under way and brings the feet together. `walker.stop()` halts at once, mid-step.
+
+## Recording and learning motion
+
+A **take** is what a robot did, as numbers: its joint values and where it stands, every scan. **Record Values** saves one from the app (see [Running & Debugging](help:runtime)); a program records one around anything it does, and plays takes back:
+
+```python
+with walker.record() as rec:                 # every scan; record(rate=25) for 25 a second
+    walker.walk_to(2000, 500)
+take = rec.take                              # ms.Take: columns, rows, take["x"], take.frame(i)
+take.save("a-to-b.csv")                      # the same CSV as Record Values
+walker.play(ms.Take.load("a-to-b.csv"), relative=True)   # again, from where it stands
+walker.play(take, speed=2, place=False)      # only the joints, twice as fast
+walker.walk_steps([(200, 0, 0), (400, 0, 0)])  # exactly these footsteps (x, z, heading)
+```
+
+`play` sets the joints named in the take's columns and moves the robot to its `x y z rx ry rz` (or `x z heading` on the floor), interpolating between rows. With `relative=True` the motion starts where the robot stands.
+
+**Python only:** `motionstudio.learn` (needs NumPy) teaches small neural networks from takes:
+
+- `AnimationModel().fit({"wave": take1, "bow": take2})` learns animations and poses. `generate("wave", duration=3)` plays one at any length, `generate({"wave": 0.5, "bow": 0.5})` blends them, and `pose("bow", 0.5)` gives the joint values half way through.
+- `WalkPolicy().fit(takes)` learns to walk from takes of a humanoid walking to many goals. Its **step policy** decides each footstep towards a goal, and its **motion model** moves every joint through a step. `policy.walk(walker, x, z, heading)` makes the robot step where the policy decides, so its feet land exactly. `policy.motion(x, z, heading, start=walker)` makes the whole motion from the networks, as a take to play.
+
+The Python library's README describes them. The test project's scripts 09 to 13 show the whole round: record, collect, train, walk.
 
 ## Signals and the simulation
 

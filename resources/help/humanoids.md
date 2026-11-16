@@ -88,4 +88,6 @@ It is kinematic: the legs follow the plan and the humanoid can't fall. The floor
 
 **File › Open Template… › Humanoid Patrol** is a humanoid that walks round four spots, waving at one and bowing at another.
 
+**Recording it:** **Record Values** saves the humanoid's joint values, where it stands and its steps while it walks, as a CSV take (see [Running & Debugging](help:runtime)). From Python, takes like that teach a model to walk on its own (see [Robot API](help:api)).
+
 Any model can walk if it has objects called **Left Foot** and **Right Foot** below one top object, each moved by at least a hip, a knee and an ankle joint with actuators, and its feet resting on the floor at the top object's height.
