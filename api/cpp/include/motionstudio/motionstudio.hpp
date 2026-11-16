@@ -10,6 +10,11 @@
 //   robot.moveJoints({{"A1", 30}});               // a joint move
 //   studio.set("Start", true);
 //
+//   auto walker = studio.humanoid();              // a humanoid on legs
+//   walker.walk(1000);                            // a metre ahead
+//   walker.turn(90);                              // a quarter turn to its left
+//   walker.walkPath({{1000, 0}, {1000, 1000}});   // through points (x, z in mm)
+//
 // Units are millimetres, degrees and seconds; Y is up, as in MotionStudio.
 // Every call throws ms::Error (or a subclass) when MotionStudio refuses it.
 #pragma once
@@ -108,6 +113,44 @@ struct JointInfo {
     double      acceleration = 0;
 };
 
+// Where a walking robot stands: x and z (mm) on the floor and its heading
+// (degrees about +Y: 0 faces +X, positive turns to its left, towards −Z)
+struct Place {
+    double x = 0, z = 0;
+    double heading = 0;
+};
+std::ostream& operator<<(std::ostream& os, const Place& p);
+
+// A point on the floor (mm) for walkTo / walkPath
+struct Point {
+    double x = 0, z = 0;
+};
+
+// How a humanoid walks; what is left out comes from the size of its legs.
+// Lengths in mm, angles in degrees, stepTime in s, speed in mm/s (it sets
+// the step time from the step length). armSwing 0 keeps the arms still.
+//   ms::Gait{.stepLength = 250, .speed = 400}          C++20
+struct Gait {
+    std::optional<double> stepLength, sideStep, turnPerStep, stepHeight, stepTime, speed, crouch, sway, armSwing;
+};
+
+// Options of a walk. `frame` (walkTo / walkPath): "world", "robot" (where
+// it stands when the walk starts: x ahead, z to its right) or an object's name.
+struct WalkOptions {
+    Gait        gait;
+    std::string frame = "world";
+    bool        wait  = true;
+};
+
+// A humanoid's place, whether it walks, and the gait it uses by default
+struct WalkState {
+    Place place;
+    bool  walking = false;
+    int   motion = 0;          // the walk under way (0: none, or a sequence's Walk operation)
+    int   step = 0, steps = 0; // the step under way (1-based) and the walk's steps
+    Gait  gait;                // every value set
+};
+
 struct SignalInfo {
     std::string name, kind, type;   // kind: Input, Internal, Derived, Sensor; type: Bool, Int, Real
     bool        writable = false;
@@ -135,7 +178,7 @@ public:
     double progress() const;   // 0 … 1
 
 private:
-    friend class Robot; friend class Tool; friend class Actuator;
+    friend class Robot; friend class Tool; friend class Actuator; friend class Humanoid;
     Motion(std::shared_ptr<detail::Connection> c, int id) : conn_(std::move(c)), id_(id) {}
     std::shared_ptr<detail::Connection> conn_;
     int id_ = 0;
@@ -175,6 +218,7 @@ public:
     const std::string& path() const { return path_; }
     const std::vector<std::string>& jointNames() const { return joints_; }
     const std::vector<std::string>& toolNames() const { return tools_; }
+    bool walks() const { return walks_; }   // it has legs: use it as a Humanoid
 
     // The joints' values now (degrees, or mm for sliding joints)
     std::map<std::string, double> joints() const;
@@ -200,13 +244,43 @@ public:
     Motion moveJ(const Target& t, const MoveOptions& o = {}) const { return tool().moveJ(t, o); }
     Motion moveBy(const Target& t, const MoveOptions& o = {}) const { return tool().moveBy(t, o); }
 
-private:
+protected:
     friend class Studio;
     Robot(std::shared_ptr<detail::Connection> c) : conn_(std::move(c)) {}
     Motion jointMove(const std::map<std::string, double>& v, const MoveOptions& o, bool relative) const;
     std::shared_ptr<detail::Connection> conn_;
     std::string name_, path_;
     std::vector<std::string> joints_, tools_;
+    bool walks_ = false;
+};
+
+// A robot that walks: a humanoid on legs (Tools > Humanoid Builder) or any
+// model with a "Left Foot" and a "Right Foot". Its root object is carried
+// along while the legs step. Distances are mm, angles degrees; its left is −Z.
+class Humanoid : public Robot {
+public:
+    // Walks `forward` mm (negative: back) and `sideways` mm to its left
+    // (negative: right) while turning `turn` degrees to its left; a turn with
+    // a distance is spread over the walk, so it follows an arc
+    Motion walk(double forward, double sideways = 0, double turn = 0, const WalkOptions& o = {}) const;
+    Motion turn(double degrees, const WalkOptions& o = {}) const;       // on the spot, positive to its left
+    Motion sideStep(double mm, const WalkOptions& o = {}) const;        // positive to its left
+    // To (x, z) mm, facing the way it goes, then to `heading` (degrees) if given
+    Motion walkTo(double x, double z, std::optional<double> heading = std::nullopt, const WalkOptions& o = {}) const;
+    // Through points on the floor, turning gradually at the corners, then to `heading` if given
+    Motion walkPath(const std::vector<Point>& points, std::optional<double> heading = std::nullopt,
+                    const WalkOptions& o = {}) const;
+    // Ends its walks after the step under way, the feet together; returns how many
+    int stopWalking() const;
+
+    WalkState state() const;
+    Place place() const { return state().place; }
+    bool  walking() const { return state().walking; }
+    Gait  defaultGait() const { return state().gait; }
+
+private:
+    friend class Studio;
+    explicit Humanoid(const Robot& r) : Robot(r) {}
 };
 
 // One actuator by name, on any machine: a door, a turntable, a drive
@@ -240,6 +314,8 @@ public:
     std::vector<Robot> robots() const;
     // A robot by name or path ("Cell/Robot"); without a name the only robot
     Robot robot(const std::string& name = "") const;
+    // A robot that walks, by name or path; without a name the only one
+    Humanoid humanoid(const std::string& name = "") const;
     Actuator actuator(const std::string& name) const;
 
     // Signals: any symbol can be read (Box.count, J1.pos …); Input and

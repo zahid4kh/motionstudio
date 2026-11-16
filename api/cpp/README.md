@@ -30,6 +30,7 @@ Units are mm, degrees and seconds, and Y is up. See [../README.md](../README.md)
 |---|---|
 | `Studio::connect(host, port)` | Copies share the connection; it closes with the last one |
 | `robots()`, `robot(name = "")`, `actuator(name)` | |
+| `humanoid(name = "")` | A robot with legs → `Humanoid`; without a name the only one |
 | `get(signal)`, `set(signal, double \| bool)`, `signals()` | Signals |
 | `waitUntil(condition, timeout = -1)` | Waits for an expression |
 | `play()`, `pause()`, `reset()`, `sleep(s)`, `time()`, `running()`, `setSpeed(f)` | Simulation |
@@ -42,6 +43,18 @@ Units are mm, degrees and seconds, and Y is up. See [../README.md](../README.md)
 | `moveToPose(name, opts)`, `home(opts)`, `stop()` | |
 | `tool(name = "", base = "")` | → `Tool` |
 | `pose()`, `moveL()`, `moveJ()`, `moveBy()` | The only tool's methods |
+
+| `Humanoid` (a `Robot` that walks) | |
+|---|---|
+| `walk(forward, sideways = 0, turn = 0, WalkOptions)` | mm ahead, mm to its left, degrees to its left; a turn with a distance makes an arc |
+| `turn(degrees, opts)`, `sideStep(mm, opts)` | On the spot / sideways |
+| `walkTo(x, z, heading = nullopt, opts)` | To a spot on the floor (mm), then face `heading` |
+| `walkPath({{x, z}, …}, heading = nullopt, opts)` | Through points; `opts.frame = "robot"`: x ahead, z to its right |
+| `stopWalking()` | Finishes the step under way, feet together |
+| `state()` → `WalkState{place, walking, motion, step, steps, gait}` | Also `place()`, `walking()`, `defaultGait()` |
+
+- `WalkOptions{gait, frame = "world", wait = true}`; `Gait{stepLength, sideStep, turnPerStep, stepHeight, stepTime, speed, crouch, sway, armSwing}` (optionals; mm, degrees, s, mm/s). C++20: `walker.walk(2000, 0, 0, {.gait = {.speed = 500}})`.
+- `Place{x, z, heading}`: where it stands; heading 0 faces +X, positive to its left. `Point{x, z}` for paths.
 
 | `Tool` | |
 |---|---|
@@ -60,6 +73,6 @@ Errors are `ms::Error` (`code()`, `what()`), with the subclasses `NotFound`, `Ou
 ## Build and test
 
 ```sh
-cmake -B build && cmake --build build      # library, examples (square, two_motions, humanoid_wave), live_test
+cmake -B build && cmake --build build      # library, examples (square, two_motions, humanoid_wave, walk_square, walk_patrol), live_test
 ./tests/run.sh                             # starts motionstudio-server and runs the live test
 ```

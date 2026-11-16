@@ -26,7 +26,8 @@ Units are mm, degrees and seconds, and Y is up. See [../README.md](../README.md)
 
 | `Studio` | |
 |---|---|
-| `robots()` / `robot(name=None)` | Robots in the scene; a robot by name or path |
+| `robots()` / `robot(name=None)` | Robots in the scene; a robot by name or path (a `Humanoid` when it walks) |
+| `humanoid(name=None)` | A robot with legs → `Humanoid`; without a name the only one |
 | `actuator(name)` | One actuator (a door, a turntable) → `Actuator` |
 | `signals[name]`, `signals[name] = v` | Read any symbol; write Input/Internal signals. `signals.list()` |
 | `get(name)` / `set(name, value)` | The same as functions |
@@ -47,6 +48,17 @@ Units are mm, degrees and seconds, and Y is up. See [../README.md](../README.md)
 | `tool(name=None, *, base=None)` | A tool frame → `Tool` |
 | `pose()`, `move_l()`, `move_j()`, `move_by()` | The only tool's methods |
 
+| `Humanoid` (a `Robot` that walks) | |
+|---|---|
+| `walk(forward=0, sideways=0, turn=0, *, gait=None, wait=True, **gait)` | mm ahead, mm to its left, degrees to its left; a turn with a distance makes an arc |
+| `turn(degrees, …)`, `side_step(mm, …)` | On the spot / sideways |
+| `walk_to(x, z, heading=None, *, frame="world", …)` | To a spot on the floor (mm), then face `heading` |
+| `walk_path(points, heading=None, *, frame="world", …)` | Through `[(x, z), …]`; `frame="robot"`: x ahead, z to its right; or an object's name |
+| `stop_walking()` | Finishes the step under way, feet together |
+| `state()` → `WalkState(place, walking, motion, step, steps, gait)` | Also `place`, `walking`, `default_gait` |
+
+Gait options, as keywords (`step_length=250, speed=400`) or `gait=Gait(...)`: `step_length`, `side_step`, `step_height`, `crouch`, `sway` (mm), `turn_per_step`, `arm_swing` (degrees), `step_time` (s), `speed` (mm/s). What you leave out comes from the legs. `Place(x, z, heading)` is where it stands (heading 0 faces +X, positive to its left).
+
 | `Tool` | |
 |---|---|
 | `pose(frame="base")` | → `Pose` |
@@ -64,6 +76,8 @@ Units are mm, degrees and seconds, and Y is up. See [../README.md](../README.md)
 | `value`, `move_to(v)`, `move_by(d)`, `run(speed)`, `stop()` | |
 
 `Pose(x, y, z, rx, ry, rz)` is frozen, with `.offset(...)` and `.replace(...)`.
+
+Examples (`examples/`): `square.py`, `two_motions.py`, `station.py`, `humanoid_wave.py`, `walk_square.py`, `walk_patrol.py`.
 
 Errors derive from `MotionStudioError` (`.code`, `.message`). The subclasses are `NotFoundError`, `OutOfReachError`, `OutOfLimitsError`, `MotionCancelled`, `WaitTimeout` and `SimulationError`. Losing the connection raises the built-in `ConnectionError`.
 

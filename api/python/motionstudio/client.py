@@ -14,8 +14,8 @@ import itertools
 import json
 import socket
 import threading
-from dataclasses import dataclass, replace
-from typing import Any, Dict, Iterator, List, Mapping, Optional, Union
+from dataclasses import dataclass, fields, replace
+from typing import Any, Dict, Iterable, Iterator, List, Mapping, Optional, Sequence, Tuple, Union
 
 DEFAULT_HOST = "localhost"
 DEFAULT_PORT = 5800
@@ -129,6 +129,70 @@ class JointInfo:
     max: Optional[float]
     speed: float              # the actuator's speed (100 %), per second
     acceleration: float
+
+
+@dataclass(frozen=True)
+class Place:
+    """Where a walking robot stands on the floor: x and z (mm) and its heading.
+
+    The heading is in degrees about +Y (up): 0 faces +X, positive turns to
+    the robot's left (towards −Z)."""
+
+    x: float = 0.0
+    z: float = 0.0
+    heading: float = 0.0
+
+    def __str__(self) -> str:
+        return "Place(x={:.1f}, z={:.1f}, heading={:.1f})".format(self.x, self.z, self.heading)
+
+
+@dataclass(frozen=True)
+class Gait:
+    """How a humanoid walks. Anything left as None comes from the size of its legs.
+
+    ``step_length``, ``side_step``, ``step_height``, ``crouch`` and ``sway`` are
+    in mm; ``turn_per_step`` and ``arm_swing`` in degrees; ``step_time`` in
+    seconds; ``speed`` in mm/s (it sets the step time from the step length)."""
+
+    step_length: Optional[float] = None    # between successive footprints
+    side_step: Optional[float] = None      # at most sideways per step
+    turn_per_step: Optional[float] = None  # at most per step
+    step_height: Optional[float] = None    # how high the feet lift
+    step_time: Optional[float] = None      # seconds per step
+    speed: Optional[float] = None          # mm/s along the way
+    crouch: Optional[float] = None         # how far the hips sink while walking
+    sway: Optional[float] = None           # how far the hips lean over the standing foot
+    arm_swing: Optional[float] = None      # degrees each arm swings; 0 keeps the arms still
+
+    _KEYS = {"step_length": "stepLength", "side_step": "sideStep", "turn_per_step": "turnPerStep",
+             "step_height": "stepHeight", "step_time": "stepTime", "speed": "speed", "crouch": "crouch",
+             "sway": "sway", "arm_swing": "armSwing"}
+
+    def replace(self, **values: Optional[Number]) -> "Gait":
+        """This gait with some values replaced: ``gait.replace(speed=300)``."""
+        return replace(self, **values)
+
+    def to_params(self) -> Dict[str, float]:
+        return {self._KEYS[f.name]: float(getattr(self, f.name)) for f in fields(self)
+                if getattr(self, f.name) is not None}
+
+    @classmethod
+    def from_params(cls, d: Mapping[str, Any]) -> "Gait":
+        back = {v: k for k, v in cls._KEYS.items()}
+        return cls(**{back[k]: float(v) for k, v in d.items() if k in back})
+
+
+
+@dataclass(frozen=True)
+class WalkState:
+    """A humanoid's place, whether it is walking, and its default gait."""
+
+    place: Place
+    walking: bool
+    motion: Optional[int]       # the walk under way (None for a sequence's Walk operation)
+    step: int                   # the step under way (1-based), 0 when standing
+    steps: int                  # steps in the walk under way
+    gait: Gait                  # the gait used for what is not given
 
 
 # ── Connection ──────────────────────────────────────────────────────────────
@@ -340,6 +404,7 @@ class Robot:
         self.path: str = info["path"]
         self.joint_names: List[str] = list(info.get("joints", []))
         self.tool_names: List[str] = list(info.get("tools", []))
+        self.walks: bool = bool(info.get("walks", False))   # it has legs (see Humanoid)
 
     # Joints
 
@@ -425,6 +490,106 @@ class Robot:
 
     def __repr__(self) -> str:
         return f"<Robot {self.path}: {len(self.joint_names)} joints>"
+
+
+PointLike = Union[Tuple[Number, Number], Sequence[Number], Place, Mapping[str, Number]]
+
+
+def _point(p: PointLike) -> List[float]:
+    if isinstance(p, Place):
+        return [p.x, p.z]
+    if isinstance(p, Mapping):
+        return [float(p["x"]), float(p["z"])]
+    x, z = p   # type: ignore[misc]
+    return [float(x), float(z)]
+
+
+class Humanoid(Robot):
+    """A robot that walks: a humanoid on legs (Tools › Humanoid Builder) or any
+    model with a "Left Foot" and a "Right Foot".
+
+    Its root object is carried along while the legs step, so walking moves
+    the whole robot. Distances are mm, angles degrees; its left is −Z.
+    Gait options (``step_length=``, ``speed=`` … or ``gait=Gait(...)``) are
+    accepted by every walk; anything left out comes from the legs' size."""
+
+    def _gait(self, gait: Optional[Gait], options: Mapping[str, Any]) -> Dict[str, float]:
+        g = gait or Gait()
+        if options:
+            unknown = set(options) - set(Gait._KEYS)   # type: ignore[arg-type]
+            if unknown:
+                raise TypeError("unknown gait option(s): " + ", ".join(sorted(unknown)))
+            g = replace(g, **options)
+        return g.to_params()
+
+    def _walk(self, method: str, params: Dict[str, Any], gait: Optional[Gait], options: Mapping[str, Any],
+              wait: bool) -> Motion:
+        reply = self.studio._call(method, {"robot": self.path, **params, **self._gait(gait, options), "wait": wait})
+        return Motion(self.studio, reply)
+
+    def walk(self, forward: Number = 0, sideways: Number = 0, turn: Number = 0, *, gait: Optional[Gait] = None,
+             wait: bool = True, **options: Any) -> Motion:
+        """Walks ``forward`` mm (negative: backwards) and ``sideways`` mm to its
+        left (negative: right) while turning ``turn`` degrees to its left.
+
+        A turn given with a distance is spread over the walk, so it follows an
+        arc. The robot crouches, steps, and stands up when it arrives."""
+        return self._walk("humanoid.walk", {"forward": float(forward), "sideways": float(sideways),
+                                            "turn": float(turn)}, gait, options, wait)
+
+    def turn(self, degrees: Number, *, gait: Optional[Gait] = None, wait: bool = True, **options: Any) -> Motion:
+        """Turns on the spot: positive to its left."""
+        return self.walk(turn=degrees, gait=gait, wait=wait, **options)
+
+    def side_step(self, mm: Number, *, gait: Optional[Gait] = None, wait: bool = True, **options: Any) -> Motion:
+        """Steps sideways: positive to its left."""
+        return self.walk(sideways=mm, gait=gait, wait=wait, **options)
+
+    def walk_to(self, x: Number, z: Number, heading: Optional[Number] = None, *, frame: str = "world",
+                gait: Optional[Gait] = None, wait: bool = True, **options: Any) -> Motion:
+        """Walks to (x, z) mm, facing the way it goes, then turns to ``heading`` (degrees) if given.
+
+        ``frame``: ``"world"``, ``"robot"`` (where it stands when the walk
+        starts: x ahead, z to its right) or an object's name (its spot on the floor)."""
+        return self.walk_path([(x, z)], heading, frame=frame, gait=gait, wait=wait, **options)
+
+    def walk_path(self, points: Iterable[PointLike], heading: Optional[Number] = None, *, frame: str = "world",
+                  gait: Optional[Gait] = None, wait: bool = True, **options: Any) -> Motion:
+        """Walks through points on the floor, ``[(x, z), …]`` in mm (or ``Place`` objects,
+        or ``{"x", "z"}`` dicts), turning gradually at the corners. Then it
+        turns to ``heading`` if given. ``frame`` as for ``walk_to``."""
+        params: Dict[str, Any] = {"points": [_point(p) for p in points], "frame": frame}
+        if heading is not None:
+            params["heading"] = float(heading)
+        return self._walk("humanoid.walkPath", params, gait, options, wait)
+
+    def stop_walking(self) -> int:
+        """Ends its walks after the step under way, the feet together; returns how many."""
+        return int(self.studio._call("humanoid.stop", {"robot": self.path})["stopping"])
+
+    def state(self) -> WalkState:
+        """Where it stands, whether it walks, and its default gait."""
+        s = self.studio._call("humanoid.state", {"robot": self.path})
+        return WalkState(Place(float(s["x"]), float(s["z"]), float(s["heading"])), bool(s["walking"]),
+                         s.get("motion"), int(s.get("step", 0)), int(s.get("steps", 0)),
+                         Gait.from_params(s.get("gait", {})))
+
+    @property
+    def place(self) -> Place:
+        """Where it stands now (world x, z in mm; heading in degrees)."""
+        return self.state().place
+
+    @property
+    def walking(self) -> bool:
+        return self.state().walking
+
+    @property
+    def default_gait(self) -> Gait:
+        """The gait it uses for whatever a walk does not give."""
+        return self.state().gait
+
+    def __repr__(self) -> str:
+        return f"<Humanoid {self.path}: {len(self.joint_names)} joints>"
 
 
 class Actuator:
@@ -525,8 +690,8 @@ class Studio:
     # Scene
 
     def robots(self) -> List[Robot]:
-        """Every robot and machine in the scene."""
-        return [Robot(self, r) for r in self._call("scene.robots")]
+        """Every robot and machine in the scene (``Humanoid`` for the ones that walk)."""
+        return [(Humanoid if r.get("walks") else Robot)(self, r) for r in self._call("scene.robots")]
 
     def robot(self, name: Optional[str] = None) -> Robot:
         """A robot by name (or path, ``"Cell/Robot"``). Without a name: the only robot."""
@@ -538,9 +703,25 @@ class Studio:
                                 "the scene has no robot" if not robots else
                                 "the scene has several robots: pick one of " + ", ".join(r["path"] for r in robots))
         info = self._call("robot.info", {"robot": name})
-        return Robot(self, {"name": info["name"], "path": info["path"],
-                            "joints": [j["name"] for j in info["joints"]],
-                            "tools": [t["name"] for t in info["tools"]]})
+        cls = Humanoid if info.get("walks") else Robot
+        return cls(self, {"name": info["name"], "path": info["path"], "walks": info.get("walks", False),
+                          "joints": [j["name"] for j in info["joints"]],
+                          "tools": [t["name"] for t in info["tools"]]})
+
+    def humanoid(self, name: Optional[str] = None) -> Humanoid:
+        """A robot that walks, by name or path. Without a name: the only one."""
+        if name is None:
+            walkers = [r for r in self._call("scene.robots") if r.get("walks")]
+            if len(walkers) != 1:
+                raise NotFoundError("ambiguous" if walkers else "not_found",
+                                    "the scene has no robot with legs" if not walkers else
+                                    "the scene has several robots with legs: pick one of "
+                                    + ", ".join(r["path"] for r in walkers))
+            name = walkers[0]["path"]
+        robot = self.robot(name)
+        if not isinstance(robot, Humanoid):
+            raise MotionStudioError("bad_request", f"{robot.name} has no legs to walk on")
+        return robot
 
     def actuator(self, name: str) -> Actuator:
         """An actuator by name, e.g. a door or a turntable."""

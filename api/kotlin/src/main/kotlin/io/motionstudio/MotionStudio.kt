@@ -6,6 +6,11 @@
 //       robot.moveBy(y = -50)                    // 50 mm down
 //       robot.moveJoints("A1" to 30)             // a joint move
 //       studio.signals["Start"] = true
+//
+//       val walker = studio.humanoid()           // a humanoid on legs
+//       walker.walk(1000)                        // a metre ahead
+//       walker.turn(90)                          // a quarter turn to its left
+//       walker.walkPath(1000 to 0, 1000 to 1000) // through points (x to z, mm)
 //   }
 //
 // Units are millimetres, degrees and seconds; Y is up, as in MotionStudio.
@@ -93,6 +98,53 @@ data class JointInfo(
     val max: Double?,
     val speed: Double,         // the actuator's speed (100 %), per second
     val acceleration: Double,
+)
+
+/**
+ * Where a walking robot stands: [x] and [z] (mm) on the floor and its [heading] in degrees
+ * about +Y (0 faces +X, positive turns to its left, towards −Z).
+ */
+data class Place(val x: Double = 0.0, val z: Double = 0.0, val heading: Double = 0.0) {
+    override fun toString() = "Place(x=%.1f, z=%.1f, heading=%.1f)".format(x, z, heading)
+}
+
+/**
+ * How a humanoid walks; anything left null comes from the size of its legs. Lengths in mm,
+ * angles in degrees, [stepTime] in seconds, [speed] in mm/s (it sets the step time from the
+ * step length). [armSwing] = 0 keeps the arms still.
+ */
+data class Gait(
+    val stepLength: Number? = null,   // between successive footprints
+    val sideStep: Number? = null,     // at most sideways per step
+    val turnPerStep: Number? = null,  // at most per step
+    val stepHeight: Number? = null,   // how high the feet lift
+    val stepTime: Number? = null,     // seconds per step
+    val speed: Number? = null,        // mm/s along the way
+    val crouch: Number? = null,       // how far the hips sink while walking
+    val sway: Number? = null,         // how far the hips lean over the standing foot
+    val armSwing: Number? = null,     // degrees each arm swings
+) {
+    internal fun toMap(): Map<String, Double> = listOf(
+        "stepLength" to stepLength, "sideStep" to sideStep, "turnPerStep" to turnPerStep, "stepHeight" to stepHeight,
+        "stepTime" to stepTime, "speed" to speed, "crouch" to crouch, "sway" to sway, "armSwing" to armSwing,
+    ).filter { it.second != null }.associate { it.first to it.second!!.toDouble() }
+
+    companion object {
+        internal fun of(m: Map<*, *>) = Gait(
+            m["stepLength"] as? Number, m["sideStep"] as? Number, m["turnPerStep"] as? Number,
+            m["stepHeight"] as? Number, m["stepTime"] as? Number, m["speed"] as? Number, m["crouch"] as? Number,
+            m["sway"] as? Number, m["armSwing"] as? Number)
+    }
+}
+
+/** A humanoid's place, whether it walks, and the gait it uses by default. */
+data class WalkState(
+    val place: Place,
+    val walking: Boolean,
+    val motion: Int?,     // the walk under way (null: none, or a sequence's Walk operation)
+    val step: Int,        // the step under way (1-based), 0 when standing
+    val steps: Int,       // steps in the walk under way
+    val gait: Gait,       // every value set
 )
 
 /** A signal of the automation. */
@@ -263,11 +315,13 @@ class Tool internal constructor(val robot: Robot, val name: String, val base: St
 }
 
 /** A robot or other machine in the scene: the joints below one object. */
-class Robot internal constructor(internal val conn: Connection, info: Map<*, *>) {
+open class Robot internal constructor(internal val conn: Connection, info: Map<*, *>) {
     val name: String = info["name"] as String
     val path: String = info["path"] as String
     val jointNames: List<String> = info.names("joints")
     val toolNames: List<String> = info.names("tools")
+    /** It has legs: [Studio.humanoid] gives it as a [Humanoid]. */
+    val walks: Boolean = info["walks"] == true
 
     /** The joints' values now (degrees, or mm for sliding joints), by actuator name. */
     val joints: Map<String, Double>
@@ -339,6 +393,69 @@ class Robot internal constructor(internal val conn: Connection, info: Map<*, *>)
     override fun toString() = "Robot($path, ${jointNames.size} joints)"
 }
 
+/**
+ * A robot that walks: a humanoid on legs (Tools › Humanoid Builder) or any model with a
+ * "Left Foot" and a "Right Foot". Its root object is carried along while the legs step.
+ * Distances are mm, angles degrees; its left is −Z. Every walk takes a [Gait].
+ */
+class Humanoid internal constructor(conn: Connection, info: Map<*, *>) : Robot(conn, info) {
+    private fun go(method: String, params: Map<String, Any?>, gait: Gait, wait: Boolean): Motion =
+        Motion(conn, conn.call(method, mapOf("robot" to path) + params + gait.toMap() + mapOf("wait" to wait)))
+
+    /**
+     * Walks [forward] mm (negative: back) and [sideways] mm to its left (negative: right) while
+     * turning [turn] degrees to its left. A turn with a distance is spread over the walk, so it
+     * follows an arc. It crouches, steps, and stands up when it arrives.
+     */
+    fun walk(forward: Number = 0, sideways: Number = 0, turn: Number = 0, gait: Gait = Gait(),
+             wait: Boolean = true): Motion =
+        go("humanoid.walk", mapOf("forward" to forward.toDouble(), "sideways" to sideways.toDouble(),
+                                  "turn" to turn.toDouble()), gait, wait)
+
+    /** Turns on the spot: positive to its left. */
+    fun turn(degrees: Number, gait: Gait = Gait(), wait: Boolean = true) = walk(turn = degrees, gait = gait, wait = wait)
+
+    /** Steps sideways: positive to its left. */
+    fun sideStep(mm: Number, gait: Gait = Gait(), wait: Boolean = true) = walk(sideways = mm, gait = gait, wait = wait)
+
+    /**
+     * Walks to ([x], [z]) mm, facing the way it goes, then turns to [heading] (degrees) if given.
+     * [frame]: "world", "robot" (where it stands when the walk starts: x ahead, z to its right)
+     * or an object's name.
+     */
+    fun walkTo(x: Number, z: Number, heading: Number? = null, frame: String = "world", gait: Gait = Gait(),
+               wait: Boolean = true): Motion = walkPath(listOf(x to z), heading, frame, gait, wait)
+
+    /** Walks through points on the floor (x to z, mm), turning gradually at the corners. */
+    fun walkPath(points: List<Pair<Number, Number>>, heading: Number? = null, frame: String = "world",
+                 gait: Gait = Gait(), wait: Boolean = true): Motion =
+        go("humanoid.walkPath", mapOf("points" to points.map { listOf(it.first.toDouble(), it.second.toDouble()) },
+                                      "frame" to frame, "heading" to heading?.toDouble()), gait, wait)
+
+    /** `walkPath(1000 to 0, 1000 to 1000, heading = 0)` */
+    fun walkPath(vararg points: Pair<Number, Number>, heading: Number? = null, frame: String = "world",
+                 gait: Gait = Gait(), wait: Boolean = true): Motion = walkPath(points.toList(), heading, frame, gait, wait)
+
+    /** Ends its walks after the step under way, the feet together; returns how many. */
+    fun stopWalking(): Int = conn.call("humanoid.stop", mapOf("robot" to path)).num("stopping").toInt()
+
+    /** Where it stands, whether it walks, and its default gait. */
+    fun state(): WalkState {
+        val s = conn.call("humanoid.state", mapOf("robot" to path))
+        return WalkState(Place(s.num("x"), s.num("z"), s.num("heading")), s["walking"] == true,
+                         (s["motion"] as? Number)?.toInt(), s.num("step").toInt(), s.num("steps").toInt(),
+                         Gait.of(s.obj("gait")))
+    }
+
+    /** Where it stands now (world x, z in mm; heading in degrees). */
+    val place: Place get() = state().place
+    val walking: Boolean get() = state().walking
+    /** The gait it uses for whatever a walk does not give. */
+    val defaultGait: Gait get() = state().gait
+
+    override fun toString() = "Humanoid($path, ${jointNames.size} joints)"
+}
+
 /** One actuator by name, on any machine: a door, a turntable, a drive. */
 class Actuator internal constructor(private val conn: Connection, val name: String) {
     /** Its position (degrees or mm). */
@@ -401,8 +518,11 @@ class Studio internal constructor(private val conn: Connection) : Closeable {
         }
     }
 
-    /** Every robot and machine in the scene. */
-    fun robots(): List<Robot> = conn.callList("scene.robots").map { Robot(conn, it as Map<*, *>) }
+    /** Every robot and machine in the scene ([Humanoid] for the ones that walk). */
+    fun robots(): List<Robot> = conn.callList("scene.robots").map {
+        val m = it as Map<*, *>
+        if (m["walks"] == true) Humanoid(conn, m) else Robot(conn, m)
+    }
 
     /** A robot by name or path ("Cell/Robot"); without a name the only robot. */
     fun robot(name: String? = null): Robot {
@@ -414,8 +534,20 @@ class Studio internal constructor(private val conn: Connection) : Closeable {
                 else "the scene has several robots: pick one of ${all.joinToString { it.path }}")
         }
         val info = conn.call("robot.info", mapOf("robot" to name))
-        return Robot(conn, mapOf("name" to info["name"], "path" to info["path"],
-                                 "joints" to info["joints"], "tools" to info["tools"]))
+        val m = mapOf("name" to info["name"], "path" to info["path"], "joints" to info["joints"],
+                      "tools" to info["tools"], "walks" to info["walks"])
+        return if (info["walks"] == true) Humanoid(conn, m) else Robot(conn, m)
+    }
+
+    /** A robot that walks, by name or path; without a name the only one. */
+    fun humanoid(name: String? = null): Humanoid {
+        val n = name ?: robots().filter { it.walks }.let { all ->
+            all.singleOrNull()?.path ?: throw NotFoundException(
+                if (all.isEmpty()) "not_found" else "ambiguous",
+                if (all.isEmpty()) "the scene has no robot with legs"
+                else "the scene has several robots with legs: pick one of ${all.joinToString { it.path }}")
+        }
+        return robot(n) as? Humanoid ?: throw MotionStudioException("bad_request", "$n has no legs to walk on")
     }
 
     /** An actuator by name, e.g. a door or a turntable. */

@@ -212,6 +212,12 @@ private:
 
 // ── Values ──────────────────────────────────────────────────────────────────
 
+std::ostream& operator<<(std::ostream& os, const Place& p) {
+    std::ostringstream s;
+    s << std::fixed << std::setprecision(1) << "Place(x=" << p.x << ", z=" << p.z << ", heading=" << p.heading << ")";
+    return os << s.str();
+}
+
 std::ostream& operator<<(std::ostream& os, const Pose& p) {
     std::ostringstream s;
     s << std::fixed << std::setprecision(2) << "Pose(x=" << p.x << ", y=" << p.y << ", z=" << p.z
@@ -337,6 +343,64 @@ Tool Robot::tool(const std::string& name, const std::string& base) const {
     return Tool(conn_, path_, n, base);
 }
 
+// ── Humanoid ────────────────────────────────────────────────────────────────
+
+namespace {
+const std::pair<const char*, std::optional<double> Gait::*> kGaitKeys[] = {
+    {"stepLength", &Gait::stepLength}, {"sideStep", &Gait::sideStep}, {"turnPerStep", &Gait::turnPerStep},
+    {"stepHeight", &Gait::stepHeight}, {"stepTime", &Gait::stepTime}, {"speed", &Gait::speed},
+    {"crouch", &Gait::crouch},         {"sway", &Gait::sway},         {"armSwing", &Gait::armSwing},
+};
+
+Json walkParams(const std::string& robot, const WalkOptions& o) {
+    Json p = Json::Object{};
+    p.set("robot", robot).set("wait", o.wait);
+    for (const auto& [key, field] : kGaitKeys)
+        if (o.gait.*field) p.set(key, *(o.gait.*field));
+    return p;
+}
+} // namespace
+
+Motion Humanoid::walk(double forward, double sideways, double turn, const WalkOptions& o) const {
+    Json p = walkParams(path_, o);
+    p.set("forward", forward).set("sideways", sideways).set("turn", turn);
+    return Motion(conn_, int(conn_->call("humanoid.walk", p)["motion"].number()));
+}
+
+Motion Humanoid::turn(double degrees, const WalkOptions& o) const { return walk(0, 0, degrees, o); }
+Motion Humanoid::sideStep(double mm, const WalkOptions& o) const { return walk(0, mm, 0, o); }
+
+Motion Humanoid::walkTo(double x, double z, std::optional<double> heading, const WalkOptions& o) const {
+    return walkPath({{x, z}}, heading, o);
+}
+
+Motion Humanoid::walkPath(const std::vector<Point>& points, std::optional<double> heading, const WalkOptions& o) const {
+    Json p = walkParams(path_, o);
+    Json::Array pts;
+    for (const Point& q : points) pts.push_back(Json(Json::Array{Json(q.x), Json(q.z)}));
+    p.set("points", Json(std::move(pts))).set("frame", o.frame);
+    if (heading) p.set("heading", *heading);
+    return Motion(conn_, int(conn_->call("humanoid.walkPath", p)["motion"].number()));
+}
+
+int Humanoid::stopWalking() const {
+    return int(conn_->call("humanoid.stop", Json(Json::Object{{"robot", path_}}))["stopping"].number());
+}
+
+WalkState Humanoid::state() const {
+    const Json s = conn_->call("humanoid.state", Json(Json::Object{{"robot", path_}}));
+    WalkState w;
+    w.place = {s["x"].number(), s["z"].number(), s["heading"].number()};
+    w.walking = s["walking"].boolean();
+    w.motion = int(s["motion"].number(0));
+    w.step = int(s["step"].number(0));
+    w.steps = int(s["steps"].number(0));
+    const Json g = s["gait"];
+    for (const auto& [key, field] : kGaitKeys)
+        if (g.has(key)) w.gait.*field = g[key].number();
+    return w;
+}
+
 // ── Actuator ────────────────────────────────────────────────────────────────
 
 double Actuator::value() const {
@@ -381,6 +445,7 @@ std::vector<Robot> Studio::robots() const {
         r.path_ = j["path"].str();
         r.joints_ = strings(j["joints"]);
         r.tools_ = strings(j["tools"]);
+        r.walks_ = j["walks"].boolean();
         out.push_back(std::move(r));
     }
     return out;
@@ -401,7 +466,26 @@ Robot Studio::robot(const std::string& name) const {
     r.path_ = info["path"].str();
     r.joints_ = strings(info["joints"]);
     r.tools_ = strings(info["tools"]);
+    r.walks_ = info["walks"].boolean();
     return r;
+}
+
+Humanoid Studio::humanoid(const std::string& name) const {
+    std::string n = name;
+    if (n.empty()) {
+        std::vector<Robot> walkers;
+        for (const Robot& r : robots()) if (r.walks()) walkers.push_back(r);
+        if (walkers.empty()) throw NotFound("not_found", "the scene has no robot with legs");
+        if (walkers.size() > 1) {
+            std::string list;
+            for (const auto& r : walkers) list += (list.empty() ? "" : ", ") + r.path();
+            throw NotFound("ambiguous", "the scene has several robots with legs: pick one of " + list);
+        }
+        n = walkers.front().path();
+    }
+    const Robot r = robot(n);
+    if (!r.walks()) throw Error("bad_request", r.name() + " has no legs to walk on");
+    return Humanoid(r);
 }
 
 Actuator Studio::actuator(const std::string& name) const { return Actuator(conn_, name); }

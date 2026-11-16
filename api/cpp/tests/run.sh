@@ -20,3 +20,11 @@ pid2=$!
 trap 'kill $pid $pid2 2>/dev/null' EXIT
 sleep 1
 "$here/build/live_test" $port actuators
+
+# A humanoid walks
+port=58125
+"$server" --humanoid "Full-size" --port $port --speed 20 >/dev/null &
+pid3=$!
+trap 'kill $pid $pid2 $pid3 2>/dev/null' EXIT
+sleep 1
+"$here/build/live_test" $port walking

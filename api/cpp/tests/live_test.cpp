@@ -37,10 +37,66 @@ static int actuators(ms::Studio& studio) {
     return failures == 0 ? 0 : 1;
 }
 
+// A humanoid on legs: walks, turns, paths, a stop that finishes the step
+static bool near(double a, double b, double tol) { return std::fabs(a - b) <= tol; }
+static bool sameWay(double a, double b) { return near(std::fmod(a - b + 540.0, 360.0) - 180.0, 0, 0.01); }
+
+static int walking(ms::Studio& studio) {
+    studio.reset();
+    ms::Humanoid h = studio.humanoid();
+    CHECK(h.walks());
+    const ms::Gait g = h.defaultGait();
+    CHECK(g.stepLength && *g.stepLength > 100);
+    ms::Place p = h.place();
+    NEAR(p.x, 0, 1e-6); NEAR(p.z, 0, 1e-6);
+
+    h.walk(600);
+    p = h.place();
+    NEAR(p.x, 600, 0.5); NEAR(p.z, 0, 0.5);
+    h.turn(90);
+    CHECK(sameWay(h.place().heading, 90));
+    ms::WalkOptions quick;
+    quick.gait.speed = 450;
+    quick.gait.armSwing = 0;
+    h.walk(400, 0, 0, quick);                       // facing -Z now
+    p = h.place();
+    NEAR(p.x, 600, 0.5); NEAR(p.z, -400, 0.5);
+
+    h.walkPath({{600, 400}, {0, 400}, {0, 0}}, 0.0);
+    p = h.place();
+    NEAR(p.x, 0, 0.5); NEAR(p.z, 0, 0.5);
+    CHECK(sameWay(p.heading, 0));
+    ms::WalkOptions robotFrame;
+    robotFrame.frame = "robot";
+    h.walkTo(300, 300, 180.0, robotFrame);         // x ahead, z to its right
+    p = h.place();
+    NEAR(p.x, 300, 0.5); NEAR(p.z, 300, 0.5);
+    CHECK(sameWay(p.heading, 180));
+
+    // Without waiting, then a stop that finishes the step under way
+    ms::WalkOptions noWait;
+    noWait.wait = false;
+    ms::Motion m = h.walk(4000, 0, 0, noWait);
+    studio.sleep(1.2);
+    const ms::WalkState st = h.state();
+    CHECK(st.walking && st.motion == m.id() && st.steps > 5);
+    CHECK(h.stopWalking() == 1);
+    m.wait();
+    CHECK(m.state() == "done");
+    CHECK(!h.walking());
+
+    ms::WalkOptions tooLong;
+    tooLong.gait.stepLength = 5000;
+    CHECK(throws<ms::Error>([&] { h.walk(500, 0, 0, tooLong); }));
+    std::printf("%d checks, %d failures\n", checks, failures);
+    return failures == 0 ? 0 : 1;
+}
+
 int main(int argc, char** argv) {
     const int port = argc > 1 ? std::atoi(argv[1]) : ms::kDefaultPort;
     ms::Studio studio = ms::Studio::connect("localhost", port);
     if (argc > 2 && std::string(argv[2]) == "actuators") return actuators(studio);
+    if (argc > 2 && std::string(argv[2]) == "walking") return walking(studio);
     studio.reset();
     ms::Robot robot = studio.robot();
     CHECK(robot.name() == "Robot");

@@ -11,7 +11,7 @@ plugins {
 }
 
 group = "io.github.zahid4kh"
-version = "0.1.1"
+version = "0.2.0"
 
 repositories { mavenCentral() }
 
@@ -40,7 +40,7 @@ tasks.test {
 
 tasks.register<JavaExec>("runExample") {
     group = "application"
-    description = "Runs an example: -Pexample=Square (or HumanoidWave, TwoMotions)"
+    description = "Runs an example: -Pexample=Square (or HumanoidWave, TwoMotions, WalkSquare, WalkPatrol)"
     classpath = sourceSets["examples"].runtimeClasspath
     mainClass.set("examples.${project.findProperty("example") ?: "Square"}Kt")
 }
@@ -56,7 +56,7 @@ publishing {
             from(components["java"])
             pom {
                 name.set("MotionStudio robot API")
-                description.set("Control the robots and stations of a MotionStudio scene from Kotlin or Java: straight-line and joint moves, taught poses, signals.")
+                description.set("Control the robots, humanoids and stations of a MotionStudio scene from Kotlin or Java: straight-line and joint moves, taught poses, walking, signals.")
                 url.set("https://github.com/zahid4kh/motionstudio")
                 licenses {
                     license {

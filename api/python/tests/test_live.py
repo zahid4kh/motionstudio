@@ -191,6 +191,85 @@ class HumanoidTests(unittest.TestCase):
 
 
 @unittest.skipUnless(os.path.exists(SERVER), "motionstudio-server is not built")
+class WalkingTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.server = Server("--humanoid", "Full-size")
+        cls.studio = ms.connect(port=cls.server.port)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.studio.close()
+        cls.server.stop()
+
+    def setUp(self):
+        self.studio.reset()
+        self.h = self.studio.humanoid()
+
+    def assertPlace(self, p: ms.Place, x, z, heading=None, tol=0.5):
+        self.assertAlmostEqual(p.x, x, delta=tol, msg=str(p))
+        self.assertAlmostEqual(p.z, z, delta=tol, msg=str(p))
+        if heading is not None:   # 180 and -180 are the same way
+            self.assertAlmostEqual((p.heading - heading + 180) % 360 - 180, 0, delta=0.01, msg=str(p))
+
+    def test_it_is_a_humanoid_with_a_gait(self):
+        self.assertIsInstance(self.h, ms.Humanoid)
+        self.assertTrue(self.h.walks)
+        self.assertIsInstance(self.studio.robot("Humanoid"), ms.Humanoid)
+        gait = self.h.default_gait
+        self.assertGreater(gait.step_length, 100)
+        self.assertGreater(gait.speed, 0)
+        self.assertPlace(self.h.place, 0, 0, 0)
+        self.assertFalse(self.h.walking)
+
+    def test_walk_turn_and_side_step(self):
+        self.assertEqual(self.h.walk(600).state, "done")
+        self.assertPlace(self.h.place, 600, 0, 0)
+        self.h.turn(90)
+        self.assertPlace(self.h.place, 600, 0, 90)
+        self.h.walk(400)                                    # facing -Z now
+        self.assertPlace(self.h.place, 600, -400, 90)
+        self.h.side_step(-200, speed=300)                   # to its right: +X when facing -Z
+        self.assertPlace(self.h.place, 800, -400, 90)
+        self.h.walk(-300, step_length=150)                  # backwards in short steps
+        self.assertPlace(self.h.place, 800, -100, 90)
+
+    def test_paths_and_places(self):
+        square = [(800, 0), (800, 800), (0, 800), (0, 0)]
+        self.h.walk_path(square, heading=0)
+        self.assertPlace(self.h.place, 0, 0, 0)
+        self.h.walk_to(500, 300, heading=180, gait=ms.Gait(speed=500, arm_swing=0))
+        self.assertPlace(self.h.place, 500, 300, 180)
+        self.h.walk_path([ms.Place(300, 0), {"x": 300, "z": 300}], frame="robot")   # x ahead, z to its right
+        self.assertPlace(self.h.place, 200, 0)
+
+    def test_without_waiting_and_stopping(self):
+        m = self.h.walk(4000, wait=False)
+        self.studio.sleep(1.2)
+        st = self.h.state()
+        self.assertTrue(st.walking)
+        self.assertEqual(st.motion, m.id)
+        self.assertGreater(st.steps, 5)
+        self.assertEqual(self.h.stop_walking(), 1)
+        m.wait()
+        self.assertEqual(m.state, "done")
+        self.assertLess(self.h.place.x, 2000)
+        self.assertFalse(self.h.walking)
+
+    def test_errors(self):
+        with self.assertRaises(ms.MotionStudioError) as e:
+            self.h.walk(500, step_length=5000)
+        self.assertEqual(e.exception.code, "bad_request")
+        with self.assertRaises(TypeError):
+            self.h.walk(500, stride=3)
+        with self.assertRaises(ms.MotionCancelled):
+            m = self.h.walk(3000, wait=False)
+            self.studio.sleep(0.5)
+            self.h.stop()                                   # a hard stop: the robot halts mid-step
+            m.wait()
+
+
+@unittest.skipUnless(os.path.exists(SERVER), "motionstudio-server is not built")
 class ActuatorTests(unittest.TestCase):
     """A slide reports millimetres. The expression symbol stays in metres."""
 
