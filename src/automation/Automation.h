@@ -6,6 +6,7 @@
 #include <map>
 #include <memory>
 #include <vector>
+#include "Learn.h"
 #include "Take.h"
 
 // Definitions for the signal-driven automation system (see AUTOMATION_PLAN.md).
@@ -109,7 +110,10 @@ struct Operation {
     int           toolId     = -1;   // MoveL: object whose frame is the tool centre point
     int           walkerId   = -1;   // Walk: the legged robot (its root object); PlayMotion: the robot
                                      // (-1 = the one the motion was recorded on)
-    int           motionId   = -1;   // PlayMotion: the motion
+    int           motionId   = -1;   // PlayMotion: the motion (a MotionClip or a LearnedMotion)
+    QString       clip;              // PlayMotion of a LearnedMotion: the clip (empty = its first)
+    QString       blendClip;         // ... blended with this clip (empty = none)
+    QString       blend;             // ... by this much, 0..1 (expression; empty = 0.5)
     bool          relative   = true; // PlayMotion: start where the robot stands (else where it was recorded)
     int           walkToId   = -1;   // Walk: walk to this object's place and face its way (-1 = by distance)
 
@@ -117,7 +121,7 @@ struct Operation {
     QString       target;            // Move: position
     QString       velocity;          // Move / Run: speed; MoveToPose: speed % (empty = actuator default / 100);
                                      // Walk: m/s; PlayMotion: × the recorded pace (empty = 1)
-    QString       duration;          // Wait: seconds
+    QString       duration;          // Wait: seconds; PlayMotion of a LearnedMotion: its length (empty = the clip's)
     QString       condition;         // WaitFor
     QString       startCondition;    // extra gate before starting (empty = true)
     QString       onStart;           // "Sig = expr; Other = expr"
@@ -169,6 +173,16 @@ struct MotionClip {
     QString name;
     int     robotId = -1;                  // the robot's top object (what it was recorded on)
     std::shared_ptr<const take::Take> take;
+};
+
+// A model trained on motions (Motions tab › Train): it plays each motion it
+// learned as a clip, at any length, or two of them blended. Play Motion
+// operations play its clips like recorded motions.
+struct LearnedMotion {
+    int     id = -1;
+    QString name;
+    int     robotId = -1;                  // the robot whose motions it learned
+    std::shared_ptr<const learn::AnimationModel> model;
 };
 
 // Object source: makes copies of a template object while simulating. The

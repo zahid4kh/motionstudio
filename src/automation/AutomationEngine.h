@@ -217,6 +217,13 @@ public:
                                                        const take::Take& take, bool place, QString* error = nullptr);
     // The actuated joints that move parts below `root`
     static std::vector<int> actuatedJointsBelow(const SceneGraph& scene, int root);
+    // What a Play Motion operation plays on the robot at `root`, as it
+    // stands now: its motion's take, or the clip (blended by `blend`, 0..1,
+    // `duration` s long, ≤ 0 = the clip's) its learned model makes from there
+    static std::shared_ptr<PlayRequest> playMotionRequest(const SceneGraph& scene, const Operation& op, int root,
+                                                          double blend, double duration, QString* error = nullptr);
+    // The robot a Play Motion operation moves: its own, else the motion's
+    static int playMotionRobot(const SceneGraph& scene, const Operation& op);
 
     // Checks the request and queues it; returns the motion's id (> 0), or 0
     // with an error code (not_running, bad_request, not_actuated,
@@ -319,6 +326,7 @@ private:
         bool             pathWarned = false;
         // Walk
         expr::Expression forward, sideways, turn;
+        expr::Expression blend;           // PlayMotion of a learned model
         std::shared_ptr<gait::Walker> walker;
         double           walkStart = 0;
         // PlayMotion

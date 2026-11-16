@@ -105,7 +105,13 @@ public:
     MotionClip* getMotion(int id);
     const MotionClip* getMotion(int id) const;
     const std::map<int, MotionClip>& allMotions() const { return m_motionClips; }
-    // `base`, or `base 2`, `base 3` … : a name no motion other than `exceptId` uses
+    // Models trained on motions; they share the motions' names
+    int         addLearned(LearnedMotion m);
+    void        removeLearned(int id);
+    LearnedMotion* getLearned(int id);
+    const LearnedMotion* getLearned(int id) const;
+    const std::map<int, LearnedMotion>& allLearned() const { return m_learned; }
+    // `base`, or `base 2`, `base 3` … : a name no motion or model other than `exceptId` uses
     QString     makeMotionName(const QString& base, int exceptId = -1) const;
 
     // Assembly mates (see scene/Assembly.h for solving them). Removing an
@@ -240,6 +246,7 @@ private:
     std::map<int, Pose>                    m_poses;
     std::map<int, Mate>                    m_mates;
     std::map<int, MotionClip>              m_motionClips;
+    std::map<int, LearnedMotion>           m_learned;
     std::map<int, PartSource>              m_sources;
     std::map<int, PartSink>                m_sinks;
     std::vector<int>                       m_roots;

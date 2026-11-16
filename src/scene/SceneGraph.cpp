@@ -405,9 +405,35 @@ const MotionClip* SceneGraph::getMotion(int id) const {
     return it != m_motionClips.end() ? &it->second : nullptr;
 }
 
+int SceneGraph::addLearned(LearnedMotion m) {
+    m.id = m_nextId++;
+    m.name = makeMotionName(m.name.trimmed().isEmpty() ? QString("Learned") : m.name.trimmed(), m.id);
+    const int id = m.id;
+    m_learned[id] = std::move(m);
+    emit automationChanged();
+    return id;
+}
+
+void SceneGraph::removeLearned(int id) {
+    if (!m_learned.erase(id)) return;
+    emit automationChanged();
+}
+
+LearnedMotion* SceneGraph::getLearned(int id) {
+    auto it = m_learned.find(id);
+    return it != m_learned.end() ? &it->second : nullptr;
+}
+
+const LearnedMotion* SceneGraph::getLearned(int id) const {
+    auto it = m_learned.find(id);
+    return it != m_learned.end() ? &it->second : nullptr;
+}
+
 QString SceneGraph::makeMotionName(const QString& base, int exceptId) const {
     auto taken = [&](const QString& n) {
         for (const auto& [id, m] : m_motionClips)
+            if (id != exceptId && m.name.compare(n, Qt::CaseInsensitive) == 0) return true;
+        for (const auto& [id, m] : m_learned)
             if (id != exceptId && m.name.compare(n, Qt::CaseInsensitive) == 0) return true;
         return false;
     };
@@ -934,6 +960,7 @@ void SceneGraph::clear() {
     m_poses.clear();
     m_mates.clear();
     m_motionClips.clear();
+    m_learned.clear();
     m_sources.clear();
     m_sinks.clear();
     m_roots.clear();

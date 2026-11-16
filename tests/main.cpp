@@ -4035,6 +4035,63 @@ TEST(learnAnimationModelPlaysAndBlendsClips) {
     CHECK(!learn::AnimationModel::train(takes, o, &m, &err) && err.contains("lacks the joints"));
 }
 
+TEST(learnedMotionPlayedByAnOperation) {
+    SceneGraph g;
+    const humanoid::Built b = walkingHumanoid(g);
+    // A raise of two joints of its own, learned
+    const QString a1 = g.getMotor(b.motors[0])->name, a2 = g.getMotor(b.motors[1])->name;
+    take::Take t;
+    t.robot = "Humanoid";
+    t.rate = 50;
+    t.columns = QStringList{"t", a1, a2};
+    for (int i = 0; i <= 50; ++i) t.rows.push_back({i / 50.0, 20.0 * i / 50, -10.0 * i / 50});
+    learn::AnimationModel::Options o;
+    o.hidden = {32, 32};
+    o.epochs = 200;
+    auto model = std::make_shared<learn::AnimationModel>();
+    CHECK(learn::AnimationModel::train({{"raise", t}}, o, model.get()));
+    CHECK(!model->place);
+    LearnedMotion lm;
+    lm.name = "Moves";
+    lm.robotId = b.root;
+    lm.model = model;
+    const int id = g.addLearned(lm);
+    MotionClip clash;
+    clash.name = "Moves";
+    clash.take = std::make_shared<take::Take>(t);
+    CHECK(g.getMotion(g.addMotion(clash))->name == "Moves 2");   // one namespace
+
+    Sequence q;
+    q.name = "Show";
+    Operation op;
+    op.id = g.allocateId();
+    op.type = OperationType::PlayMotion;
+    op.motionId = id;
+    op.clip = "raise";
+    op.duration = "2";
+    q.operations = {op};
+    const int seq = g.addSequence(q);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+    SceneGraph loaded;
+    roundTrip(g, loaded);
+    CHECK(AutomationEngine::validateAll(loaded).isEmpty());
+    CHECK(loaded.allLearned().size() == 1 && loaded.allSequences().begin()->second.operations[0].clip == "raise");
+
+    AutomationEngine e(&g);
+    CHECK(e.start(nullptr));
+    int scans = 0;
+    for (; scans < 1000 && e.seqStatus(seq).state != AutomationEngine::SeqState::Finished; ++scans) e.scan(0.016);
+    CHECK(e.seqStatus(seq).state == AutomationEngine::SeqState::Finished);
+    CHECK(std::abs(scans - 125) <= 3);   // its length: 2 s
+    CHECK(e.warnings().isEmpty());
+    CHECK_NEAR(g.getJoint(g.getMotor(b.motors[0])->jointId)->currentValue, 20, 1.5);
+    CHECK_NEAR(g.getJoint(g.getMotor(b.motors[1])->jointId)->currentValue, -10, 1.5);
+    e.stop();
+
+    g.getSequence(seq)->operations[0].clip = "bow";
+    CHECK(AutomationEngine::validateAll(g).join(" ").contains("has no clip bow"));
+}
+
 TEST(takeKeptInTheProject) {
     SceneGraph g;
     const int robot = g.addObject("Arm", PrimitiveType::Cube);

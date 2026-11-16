@@ -298,19 +298,25 @@ QStringList AutomationEngine::validateAll(const SceneGraph& scene) {
                 }
                 case OperationType::PlayMotion: {
                     const MotionClip* clip = scene.getMotion(op.motionId);
-                    if (!clip || !clip->take)
+                    const LearnedMotion* lm = scene.getLearned(op.motionId);
+                    const bool has = (clip && clip->take) || (lm && lm->model);
+                    if (!has)
                         errs << where + (op.motionId == -1 ? ": no motion selected" : ": the motion no longer exists");
-                    const int root = op.walkerId != -1 ? op.walkerId : clip ? clip->robotId : -1;
-                    if (clip && clip->take) {
+                    const int root = playMotionRobot(scene, op);
+                    if (has) {
                         QString why;
                         if (!scene.getObject(root))
                             errs << where + (op.walkerId != -1 ? QString(": the robot no longer exists")
                                                                : QString(": the robot %1 was recorded on is gone; choose a robot")
-                                                                     .arg(clip->name));
-                        else if (!playRequestFor(scene, root, actuatedJointsBelow(scene, root), *clip->take, true, &why))
+                                                                     .arg(clip ? clip->name : lm->name));
+                        else if (!playMotionRequest(scene, op, root, 0.5, lm ? 0.2 : 0.0, &why))
                             errs << where + ": " + why;
                     }
                     chk(where + " speed", op.velocity);
+                    if (lm) {
+                        chk(where + " blend", op.blend);
+                        chk(where + " length", op.duration);
+                    }
                     break;
                 }
             }
@@ -539,6 +545,7 @@ bool AutomationEngine::start(QStringList* errors) {
             o.forward.compile(op.forward, res.r());
             o.sideways.compile(op.sideways, res.r());
             o.turn.compile(op.turn, res.r());
+            o.blend.compile(op.blend, res.r());
             expr::compileAssignments(op.onStart, res.r(), res.w(), o.onStart);
             expr::compileAssignments(op.onFinish, res.r(), res.w(), o.onFinish);
             for (int p : op.predecessors) {
@@ -912,23 +919,25 @@ void AutomationEngine::startOperation(SeqRt& seq, OpRt& op) {
         case OperationType::PlayMotion: {
             op.play = PlayRt();
             const MotionClip* clip = m_scene->getMotion(op.def.motionId);
-            const int root = op.def.walkerId != -1 ? op.def.walkerId : clip ? clip->robotId : -1;
-            if (!clip || !clip->take || !m_scene->getObject(root)) break;
+            const LearnedMotion* lm = m_scene->getLearned(op.def.motionId);
+            const int root = playMotionRobot(*m_scene, op.def);
+            if (!((clip && clip->take) || (lm && lm->model)) || !m_scene->getObject(root)) break;
+            const double blend = op.def.blend.trimmed().isEmpty() ? 0.5 : op.blend.eval(c);
+            const double length = op.def.duration.trimmed().isEmpty() ? 0.0 : op.duration.eval(c);
+            const QString name = clip ? clip->name : lm->name + (op.def.clip.isEmpty() ? QString() : ": " + op.def.clip);
             QString err;
-            std::shared_ptr<PlayRequest> req =
-                playRequestFor(*m_scene, root, actuatedJointsBelow(*m_scene, root), *clip->take, true, &err);
+            std::shared_ptr<PlayRequest> req = playMotionRequest(*m_scene, op.def, root, blend, length, &err);
             if (!req) {
-                m_warnings << QString("%1: %2").arg(op.def.name.isEmpty() ? clip->name : op.def.name, err);
+                m_warnings << QString("%1: %2").arg(op.def.name.isEmpty() ? name : op.def.name, err);
                 break;
             }
-            req->relative = op.def.relative;
             if (!op.def.velocity.trimmed().isEmpty()) {
                 const double v = op.velocity.eval(c);
                 req->speed = std::isfinite(v) && v > 0.01 ? v : 0.01;
             }
             op.play.req = std::move(req);
             beginPlay(op.play);
-            op.status.detail = "playing " + clip->name;
+            op.status.detail = "playing " + name;
             break;
         }
         case OperationType::Release:
@@ -1897,6 +1906,48 @@ std::vector<int> AutomationEngine::actuatedJointsBelow(const SceneGraph& scene, 
         if (j && scenequery::inSubtree(scene, j->childBodyId, root)) out.push_back(j->id);
     }
     return out;
+}
+
+int AutomationEngine::playMotionRobot(const SceneGraph& scene, const Operation& op) {
+    if (op.walkerId != -1) return op.walkerId;
+    if (const MotionClip* m = scene.getMotion(op.motionId)) return m->robotId;
+    if (const LearnedMotion* m = scene.getLearned(op.motionId)) return m->robotId;
+    return -1;
+}
+
+std::shared_ptr<AutomationEngine::PlayRequest> AutomationEngine::playMotionRequest(
+    const SceneGraph& scene, const Operation& op, int root, double blend, double duration, QString* error)
+{
+    const std::vector<int> joints = actuatedJointsBelow(scene, root);
+    if (const MotionClip* m = scene.getMotion(op.motionId); m && m->take) {
+        std::shared_ptr<PlayRequest> req = playRequestFor(scene, root, joints, *m->take, true, error);
+        if (req) req->relative = op.relative;
+        return req;
+    }
+    const LearnedMotion* lm = scene.getLearned(op.motionId);
+    if (!lm || !lm->model || !scene.getObject(root)) {
+        if (error) *error = "nothing to play";
+        return {};
+    }
+    const learn::AnimationModel& model = *lm->model;
+    if (!std::isfinite(blend) || !std::isfinite(duration)) {
+        if (error) *error = "the blend or the length is not a number";
+        return {};
+    }
+    const std::vector<double> w = model.weights(op.clip, op.blendClip, blend);
+    if (w.empty()) {
+        const QString missing = !op.clip.isEmpty() && !model.clips.contains(op.clip) ? op.clip : op.blendClip;
+        if (error) *error = QString("%1 has no clip %2 (it knows %3)").arg(lm->name, missing, model.clips.join(", "));
+        return {};
+    }
+    // Made from where the robot stands, in place (mm, degrees)
+    const QMatrix4x4 now = kin::toolFrame(scene, root);
+    const gait::Place here = gait::placeOf(now);
+    const take::Take t = model.generate(w, duration, 50, here.x * 1000, double(now(1, 3)) * 1000, here.z * 1000,
+                                        qRadiansToDegrees(here.heading));
+    std::shared_ptr<PlayRequest> req = playRequestFor(scene, root, joints, t, true, error);
+    if (req) req->relative = false;
+    return req;
 }
 
 std::shared_ptr<AutomationEngine::PlayRequest> AutomationEngine::playRequestFor(

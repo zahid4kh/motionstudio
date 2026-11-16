@@ -284,6 +284,9 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene, MeshPool* pool) {
             if (op.walkToId != -1)  oo["walkToId"]  = op.walkToId;
             if (op.motionId != -1)  oo["motionId"]  = op.motionId;
             if (!op.relative)       oo["relative"]  = false;
+            if (!op.clip.isEmpty())      oo["clip"]      = op.clip;
+            if (!op.blendClip.isEmpty()) oo["blendClip"] = op.blendClip;
+            if (!op.blend.isEmpty())     oo["blend"]     = op.blend;
             if (!op.forward.isEmpty())  oo["forward"]  = op.forward;
             if (!op.sideways.isEmpty()) oo["sideways"] = op.sideways;
             if (!op.turn.isEmpty())     oo["turn"]     = op.turn;
@@ -329,6 +332,11 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene, MeshPool* pool) {
         o["name"]    = m.name;
         o["robotId"] = m.robotId;
         motions.append(o);
+    }
+    QJsonArray learned;
+    for (auto& [id, m] : scene.allLearned()) {
+        if (!m.model) continue;
+        learned.append(QJsonObject{{"id", m.id}, {"name", m.name}, {"robotId", m.robotId}, {"model", m.model->toJson()}});
     }
 
     QJsonArray mates;
@@ -428,6 +436,7 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene, MeshPool* pool) {
     if (!sources.isEmpty()) root["sources"] = sources;
     if (!sinks.isEmpty()) root["sinks"] = sinks;
     if (!motions.isEmpty()) root["motions"] = motions;
+    if (!learned.isEmpty()) root["learnedMotions"] = learned;
     return root;
 }
 
@@ -610,6 +619,17 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root, con
         m.take    = std::move(take);
         motionIdMap[o["id"].toInt(-1)] = scene.addMotion(m);
     }
+    for (auto v : root["learnedMotions"].toArray()) {
+        const QJsonObject o = v.toObject();
+        auto model = std::make_shared<learn::AnimationModel>();
+        if (!learn::AnimationModel::fromJson(o["model"].toObject(), model.get())) continue;   // damaged
+        LearnedMotion m;
+        m.name    = o["name"].toString();
+        const int robot = o["robotId"].toInt(-1);
+        m.robotId = robot == -1 ? -1 : idMap.value(robot, -2);
+        m.model   = std::move(model);
+        motionIdMap[o["id"].toInt(-1)] = scene.addLearned(m);
+    }
 
     // Mates (dropped when a part they refer to is missing)
     for (auto v : root["mates"].toArray()) {
@@ -701,6 +721,9 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root, con
             op.walkToId       = ref(idMap, oo["walkToId"]);
             op.motionId       = ref(motionIdMap, oo["motionId"]);
             op.relative       = oo["relative"].toBool(true);
+            op.clip           = oo["clip"].toString();
+            op.blendClip      = oo["blendClip"].toString();
+            op.blend          = oo["blend"].toString();
             op.forward        = oo["forward"].toString();
             op.sideways       = oo["sideways"].toString();
             op.turn           = oo["turn"].toString();
