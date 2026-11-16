@@ -52,7 +52,7 @@ Arm and leg joints are built on both sides, named **L…** and **R…** (`LShoul
 
 Joints that meet at one point (the three shoulder joints) turn in the order listed, each one carrying the next. For each joint you set its range (**Min**, **Max**), its **Home** value (the value it is built at, saved as its Home pose) and its actuator's speed and acceleration.
 
-The humanoid's pelvis stays where it is built: it is a kinematic model and does not balance. Lifting a leg lifts its foot off the floor.
+The humanoid's pelvis stays where it is built while you jog it: it is a kinematic model and does not balance. Lifting a leg lifts its foot off the floor. To move the whole humanoid, make it walk (see below).
 
 ## Hands
 
@@ -64,6 +64,28 @@ Each palm has a **Left Hand TCP** / **Right Hand TCP** frame, with −Y along th
 
 ## Poses and the demo sequence
 
-Every humanoid gets a **Home** pose. With **Demo poses and a looping sequence** ticked, it also gets the poses **T-Pose**, **Wave A**, **Wave B**, **Step L**, **Step R** and **Bow**, and a sequence (`HumanoidDemo` for a humanoid named Humanoid) that runs through them on Play and loops. A pose that needs a joint the humanoid lacks is left out, and so are the step poses on a pedestal.
+Every humanoid gets a **Home** pose. With **Demo poses and a looping sequence** ticked, it also gets the poses **T-Pose**, **Wave A**, **Wave B**, **Step L**, **Step R** and **Bow**, and a sequence (`HumanoidDemo` for a humanoid named Humanoid) that runs through them on Play and loops. A humanoid on legs then also walks out, turns round, walks back and turns to face the way it started. A pose that needs a joint the humanoid lacks is left out, and so are the step poses on a pedestal.
 
 Every pose holds a value for every body joint, so **MoveToPose** always gives the same posture. Hand actuators are not in the poses: open and close the hands with **Move** operations. To make your own pose, jog the joints in **Automation › Actuators & Poses** and press **Capture** (see [Poses](help:poses)).
+
+## Walking
+
+A humanoid built **on its legs** can walk. It crouches a little, steps with alternate feet, and stands up again when it arrives. While it walks:
+
+- the humanoid's top object is carried along, so everything on it (arms, hands, a part it holds) comes too;
+- each foot is set down on the floor exactly where its step puts it and stays there until it lifts again. The back foot rolls onto its toes before it swings, and the arms swing against the legs;
+- its planned footprints are drawn on the floor (the left foot blue, the right one yellow; faint once taken).
+
+It is kinematic: the legs follow the plan and the humanoid can't fall. The floor is the height the humanoid stands at when it starts walking. **Reset** puts it back where it was.
+
+**From a sequence**, add a **Walk** operation (see [Sequences](help:sequences)):
+
+- **Forward**, **Sideways** and **Turn**: metres ahead, metres to its left and degrees to its left. Negative values walk backwards, step right or turn right. A turn given with a distance makes the walk an arc.
+- **Walk to** an object: it walks to where the object stands on the floor and turns to face the way it faces (the object's +X). Add an empty frame as a marker, place it, and walk to it. Move the marker and the humanoid walks there instead.
+- **Speed** (m/s) is optional; without it the pace comes from the size of the legs.
+
+**From a program**, call `walk`, `turn`, `walk_to` and `walk_path` on a humanoid (see [Robot API](help:api)). A program can set the step length, the step height, the speed and the arm swing, and stop a walk gracefully after the step under way.
+
+**File › Open Template… › Humanoid Patrol** is a humanoid that walks round four spots, waving at one and bowing at another.
+
+Any model can walk if it has objects called **Left Foot** and **Right Foot** below one top object, each moved by at least a hip, a knee and an ankle joint with actuators, and its feet resting on the floor at the top object's height.

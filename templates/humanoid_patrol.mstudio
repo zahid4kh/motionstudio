@@ -1,0 +1,5468 @@
+{
+    "conveyorBelts": [
+    ],
+    "joints": [
+        {
+            "axis": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "childBodyId": 5,
+            "continuous": false,
+            "id": 6,
+            "initialAngle": 0,
+            "limitMax": 45,
+            "limitMin": -30,
+            "name": "LHipYaw",
+            "parentBodyId": 2,
+            "pivot": {
+                "x": 0,
+                "y": 0,
+                "z": -0.10000000149011612
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "childBodyId": 7,
+            "continuous": false,
+            "id": 8,
+            "initialAngle": 0,
+            "limitMax": 45,
+            "limitMin": -20,
+            "name": "LHipRoll",
+            "parentBodyId": 5,
+            "pivot": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "childBodyId": 9,
+            "continuous": false,
+            "id": 10,
+            "initialAngle": 0,
+            "limitMax": 120,
+            "limitMin": -30,
+            "name": "LHipPitch",
+            "parentBodyId": 7,
+            "pivot": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": 0,
+                "z": -1
+            },
+            "childBodyId": 13,
+            "continuous": false,
+            "id": 14,
+            "initialAngle": 0,
+            "limitMax": 140,
+            "limitMin": 0,
+            "name": "LKnee",
+            "parentBodyId": 9,
+            "pivot": {
+                "x": 0,
+                "y": -0.36000001430511475,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "childBodyId": 17,
+            "continuous": false,
+            "id": 18,
+            "initialAngle": 0,
+            "limitMax": 30,
+            "limitMin": -40,
+            "name": "LAnklePitch",
+            "parentBodyId": 13,
+            "pivot": {
+                "x": 0,
+                "y": -0.3400000035762787,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "childBodyId": 19,
+            "continuous": false,
+            "id": 20,
+            "initialAngle": 0,
+            "limitMax": 20,
+            "limitMin": -20,
+            "name": "LAnkleRoll",
+            "parentBodyId": 17,
+            "pivot": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": -1,
+                "z": 0
+            },
+            "childBodyId": 25,
+            "continuous": false,
+            "id": 26,
+            "initialAngle": 0,
+            "limitMax": 45,
+            "limitMin": -30,
+            "name": "RHipYaw",
+            "parentBodyId": 2,
+            "pivot": {
+                "x": 0,
+                "y": 0,
+                "z": 0.10000000149011612
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": -1,
+                "y": 0,
+                "z": 0
+            },
+            "childBodyId": 27,
+            "continuous": false,
+            "id": 28,
+            "initialAngle": 0,
+            "limitMax": 45,
+            "limitMin": -20,
+            "name": "RHipRoll",
+            "parentBodyId": 25,
+            "pivot": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "childBodyId": 29,
+            "continuous": false,
+            "id": 30,
+            "initialAngle": 0,
+            "limitMax": 120,
+            "limitMin": -30,
+            "name": "RHipPitch",
+            "parentBodyId": 27,
+            "pivot": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": 0,
+                "z": -1
+            },
+            "childBodyId": 33,
+            "continuous": false,
+            "id": 34,
+            "initialAngle": 0,
+            "limitMax": 140,
+            "limitMin": 0,
+            "name": "RKnee",
+            "parentBodyId": 29,
+            "pivot": {
+                "x": 0,
+                "y": -0.36000001430511475,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "childBodyId": 37,
+            "continuous": false,
+            "id": 38,
+            "initialAngle": 0,
+            "limitMax": 30,
+            "limitMin": -40,
+            "name": "RAnklePitch",
+            "parentBodyId": 33,
+            "pivot": {
+                "x": 0,
+                "y": -0.3400000035762787,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": -1,
+                "y": 0,
+                "z": 0
+            },
+            "childBodyId": 39,
+            "continuous": false,
+            "id": 40,
+            "initialAngle": 0,
+            "limitMax": 20,
+            "limitMin": -20,
+            "name": "RAnkleRoll",
+            "parentBodyId": 37,
+            "pivot": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "childBodyId": 45,
+            "continuous": false,
+            "id": 46,
+            "initialAngle": 0,
+            "limitMax": 90,
+            "limitMin": -90,
+            "name": "WaistYaw",
+            "parentBodyId": 2,
+            "pivot": {
+                "x": 0,
+                "y": 0.11999999731779099,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": 0,
+                "z": -1
+            },
+            "childBodyId": 47,
+            "continuous": false,
+            "id": 48,
+            "initialAngle": 0,
+            "limitMax": 60,
+            "limitMin": -20,
+            "name": "WaistPitch",
+            "parentBodyId": 45,
+            "pivot": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "childBodyId": 56,
+            "continuous": false,
+            "id": 57,
+            "initialAngle": 0,
+            "limitMax": 90,
+            "limitMin": -90,
+            "name": "NeckYaw",
+            "parentBodyId": 47,
+            "pivot": {
+                "x": 0,
+                "y": 0.5,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": 0,
+                "z": -1
+            },
+            "childBodyId": 58,
+            "continuous": false,
+            "id": 59,
+            "initialAngle": 0,
+            "limitMax": 45,
+            "limitMin": -30,
+            "name": "NeckPitch",
+            "parentBodyId": 56,
+            "pivot": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "childBodyId": 65,
+            "continuous": false,
+            "id": 66,
+            "initialAngle": 0,
+            "limitMax": 180,
+            "limitMin": -60,
+            "name": "LShoulderPitch",
+            "parentBodyId": 47,
+            "pivot": {
+                "x": 0,
+                "y": 0.4000000059604645,
+                "z": -0.20000000298023224
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "childBodyId": 67,
+            "continuous": false,
+            "id": 68,
+            "initialAngle": 0,
+            "limitMax": 180,
+            "limitMin": -15,
+            "name": "LShoulderRoll",
+            "parentBodyId": 65,
+            "pivot": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "childBodyId": 69,
+            "continuous": false,
+            "id": 70,
+            "initialAngle": 0,
+            "limitMax": 90,
+            "limitMin": -90,
+            "name": "LShoulderYaw",
+            "parentBodyId": 67,
+            "pivot": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "childBodyId": 73,
+            "continuous": false,
+            "id": 74,
+            "initialAngle": 0,
+            "limitMax": 145,
+            "limitMin": 0,
+            "name": "LElbow",
+            "parentBodyId": 69,
+            "pivot": {
+                "x": 0,
+                "y": -0.28999999165534973,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "childBodyId": 77,
+            "continuous": false,
+            "id": 78,
+            "initialAngle": 0,
+            "limitMax": 120,
+            "limitMin": -120,
+            "name": "LWristYaw",
+            "parentBodyId": 73,
+            "pivot": {
+                "x": 0,
+                "y": -0.25,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "childBodyId": 79,
+            "continuous": false,
+            "id": 80,
+            "initialAngle": 0,
+            "limitMax": 70,
+            "limitMin": -70,
+            "name": "LWristPitch",
+            "parentBodyId": 77,
+            "pivot": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": -1,
+                "y": 0,
+                "z": 0
+            },
+            "childBodyId": 84,
+            "continuous": false,
+            "id": 88,
+            "initialAngle": 0,
+            "limitMax": 90,
+            "limitMin": 0,
+            "name": "LHand",
+            "parentBodyId": 79,
+            "pivot": {
+                "x": 0.028687499463558197,
+                "y": -0.07649999856948853,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": -1,
+                "y": 0,
+                "z": 0
+            },
+            "childBodyId": 86,
+            "continuous": false,
+            "coupledTo": 88,
+            "id": 89,
+            "initialAngle": 0,
+            "limitMax": 90,
+            "limitMin": 0,
+            "name": "LIndex Tip",
+            "offset": 0,
+            "parentBodyId": 84,
+            "pivot": {
+                "x": 0,
+                "y": -0.04885375127196312,
+                "z": 0
+            },
+            "ratio": 1,
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": -1,
+                "y": 0,
+                "z": 0
+            },
+            "childBodyId": 90,
+            "continuous": false,
+            "coupledTo": 88,
+            "id": 94,
+            "initialAngle": 0,
+            "limitMax": 90,
+            "limitMin": 0,
+            "name": "LMiddle",
+            "offset": 0,
+            "parentBodyId": 79,
+            "pivot": {
+                "x": 0.009562499821186066,
+                "y": -0.07649999856948853,
+                "z": 0
+            },
+            "ratio": 1,
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": -1,
+                "y": 0,
+                "z": 0
+            },
+            "childBodyId": 92,
+            "continuous": false,
+            "coupledTo": 88,
+            "id": 95,
+            "initialAngle": 0,
+            "limitMax": 90,
+            "limitMin": 0,
+            "name": "LMiddle Tip",
+            "offset": 0,
+            "parentBodyId": 90,
+            "pivot": {
+                "x": 0,
+                "y": -0.05142499879002571,
+                "z": 0
+            },
+            "ratio": 1,
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": -1,
+                "y": 0,
+                "z": 0
+            },
+            "childBodyId": 96,
+            "continuous": false,
+            "coupledTo": 88,
+            "id": 100,
+            "initialAngle": 0,
+            "limitMax": 90,
+            "limitMin": 0,
+            "name": "LRing",
+            "offset": 0,
+            "parentBodyId": 79,
+            "pivot": {
+                "x": -0.009562499821186066,
+                "y": -0.07649999856948853,
+                "z": 0
+            },
+            "ratio": 1,
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": -1,
+                "y": 0,
+                "z": 0
+            },
+            "childBodyId": 98,
+            "continuous": false,
+            "coupledTo": 88,
+            "id": 101,
+            "initialAngle": 0,
+            "limitMax": 90,
+            "limitMin": 0,
+            "name": "LRing Tip",
+            "offset": 0,
+            "parentBodyId": 96,
+            "pivot": {
+                "x": 0,
+                "y": -0.04885375127196312,
+                "z": 0
+            },
+            "ratio": 1,
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": -1,
+                "y": 0,
+                "z": 0
+            },
+            "childBodyId": 102,
+            "continuous": false,
+            "coupledTo": 88,
+            "id": 106,
+            "initialAngle": 0,
+            "limitMax": 90,
+            "limitMin": 0,
+            "name": "LLittle",
+            "offset": 0,
+            "parentBodyId": 79,
+            "pivot": {
+                "x": -0.028687499463558197,
+                "y": -0.07649999856948853,
+                "z": 0
+            },
+            "ratio": 1,
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": -1,
+                "y": 0,
+                "z": 0
+            },
+            "childBodyId": 104,
+            "continuous": false,
+            "coupledTo": 88,
+            "id": 107,
+            "initialAngle": 0,
+            "limitMax": 90,
+            "limitMin": 0,
+            "name": "LLittle Tip",
+            "offset": 0,
+            "parentBodyId": 102,
+            "pivot": {
+                "x": 0,
+                "y": -0.04114000126719475,
+                "z": 0
+            },
+            "ratio": 1,
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": 0,
+                "z": -1
+            },
+            "childBodyId": 108,
+            "continuous": false,
+            "coupledTo": 88,
+            "id": 112,
+            "initialAngle": 0,
+            "limitMax": 45,
+            "limitMin": 0,
+            "name": "LThumb",
+            "offset": 0,
+            "parentBodyId": 79,
+            "pivot": {
+                "x": 0.03824999928474426,
+                "y": -0.022949999198317528,
+                "z": 0.008720999583601952
+            },
+            "ratio": 0.5,
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": 0,
+                "z": -1
+            },
+            "childBodyId": 110,
+            "continuous": false,
+            "coupledTo": 88,
+            "id": 113,
+            "initialAngle": 0,
+            "limitMax": 54,
+            "limitMin": 0,
+            "name": "LThumb Tip",
+            "offset": 0,
+            "parentBodyId": 108,
+            "pivot": {
+                "x": 0,
+                "y": -0.03926999866962433,
+                "z": 0
+            },
+            "ratio": 0.6000000238418579,
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "childBodyId": 114,
+            "continuous": false,
+            "id": 115,
+            "initialAngle": 0,
+            "limitMax": 180,
+            "limitMin": -60,
+            "name": "RShoulderPitch",
+            "parentBodyId": 47,
+            "pivot": {
+                "x": 0,
+                "y": 0.4000000059604645,
+                "z": 0.20000000298023224
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": -1,
+                "y": 0,
+                "z": 0
+            },
+            "childBodyId": 116,
+            "continuous": false,
+            "id": 117,
+            "initialAngle": 0,
+            "limitMax": 180,
+            "limitMin": -15,
+            "name": "RShoulderRoll",
+            "parentBodyId": 114,
+            "pivot": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": -1,
+                "z": 0
+            },
+            "childBodyId": 118,
+            "continuous": false,
+            "id": 119,
+            "initialAngle": 0,
+            "limitMax": 90,
+            "limitMin": -90,
+            "name": "RShoulderYaw",
+            "parentBodyId": 116,
+            "pivot": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "childBodyId": 122,
+            "continuous": false,
+            "id": 123,
+            "initialAngle": 0,
+            "limitMax": 145,
+            "limitMin": 0,
+            "name": "RElbow",
+            "parentBodyId": 118,
+            "pivot": {
+                "x": 0,
+                "y": -0.28999999165534973,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": -1,
+                "z": 0
+            },
+            "childBodyId": 126,
+            "continuous": false,
+            "id": 127,
+            "initialAngle": 0,
+            "limitMax": 120,
+            "limitMin": -120,
+            "name": "RWristYaw",
+            "parentBodyId": 122,
+            "pivot": {
+                "x": 0,
+                "y": -0.25,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "childBodyId": 128,
+            "continuous": false,
+            "id": 129,
+            "initialAngle": 0,
+            "limitMax": 70,
+            "limitMin": -70,
+            "name": "RWristPitch",
+            "parentBodyId": 126,
+            "pivot": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "childBodyId": 133,
+            "continuous": false,
+            "id": 137,
+            "initialAngle": 0,
+            "limitMax": 90,
+            "limitMin": 0,
+            "name": "RHand",
+            "parentBodyId": 128,
+            "pivot": {
+                "x": 0.028687499463558197,
+                "y": -0.07649999856948853,
+                "z": 0
+            },
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "childBodyId": 135,
+            "continuous": false,
+            "coupledTo": 137,
+            "id": 138,
+            "initialAngle": 0,
+            "limitMax": 90,
+            "limitMin": 0,
+            "name": "RIndex Tip",
+            "offset": 0,
+            "parentBodyId": 133,
+            "pivot": {
+                "x": 0,
+                "y": -0.04885375127196312,
+                "z": 0
+            },
+            "ratio": 1,
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "childBodyId": 139,
+            "continuous": false,
+            "coupledTo": 137,
+            "id": 143,
+            "initialAngle": 0,
+            "limitMax": 90,
+            "limitMin": 0,
+            "name": "RMiddle",
+            "offset": 0,
+            "parentBodyId": 128,
+            "pivot": {
+                "x": 0.009562499821186066,
+                "y": -0.07649999856948853,
+                "z": 0
+            },
+            "ratio": 1,
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "childBodyId": 141,
+            "continuous": false,
+            "coupledTo": 137,
+            "id": 144,
+            "initialAngle": 0,
+            "limitMax": 90,
+            "limitMin": 0,
+            "name": "RMiddle Tip",
+            "offset": 0,
+            "parentBodyId": 139,
+            "pivot": {
+                "x": 0,
+                "y": -0.05142499879002571,
+                "z": 0
+            },
+            "ratio": 1,
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "childBodyId": 145,
+            "continuous": false,
+            "coupledTo": 137,
+            "id": 149,
+            "initialAngle": 0,
+            "limitMax": 90,
+            "limitMin": 0,
+            "name": "RRing",
+            "offset": 0,
+            "parentBodyId": 128,
+            "pivot": {
+                "x": -0.009562499821186066,
+                "y": -0.07649999856948853,
+                "z": 0
+            },
+            "ratio": 1,
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "childBodyId": 147,
+            "continuous": false,
+            "coupledTo": 137,
+            "id": 150,
+            "initialAngle": 0,
+            "limitMax": 90,
+            "limitMin": 0,
+            "name": "RRing Tip",
+            "offset": 0,
+            "parentBodyId": 145,
+            "pivot": {
+                "x": 0,
+                "y": -0.04885375127196312,
+                "z": 0
+            },
+            "ratio": 1,
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "childBodyId": 151,
+            "continuous": false,
+            "coupledTo": 137,
+            "id": 155,
+            "initialAngle": 0,
+            "limitMax": 90,
+            "limitMin": 0,
+            "name": "RLittle",
+            "offset": 0,
+            "parentBodyId": 128,
+            "pivot": {
+                "x": -0.028687499463558197,
+                "y": -0.07649999856948853,
+                "z": 0
+            },
+            "ratio": 1,
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "childBodyId": 153,
+            "continuous": false,
+            "coupledTo": 137,
+            "id": 156,
+            "initialAngle": 0,
+            "limitMax": 90,
+            "limitMin": 0,
+            "name": "RLittle Tip",
+            "offset": 0,
+            "parentBodyId": 151,
+            "pivot": {
+                "x": 0,
+                "y": -0.04114000126719475,
+                "z": 0
+            },
+            "ratio": 1,
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": 0,
+                "z": -1
+            },
+            "childBodyId": 157,
+            "continuous": false,
+            "coupledTo": 137,
+            "id": 161,
+            "initialAngle": 0,
+            "limitMax": 45,
+            "limitMin": 0,
+            "name": "RThumb",
+            "offset": 0,
+            "parentBodyId": 128,
+            "pivot": {
+                "x": 0.03824999928474426,
+                "y": -0.022949999198317528,
+                "z": -0.008720999583601952
+            },
+            "ratio": 0.5,
+            "type": "Revolute"
+        },
+        {
+            "axis": {
+                "x": 0,
+                "y": 0,
+                "z": -1
+            },
+            "childBodyId": 159,
+            "continuous": false,
+            "coupledTo": 137,
+            "id": 162,
+            "initialAngle": 0,
+            "limitMax": 54,
+            "limitMin": 0,
+            "name": "RThumb Tip",
+            "offset": 0,
+            "parentBodyId": 157,
+            "pivot": {
+                "x": 0,
+                "y": -0.03926999866962433,
+                "z": 0
+            },
+            "ratio": 0.6000000238418579,
+            "type": "Revolute"
+        }
+    ],
+    "meshes": [
+    ],
+    "motors": [
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 163,
+            "jointId": 46,
+            "mode": "Position",
+            "name": "WaistYaw",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 164,
+            "jointId": 48,
+            "mode": "Position",
+            "name": "WaistPitch",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 165,
+            "jointId": 57,
+            "mode": "Position",
+            "name": "NeckYaw",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 166,
+            "jointId": 59,
+            "mode": "Position",
+            "name": "NeckPitch",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 167,
+            "jointId": 66,
+            "mode": "Position",
+            "name": "LShoulderPitch",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 168,
+            "jointId": 68,
+            "mode": "Position",
+            "name": "LShoulderRoll",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 169,
+            "jointId": 70,
+            "mode": "Position",
+            "name": "LShoulderYaw",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 170,
+            "jointId": 74,
+            "mode": "Position",
+            "name": "LElbow",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 171,
+            "jointId": 78,
+            "mode": "Position",
+            "name": "LWristYaw",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 172,
+            "jointId": 80,
+            "mode": "Position",
+            "name": "LWristPitch",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 173,
+            "jointId": 115,
+            "mode": "Position",
+            "name": "RShoulderPitch",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 174,
+            "jointId": 117,
+            "mode": "Position",
+            "name": "RShoulderRoll",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 175,
+            "jointId": 119,
+            "mode": "Position",
+            "name": "RShoulderYaw",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 176,
+            "jointId": 123,
+            "mode": "Position",
+            "name": "RElbow",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 177,
+            "jointId": 127,
+            "mode": "Position",
+            "name": "RWristYaw",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 178,
+            "jointId": 129,
+            "mode": "Position",
+            "name": "RWristPitch",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 179,
+            "jointId": 6,
+            "mode": "Position",
+            "name": "LHipYaw",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 180,
+            "jointId": 8,
+            "mode": "Position",
+            "name": "LHipRoll",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 181,
+            "jointId": 10,
+            "mode": "Position",
+            "name": "LHipPitch",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 182,
+            "jointId": 14,
+            "mode": "Position",
+            "name": "LKnee",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 183,
+            "jointId": 18,
+            "mode": "Position",
+            "name": "LAnklePitch",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 184,
+            "jointId": 20,
+            "mode": "Position",
+            "name": "LAnkleRoll",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 185,
+            "jointId": 26,
+            "mode": "Position",
+            "name": "RHipYaw",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 186,
+            "jointId": 28,
+            "mode": "Position",
+            "name": "RHipRoll",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 187,
+            "jointId": 30,
+            "mode": "Position",
+            "name": "RHipPitch",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 188,
+            "jointId": 34,
+            "mode": "Position",
+            "name": "RKnee",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 189,
+            "jointId": 38,
+            "mode": "Position",
+            "name": "RAnklePitch",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 480,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 190,
+            "jointId": 40,
+            "mode": "Position",
+            "name": "RAnkleRoll",
+            "targetExpr": "",
+            "velocity": 120,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 900,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 191,
+            "jointId": 88,
+            "mode": "Position",
+            "name": "LHand",
+            "targetExpr": "",
+            "velocity": 180,
+            "velocityExpr": ""
+        },
+        {
+            "acceleration": 900,
+            "activeExpr": "",
+            "enabled": true,
+            "id": 192,
+            "jointId": 137,
+            "mode": "Position",
+            "name": "RHand",
+            "targetExpr": "",
+            "velocity": 180,
+            "velocityExpr": ""
+        }
+    ],
+    "objects": [
+        {
+            "id": 1,
+            "name": "Humanoid",
+            "parentId": -1,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "id": 2,
+            "name": "Pelvis",
+            "parentId": 1,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0.7799999713897705,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#ef7d22",
+            "id": 3,
+            "name": "Pelvis",
+            "parentId": 2,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0.008999999612569809,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.1784999966621399,
+                    "y": 0.1793999969959259,
+                    "z": 0.3465000092983246
+                }
+            },
+            "type": "Sphere"
+        },
+        {
+            "color": "#363a41",
+            "id": 4,
+            "name": "Spine",
+            "parentId": 2,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0.0989999994635582,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.09000000357627869,
+                    "y": 0.041999995708465576,
+                    "z": 0.09000000357627869
+                }
+            },
+            "type": "Cylinder"
+        },
+        {
+            "id": 5,
+            "name": "LHipYaw Link",
+            "parentId": 2,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": -0.10000000149011612
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "id": 7,
+            "name": "LHipRoll Link",
+            "parentId": 5,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "id": 9,
+            "name": "Left Thigh",
+            "parentId": 7,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 11,
+            "name": "Hip",
+            "parentId": 9,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.14949999749660492,
+                    "y": 0.14949999749660492,
+                    "z": 0.14949999749660492
+                }
+            },
+            "type": "Sphere"
+        },
+        {
+            "color": "#ef7d22",
+            "id": 12,
+            "name": "Thigh",
+            "parentId": 9,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.19950000941753387,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 180,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.12999999523162842,
+                    "y": 0.32100000977516174,
+                    "z": 0.12999999523162842
+                }
+            },
+            "type": "Cylinder"
+        },
+        {
+            "id": 13,
+            "name": "Left Shin",
+            "parentId": 9,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.36000001430511475,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 15,
+            "name": "Knee",
+            "parentId": 13,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.12600000202655792,
+                    "y": 0.12600000202655792,
+                    "z": 0.12600000202655792
+                }
+            },
+            "type": "Sphere"
+        },
+        {
+            "color": "#ef7d22",
+            "id": 16,
+            "name": "Shin",
+            "parentId": 13,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.17000000178813934,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 180,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.10499999672174454,
+                    "y": 0.3400000035762787,
+                    "z": 0.10499999672174454
+                }
+            },
+            "type": "Cylinder"
+        },
+        {
+            "id": 17,
+            "name": "LAnklePitch Link",
+            "parentId": 13,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.3400000035762787,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "id": 19,
+            "name": "Left Foot",
+            "parentId": 17,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 21,
+            "name": "Ankle",
+            "parentId": 19,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.09974999725818634,
+                    "y": 0.09974999725818634,
+                    "z": 0.09974999725818634
+                }
+            },
+            "type": "Sphere"
+        },
+        {
+            "color": "#363a41",
+            "id": 22,
+            "name": "Ankle Post",
+            "parentId": 19,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.012000000104308128,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 180,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.06300000101327896,
+                    "y": 0.024000000208616257,
+                    "z": 0.06300000101327896
+                }
+            },
+            "type": "Cylinder"
+        },
+        {
+            "color": "#ef7d22",
+            "id": 23,
+            "name": "Foot",
+            "parentId": 19,
+            "transform": {
+                "position": {
+                    "x": 0.04800000041723251,
+                    "y": -0.04600000008940697,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.23999999463558197,
+                    "y": 0.04399999976158142,
+                    "z": 0.10000000149011612
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "color": "#26292d",
+            "id": 24,
+            "name": "Sole",
+            "parentId": 19,
+            "transform": {
+                "position": {
+                    "x": 0.04800000041723251,
+                    "y": -0.07400000095367432,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.23999999463558197,
+                    "y": 0.012000000104308128,
+                    "z": 0.10000000149011612
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 25,
+            "name": "RHipYaw Link",
+            "parentId": 2,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0.10000000149011612
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "id": 27,
+            "name": "RHipRoll Link",
+            "parentId": 25,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "id": 29,
+            "name": "Right Thigh",
+            "parentId": 27,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 31,
+            "name": "Hip",
+            "parentId": 29,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.14949999749660492,
+                    "y": 0.14949999749660492,
+                    "z": 0.14949999749660492
+                }
+            },
+            "type": "Sphere"
+        },
+        {
+            "color": "#ef7d22",
+            "id": 32,
+            "name": "Thigh",
+            "parentId": 29,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.19950000941753387,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 180,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.12999999523162842,
+                    "y": 0.32100000977516174,
+                    "z": 0.12999999523162842
+                }
+            },
+            "type": "Cylinder"
+        },
+        {
+            "id": 33,
+            "name": "Right Shin",
+            "parentId": 29,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.36000001430511475,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 35,
+            "name": "Knee",
+            "parentId": 33,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.12600000202655792,
+                    "y": 0.12600000202655792,
+                    "z": 0.12600000202655792
+                }
+            },
+            "type": "Sphere"
+        },
+        {
+            "color": "#ef7d22",
+            "id": 36,
+            "name": "Shin",
+            "parentId": 33,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.17000000178813934,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 180,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.10499999672174454,
+                    "y": 0.3400000035762787,
+                    "z": 0.10499999672174454
+                }
+            },
+            "type": "Cylinder"
+        },
+        {
+            "id": 37,
+            "name": "RAnklePitch Link",
+            "parentId": 33,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.3400000035762787,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "id": 39,
+            "name": "Right Foot",
+            "parentId": 37,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 41,
+            "name": "Ankle",
+            "parentId": 39,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.09974999725818634,
+                    "y": 0.09974999725818634,
+                    "z": 0.09974999725818634
+                }
+            },
+            "type": "Sphere"
+        },
+        {
+            "color": "#363a41",
+            "id": 42,
+            "name": "Ankle Post",
+            "parentId": 39,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.012000000104308128,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 180,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.06300000101327896,
+                    "y": 0.024000000208616257,
+                    "z": 0.06300000101327896
+                }
+            },
+            "type": "Cylinder"
+        },
+        {
+            "color": "#ef7d22",
+            "id": 43,
+            "name": "Foot",
+            "parentId": 39,
+            "transform": {
+                "position": {
+                    "x": 0.04800000041723251,
+                    "y": -0.04600000008940697,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.23999999463558197,
+                    "y": 0.04399999976158142,
+                    "z": 0.10000000149011612
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "color": "#26292d",
+            "id": 44,
+            "name": "Sole",
+            "parentId": 39,
+            "transform": {
+                "position": {
+                    "x": 0.04800000041723251,
+                    "y": -0.07400000095367432,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.23999999463558197,
+                    "y": 0.012000000104308128,
+                    "z": 0.10000000149011612
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 45,
+            "name": "WaistYaw Link",
+            "parentId": 2,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0.11999999731779099,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "id": 47,
+            "name": "Torso",
+            "parentId": 45,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 49,
+            "name": "Waist",
+            "parentId": 47,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.1274999976158142,
+                    "y": 0.1274999976158142,
+                    "z": 0.1274999976158142
+                }
+            },
+            "type": "Sphere"
+        },
+        {
+            "color": "#363a41",
+            "id": 50,
+            "name": "Abdomen",
+            "parentId": 47,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0.09600000083446503,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.1679999977350235,
+                    "y": 0.20000000298023224,
+                    "z": 0.1679600030183792
+                }
+            },
+            "type": "Sphere"
+        },
+        {
+            "color": "#ef7d22",
+            "id": 51,
+            "name": "Chest",
+            "parentId": 47,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0.2639999985694885,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.20999999344348907,
+                    "y": 0.3199999928474426,
+                    "z": 0.24699999392032623
+                }
+            },
+            "type": "Sphere"
+        },
+        {
+            "color": "#c9ced6",
+            "id": 52,
+            "name": "Core Light",
+            "parentId": 47,
+            "transform": {
+                "position": {
+                    "x": 0.09870000183582306,
+                    "y": 0.2720000147819519,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": -89.99999237060547
+                },
+                "scale": {
+                    "x": 0.07500000298023224,
+                    "y": 0.019999999552965164,
+                    "z": 0.07500000298023224
+                }
+            },
+            "type": "Cylinder"
+        },
+        {
+            "color": "#ef7d22",
+            "id": 53,
+            "name": "Left Shoulder Bridge",
+            "parentId": 47,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0.4000000059604645,
+                    "z": -0.11455000191926956
+                },
+                "rotation": {
+                    "x": -89.99999237060547,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.08550000190734863,
+                    "y": 0.08089999854564667,
+                    "z": 0.08550000190734863
+                }
+            },
+            "type": "Cylinder"
+        },
+        {
+            "color": "#ef7d22",
+            "id": 54,
+            "name": "Right Shoulder Bridge",
+            "parentId": 47,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0.4000000059604645,
+                    "z": 0.11455000191926956
+                },
+                "rotation": {
+                    "x": 89.99999237060547,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.08550000190734863,
+                    "y": 0.08089999854564667,
+                    "z": 0.08550000190734863
+                }
+            },
+            "type": "Cylinder"
+        },
+        {
+            "color": "#363a41",
+            "id": 55,
+            "name": "Neck",
+            "parentId": 47,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0.4300000071525574,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.07500000298023224,
+                    "y": 0.13999998569488525,
+                    "z": 0.07500000298023224
+                }
+            },
+            "type": "Cylinder"
+        },
+        {
+            "id": 56,
+            "name": "NeckYaw Link",
+            "parentId": 47,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0.5,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "id": 58,
+            "name": "Head",
+            "parentId": 56,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 60,
+            "name": "Neck Joint",
+            "parentId": 58,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.08624999970197678,
+                    "y": 0.08624999970197678,
+                    "z": 0.08624999970197678
+                }
+            },
+            "type": "Sphere"
+        },
+        {
+            "color": "#ef7d22",
+            "id": 61,
+            "name": "Skull",
+            "parentId": 58,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0.11659999191761017,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.18700000643730164,
+                    "y": 0.20679999887943268,
+                    "z": 0.1671999990940094
+                }
+            },
+            "type": "Sphere"
+        },
+        {
+            "color": "#1d2024",
+            "id": 62,
+            "name": "Visor",
+            "parentId": 58,
+            "transform": {
+                "position": {
+                    "x": 0.04399999976158142,
+                    "y": 0.12759999930858612,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.10999999940395355,
+                    "y": 0.06599999964237213,
+                    "z": 0.1363999992609024
+                }
+            },
+            "type": "Sphere"
+        },
+        {
+            "color": "#c9ced6",
+            "id": 63,
+            "name": "Left Eye",
+            "parentId": 58,
+            "transform": {
+                "position": {
+                    "x": 0.09459999948740005,
+                    "y": 0.13199999928474426,
+                    "z": -0.028599997982382774
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.014299998991191387,
+                    "y": 0.014299998991191387,
+                    "z": 0.014299998991191387
+                }
+            },
+            "type": "Sphere"
+        },
+        {
+            "color": "#c9ced6",
+            "id": 64,
+            "name": "Right Eye",
+            "parentId": 58,
+            "transform": {
+                "position": {
+                    "x": 0.09459999948740005,
+                    "y": 0.13199999928474426,
+                    "z": 0.028599997982382774
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.014299998991191387,
+                    "y": 0.014299998991191387,
+                    "z": 0.014299998991191387
+                }
+            },
+            "type": "Sphere"
+        },
+        {
+            "id": 65,
+            "name": "LShoulderPitch Link",
+            "parentId": 47,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0.4000000059604645,
+                    "z": -0.20000000298023224
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "id": 67,
+            "name": "LShoulderRoll Link",
+            "parentId": 65,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "id": 69,
+            "name": "Left Upper Arm",
+            "parentId": 67,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 71,
+            "name": "Shoulder",
+            "parentId": 69,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.11699999868869781,
+                    "y": 0.11699999868869781,
+                    "z": 0.11699999868869781
+                }
+            },
+            "type": "Sphere"
+        },
+        {
+            "color": "#ef7d22",
+            "id": 72,
+            "name": "Upper Arm",
+            "parentId": 69,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.1629999876022339,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 180,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.09000000357627869,
+                    "y": 0.2540000081062317,
+                    "z": 0.09000000357627869
+                }
+            },
+            "type": "Cylinder"
+        },
+        {
+            "id": 73,
+            "name": "Left Forearm",
+            "parentId": 69,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.28999999165534973,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 75,
+            "name": "Elbow",
+            "parentId": 73,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.09200000017881393,
+                    "y": 0.09200000017881393,
+                    "z": 0.09200000017881393
+                }
+            },
+            "type": "Sphere"
+        },
+        {
+            "color": "#ef7d22",
+            "id": 76,
+            "name": "Forearm",
+            "parentId": 73,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.125,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 180,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.07999999821186066,
+                    "y": 0.25,
+                    "z": 0.07999999821186066
+                }
+            },
+            "type": "Cylinder"
+        },
+        {
+            "id": 77,
+            "name": "LWristYaw Link",
+            "parentId": 73,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.25,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "id": 79,
+            "name": "Left Hand",
+            "parentId": 77,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 81,
+            "name": "Wrist",
+            "parentId": 79,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.06800000369548798,
+                    "y": 0.06800000369548798,
+                    "z": 0.06800000369548798
+                }
+            },
+            "type": "Sphere"
+        },
+        {
+            "color": "#ef7d22",
+            "id": 82,
+            "name": "Palm",
+            "parentId": 79,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.03824999928474426,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.07649999856948853,
+                    "y": 0.07649999856948853,
+                    "z": 0.029069999232888222
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 83,
+            "name": "Left Hand TCP",
+            "parentId": 79,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.12325000017881393,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "id": 84,
+            "name": "Left Index",
+            "parentId": 79,
+            "transform": {
+                "position": {
+                    "x": 0.028687499463558197,
+                    "y": -0.07649999856948853,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 85,
+            "name": "Phalanx 1",
+            "parentId": 84,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.02442687563598156,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.016064999625086784,
+                    "y": 0.045922525227069855,
+                    "z": 0.023256000131368637
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 86,
+            "name": "Left Index Tip",
+            "parentId": 84,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.04885375127196312,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 87,
+            "name": "Phalanx 2",
+            "parentId": 86,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.01998562552034855,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.014779799617826939,
+                    "y": 0.03757297620177269,
+                    "z": 0.020930400118231773
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 90,
+            "name": "Left Middle",
+            "parentId": 79,
+            "transform": {
+                "position": {
+                    "x": 0.009562499821186066,
+                    "y": -0.07649999856948853,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 91,
+            "name": "Phalanx 1",
+            "parentId": 90,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.025712499395012856,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.016064999625086784,
+                    "y": 0.04833950102329254,
+                    "z": 0.023256000131368637
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 92,
+            "name": "Left Middle Tip",
+            "parentId": 90,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.05142499879002571,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 93,
+            "name": "Phalanx 2",
+            "parentId": 92,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.021037500351667404,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.014779799617826939,
+                    "y": 0.039550501853227615,
+                    "z": 0.020930400118231773
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 96,
+            "name": "Left Ring",
+            "parentId": 79,
+            "transform": {
+                "position": {
+                    "x": -0.009562499821186066,
+                    "y": -0.07649999856948853,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 97,
+            "name": "Phalanx 1",
+            "parentId": 96,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.02442687563598156,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.016064999625086784,
+                    "y": 0.045922525227069855,
+                    "z": 0.023256000131368637
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 98,
+            "name": "Left Ring Tip",
+            "parentId": 96,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.04885375127196312,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 99,
+            "name": "Phalanx 2",
+            "parentId": 98,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.01998562552034855,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.014779799617826939,
+                    "y": 0.03757297620177269,
+                    "z": 0.020930400118231773
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 102,
+            "name": "Left Little",
+            "parentId": 79,
+            "transform": {
+                "position": {
+                    "x": -0.028687499463558197,
+                    "y": -0.07649999856948853,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 103,
+            "name": "Phalanx 1",
+            "parentId": 102,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.020570000633597374,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.016064999625086784,
+                    "y": 0.03867160156369209,
+                    "z": 0.023256000131368637
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 104,
+            "name": "Left Little Tip",
+            "parentId": 102,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.04114000126719475,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 105,
+            "name": "Phalanx 2",
+            "parentId": 104,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.016829999163746834,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.014779799617826939,
+                    "y": 0.03164039924740791,
+                    "z": 0.020930400118231773
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 108,
+            "name": "Left Thumb",
+            "parentId": 79,
+            "transform": {
+                "position": {
+                    "x": 0.03824999928474426,
+                    "y": -0.022949999198317528,
+                    "z": 0.008720999583601952
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 40
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 109,
+            "name": "Thumb 1",
+            "parentId": 108,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.019634999334812164,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.01686825044453144,
+                    "y": 0.03691380098462105,
+                    "z": 0.023256000131368637
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 110,
+            "name": "Left Thumb Tip",
+            "parentId": 108,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.03926999866962433,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 111,
+            "name": "Thumb 2",
+            "parentId": 110,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.019634999334812164,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.016064999625086784,
+                    "y": 0.03691380098462105,
+                    "z": 0.020930400118231773
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 114,
+            "name": "RShoulderPitch Link",
+            "parentId": 47,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0.4000000059604645,
+                    "z": 0.20000000298023224
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "id": 116,
+            "name": "RShoulderRoll Link",
+            "parentId": 114,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "id": 118,
+            "name": "Right Upper Arm",
+            "parentId": 116,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 120,
+            "name": "Shoulder",
+            "parentId": 118,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.11699999868869781,
+                    "y": 0.11699999868869781,
+                    "z": 0.11699999868869781
+                }
+            },
+            "type": "Sphere"
+        },
+        {
+            "color": "#ef7d22",
+            "id": 121,
+            "name": "Upper Arm",
+            "parentId": 118,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.1629999876022339,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 180,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.09000000357627869,
+                    "y": 0.2540000081062317,
+                    "z": 0.09000000357627869
+                }
+            },
+            "type": "Cylinder"
+        },
+        {
+            "id": 122,
+            "name": "Right Forearm",
+            "parentId": 118,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.28999999165534973,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 124,
+            "name": "Elbow",
+            "parentId": 122,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.09200000017881393,
+                    "y": 0.09200000017881393,
+                    "z": 0.09200000017881393
+                }
+            },
+            "type": "Sphere"
+        },
+        {
+            "color": "#ef7d22",
+            "id": 125,
+            "name": "Forearm",
+            "parentId": 122,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.125,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 180,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.07999999821186066,
+                    "y": 0.25,
+                    "z": 0.07999999821186066
+                }
+            },
+            "type": "Cylinder"
+        },
+        {
+            "id": 126,
+            "name": "RWristYaw Link",
+            "parentId": 122,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.25,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "id": 128,
+            "name": "Right Hand",
+            "parentId": 126,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 130,
+            "name": "Wrist",
+            "parentId": 128,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.06800000369548798,
+                    "y": 0.06800000369548798,
+                    "z": 0.06800000369548798
+                }
+            },
+            "type": "Sphere"
+        },
+        {
+            "color": "#ef7d22",
+            "id": 131,
+            "name": "Palm",
+            "parentId": 128,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.03824999928474426,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.07649999856948853,
+                    "y": 0.07649999856948853,
+                    "z": 0.029069999232888222
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 132,
+            "name": "Right Hand TCP",
+            "parentId": 128,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.12325000017881393,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "id": 133,
+            "name": "Right Index",
+            "parentId": 128,
+            "transform": {
+                "position": {
+                    "x": 0.028687499463558197,
+                    "y": -0.07649999856948853,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 134,
+            "name": "Phalanx 1",
+            "parentId": 133,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.02442687563598156,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.016064999625086784,
+                    "y": 0.045922525227069855,
+                    "z": 0.023256000131368637
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 135,
+            "name": "Right Index Tip",
+            "parentId": 133,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.04885375127196312,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 136,
+            "name": "Phalanx 2",
+            "parentId": 135,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.01998562552034855,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.014779799617826939,
+                    "y": 0.03757297620177269,
+                    "z": 0.020930400118231773
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 139,
+            "name": "Right Middle",
+            "parentId": 128,
+            "transform": {
+                "position": {
+                    "x": 0.009562499821186066,
+                    "y": -0.07649999856948853,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 140,
+            "name": "Phalanx 1",
+            "parentId": 139,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.025712499395012856,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.016064999625086784,
+                    "y": 0.04833950102329254,
+                    "z": 0.023256000131368637
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 141,
+            "name": "Right Middle Tip",
+            "parentId": 139,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.05142499879002571,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 142,
+            "name": "Phalanx 2",
+            "parentId": 141,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.021037500351667404,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.014779799617826939,
+                    "y": 0.039550501853227615,
+                    "z": 0.020930400118231773
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 145,
+            "name": "Right Ring",
+            "parentId": 128,
+            "transform": {
+                "position": {
+                    "x": -0.009562499821186066,
+                    "y": -0.07649999856948853,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 146,
+            "name": "Phalanx 1",
+            "parentId": 145,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.02442687563598156,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.016064999625086784,
+                    "y": 0.045922525227069855,
+                    "z": 0.023256000131368637
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 147,
+            "name": "Right Ring Tip",
+            "parentId": 145,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.04885375127196312,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 148,
+            "name": "Phalanx 2",
+            "parentId": 147,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.01998562552034855,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.014779799617826939,
+                    "y": 0.03757297620177269,
+                    "z": 0.020930400118231773
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 151,
+            "name": "Right Little",
+            "parentId": 128,
+            "transform": {
+                "position": {
+                    "x": -0.028687499463558197,
+                    "y": -0.07649999856948853,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 152,
+            "name": "Phalanx 1",
+            "parentId": 151,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.020570000633597374,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.016064999625086784,
+                    "y": 0.03867160156369209,
+                    "z": 0.023256000131368637
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 153,
+            "name": "Right Little Tip",
+            "parentId": 151,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.04114000126719475,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 154,
+            "name": "Phalanx 2",
+            "parentId": 153,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.016829999163746834,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.014779799617826939,
+                    "y": 0.03164039924740791,
+                    "z": 0.020930400118231773
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 157,
+            "name": "Right Thumb",
+            "parentId": 128,
+            "transform": {
+                "position": {
+                    "x": 0.03824999928474426,
+                    "y": -0.022949999198317528,
+                    "z": -0.008720999583601952
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 40
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 158,
+            "name": "Thumb 1",
+            "parentId": 157,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.019634999334812164,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.01686825044453144,
+                    "y": 0.03691380098462105,
+                    "z": 0.023256000131368637
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 159,
+            "name": "Right Thumb Tip",
+            "parentId": 157,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.03926999866962433,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#363a41",
+            "id": 160,
+            "name": "Thumb 2",
+            "parentId": 159,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": -0.019634999334812164,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.016064999625086784,
+                    "y": 0.03691380098462105,
+                    "z": 0.020930400118231773
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 218,
+            "name": "Floor Spots",
+            "parentId": -1,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "id": 219,
+            "name": "Spot A",
+            "parentId": 218,
+            "transform": {
+                "position": {
+                    "x": 2,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": -90,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#3a8dde",
+            "id": 220,
+            "name": "Pad",
+            "opacity": 0.6000000238418579,
+            "parentId": 219,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0.003000000026077032,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.5,
+                    "y": 0.006000000052154064,
+                    "z": 0.5
+                }
+            },
+            "type": "Cylinder"
+        },
+        {
+            "color": "#f2b134",
+            "id": 221,
+            "name": "Arrow",
+            "parentId": 219,
+            "transform": {
+                "position": {
+                    "x": 0.1599999964237213,
+                    "y": 0.00800000037997961,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.1599999964237213,
+                    "y": 0.006000000052154064,
+                    "z": 0.05000000074505806
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 222,
+            "name": "Spot B",
+            "parentId": 218,
+            "transform": {
+                "position": {
+                    "x": 2,
+                    "y": 0,
+                    "z": 2
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 180,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#3a8dde",
+            "id": 223,
+            "name": "Pad",
+            "opacity": 0.6000000238418579,
+            "parentId": 222,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0.003000000026077032,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.5,
+                    "y": 0.006000000052154064,
+                    "z": 0.5
+                }
+            },
+            "type": "Cylinder"
+        },
+        {
+            "color": "#f2b134",
+            "id": 224,
+            "name": "Arrow",
+            "parentId": 222,
+            "transform": {
+                "position": {
+                    "x": 0.1599999964237213,
+                    "y": 0.00800000037997961,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.1599999964237213,
+                    "y": 0.006000000052154064,
+                    "z": 0.05000000074505806
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 225,
+            "name": "Spot C",
+            "parentId": 218,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 2
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 90,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#3a8dde",
+            "id": 226,
+            "name": "Pad",
+            "opacity": 0.6000000238418579,
+            "parentId": 225,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0.003000000026077032,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.5,
+                    "y": 0.006000000052154064,
+                    "z": 0.5
+                }
+            },
+            "type": "Cylinder"
+        },
+        {
+            "color": "#f2b134",
+            "id": 227,
+            "name": "Arrow",
+            "parentId": 225,
+            "transform": {
+                "position": {
+                    "x": 0.1599999964237213,
+                    "y": 0.00800000037997961,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.1599999964237213,
+                    "y": 0.006000000052154064,
+                    "z": 0.05000000074505806
+                }
+            },
+            "type": "Cube"
+        },
+        {
+            "id": 228,
+            "name": "Spot D",
+            "parentId": 218,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "type": "ImportedMesh"
+        },
+        {
+            "color": "#3a8dde",
+            "id": 229,
+            "name": "Pad",
+            "opacity": 0.6000000238418579,
+            "parentId": 228,
+            "transform": {
+                "position": {
+                    "x": 0,
+                    "y": 0.003000000026077032,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.5,
+                    "y": 0.006000000052154064,
+                    "z": 0.5
+                }
+            },
+            "type": "Cylinder"
+        },
+        {
+            "color": "#f2b134",
+            "id": 230,
+            "name": "Arrow",
+            "parentId": 228,
+            "transform": {
+                "position": {
+                    "x": 0.1599999964237213,
+                    "y": 0.00800000037997961,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.1599999964237213,
+                    "y": 0.006000000052154064,
+                    "z": 0.05000000074505806
+                }
+            },
+            "type": "Cube"
+        }
+    ],
+    "poses": [
+        {
+            "id": 193,
+            "name": "Humanoid Home",
+            "values": [
+                {
+                    "jointId": 6,
+                    "value": 0
+                },
+                {
+                    "jointId": 8,
+                    "value": 0
+                },
+                {
+                    "jointId": 10,
+                    "value": 0
+                },
+                {
+                    "jointId": 14,
+                    "value": 0
+                },
+                {
+                    "jointId": 18,
+                    "value": 0
+                },
+                {
+                    "jointId": 20,
+                    "value": 0
+                },
+                {
+                    "jointId": 26,
+                    "value": 0
+                },
+                {
+                    "jointId": 28,
+                    "value": 0
+                },
+                {
+                    "jointId": 30,
+                    "value": 0
+                },
+                {
+                    "jointId": 34,
+                    "value": 0
+                },
+                {
+                    "jointId": 38,
+                    "value": 0
+                },
+                {
+                    "jointId": 40,
+                    "value": 0
+                },
+                {
+                    "jointId": 46,
+                    "value": 0
+                },
+                {
+                    "jointId": 48,
+                    "value": 0
+                },
+                {
+                    "jointId": 57,
+                    "value": 0
+                },
+                {
+                    "jointId": 59,
+                    "value": 0
+                },
+                {
+                    "jointId": 66,
+                    "value": 0
+                },
+                {
+                    "jointId": 68,
+                    "value": 0
+                },
+                {
+                    "jointId": 70,
+                    "value": 0
+                },
+                {
+                    "jointId": 74,
+                    "value": 0
+                },
+                {
+                    "jointId": 78,
+                    "value": 0
+                },
+                {
+                    "jointId": 80,
+                    "value": 0
+                },
+                {
+                    "jointId": 115,
+                    "value": 0
+                },
+                {
+                    "jointId": 117,
+                    "value": 0
+                },
+                {
+                    "jointId": 119,
+                    "value": 0
+                },
+                {
+                    "jointId": 123,
+                    "value": 0
+                },
+                {
+                    "jointId": 127,
+                    "value": 0
+                },
+                {
+                    "jointId": 129,
+                    "value": 0
+                }
+            ]
+        },
+        {
+            "id": 194,
+            "name": "Humanoid T-Pose",
+            "values": [
+                {
+                    "jointId": 6,
+                    "value": 0
+                },
+                {
+                    "jointId": 8,
+                    "value": 0
+                },
+                {
+                    "jointId": 10,
+                    "value": 0
+                },
+                {
+                    "jointId": 14,
+                    "value": 0
+                },
+                {
+                    "jointId": 18,
+                    "value": 0
+                },
+                {
+                    "jointId": 20,
+                    "value": 0
+                },
+                {
+                    "jointId": 26,
+                    "value": 0
+                },
+                {
+                    "jointId": 28,
+                    "value": 0
+                },
+                {
+                    "jointId": 30,
+                    "value": 0
+                },
+                {
+                    "jointId": 34,
+                    "value": 0
+                },
+                {
+                    "jointId": 38,
+                    "value": 0
+                },
+                {
+                    "jointId": 40,
+                    "value": 0
+                },
+                {
+                    "jointId": 46,
+                    "value": 0
+                },
+                {
+                    "jointId": 48,
+                    "value": 0
+                },
+                {
+                    "jointId": 57,
+                    "value": 0
+                },
+                {
+                    "jointId": 59,
+                    "value": 0
+                },
+                {
+                    "jointId": 66,
+                    "value": 0
+                },
+                {
+                    "jointId": 68,
+                    "value": 90
+                },
+                {
+                    "jointId": 70,
+                    "value": 0
+                },
+                {
+                    "jointId": 74,
+                    "value": 0
+                },
+                {
+                    "jointId": 78,
+                    "value": 0
+                },
+                {
+                    "jointId": 80,
+                    "value": 0
+                },
+                {
+                    "jointId": 115,
+                    "value": 0
+                },
+                {
+                    "jointId": 117,
+                    "value": 90
+                },
+                {
+                    "jointId": 119,
+                    "value": 0
+                },
+                {
+                    "jointId": 123,
+                    "value": 0
+                },
+                {
+                    "jointId": 127,
+                    "value": 0
+                },
+                {
+                    "jointId": 129,
+                    "value": 0
+                }
+            ]
+        },
+        {
+            "id": 195,
+            "name": "Humanoid Wave A",
+            "values": [
+                {
+                    "jointId": 6,
+                    "value": 0
+                },
+                {
+                    "jointId": 8,
+                    "value": 0
+                },
+                {
+                    "jointId": 10,
+                    "value": 0
+                },
+                {
+                    "jointId": 14,
+                    "value": 0
+                },
+                {
+                    "jointId": 18,
+                    "value": 0
+                },
+                {
+                    "jointId": 20,
+                    "value": 0
+                },
+                {
+                    "jointId": 26,
+                    "value": 0
+                },
+                {
+                    "jointId": 28,
+                    "value": 0
+                },
+                {
+                    "jointId": 30,
+                    "value": 0
+                },
+                {
+                    "jointId": 34,
+                    "value": 0
+                },
+                {
+                    "jointId": 38,
+                    "value": 0
+                },
+                {
+                    "jointId": 40,
+                    "value": 0
+                },
+                {
+                    "jointId": 46,
+                    "value": 0
+                },
+                {
+                    "jointId": 48,
+                    "value": 0
+                },
+                {
+                    "jointId": 57,
+                    "value": -25
+                },
+                {
+                    "jointId": 59,
+                    "value": 0
+                },
+                {
+                    "jointId": 66,
+                    "value": 0
+                },
+                {
+                    "jointId": 68,
+                    "value": 0
+                },
+                {
+                    "jointId": 70,
+                    "value": 0
+                },
+                {
+                    "jointId": 74,
+                    "value": 0
+                },
+                {
+                    "jointId": 78,
+                    "value": 0
+                },
+                {
+                    "jointId": 80,
+                    "value": 0
+                },
+                {
+                    "jointId": 115,
+                    "value": 0
+                },
+                {
+                    "jointId": 117,
+                    "value": 150
+                },
+                {
+                    "jointId": 119,
+                    "value": 0
+                },
+                {
+                    "jointId": 123,
+                    "value": 35
+                },
+                {
+                    "jointId": 127,
+                    "value": 0
+                },
+                {
+                    "jointId": 129,
+                    "value": 0
+                }
+            ]
+        },
+        {
+            "id": 196,
+            "name": "Humanoid Wave B",
+            "values": [
+                {
+                    "jointId": 6,
+                    "value": 0
+                },
+                {
+                    "jointId": 8,
+                    "value": 0
+                },
+                {
+                    "jointId": 10,
+                    "value": 0
+                },
+                {
+                    "jointId": 14,
+                    "value": 0
+                },
+                {
+                    "jointId": 18,
+                    "value": 0
+                },
+                {
+                    "jointId": 20,
+                    "value": 0
+                },
+                {
+                    "jointId": 26,
+                    "value": 0
+                },
+                {
+                    "jointId": 28,
+                    "value": 0
+                },
+                {
+                    "jointId": 30,
+                    "value": 0
+                },
+                {
+                    "jointId": 34,
+                    "value": 0
+                },
+                {
+                    "jointId": 38,
+                    "value": 0
+                },
+                {
+                    "jointId": 40,
+                    "value": 0
+                },
+                {
+                    "jointId": 46,
+                    "value": 0
+                },
+                {
+                    "jointId": 48,
+                    "value": 0
+                },
+                {
+                    "jointId": 57,
+                    "value": -25
+                },
+                {
+                    "jointId": 59,
+                    "value": 0
+                },
+                {
+                    "jointId": 66,
+                    "value": 0
+                },
+                {
+                    "jointId": 68,
+                    "value": 0
+                },
+                {
+                    "jointId": 70,
+                    "value": 0
+                },
+                {
+                    "jointId": 74,
+                    "value": 0
+                },
+                {
+                    "jointId": 78,
+                    "value": 0
+                },
+                {
+                    "jointId": 80,
+                    "value": 0
+                },
+                {
+                    "jointId": 115,
+                    "value": 0
+                },
+                {
+                    "jointId": 117,
+                    "value": 115
+                },
+                {
+                    "jointId": 119,
+                    "value": 0
+                },
+                {
+                    "jointId": 123,
+                    "value": 35
+                },
+                {
+                    "jointId": 127,
+                    "value": 0
+                },
+                {
+                    "jointId": 129,
+                    "value": 0
+                }
+            ]
+        },
+        {
+            "id": 197,
+            "name": "Humanoid Step L",
+            "values": [
+                {
+                    "jointId": 6,
+                    "value": 0
+                },
+                {
+                    "jointId": 8,
+                    "value": 0
+                },
+                {
+                    "jointId": 10,
+                    "value": 50
+                },
+                {
+                    "jointId": 14,
+                    "value": 75
+                },
+                {
+                    "jointId": 18,
+                    "value": 25
+                },
+                {
+                    "jointId": 20,
+                    "value": 0
+                },
+                {
+                    "jointId": 26,
+                    "value": 0
+                },
+                {
+                    "jointId": 28,
+                    "value": 0
+                },
+                {
+                    "jointId": 30,
+                    "value": 0
+                },
+                {
+                    "jointId": 34,
+                    "value": 0
+                },
+                {
+                    "jointId": 38,
+                    "value": 0
+                },
+                {
+                    "jointId": 40,
+                    "value": 0
+                },
+                {
+                    "jointId": 46,
+                    "value": 0
+                },
+                {
+                    "jointId": 48,
+                    "value": 0
+                },
+                {
+                    "jointId": 57,
+                    "value": 0
+                },
+                {
+                    "jointId": 59,
+                    "value": 0
+                },
+                {
+                    "jointId": 66,
+                    "value": -20
+                },
+                {
+                    "jointId": 68,
+                    "value": 0
+                },
+                {
+                    "jointId": 70,
+                    "value": 0
+                },
+                {
+                    "jointId": 74,
+                    "value": 20
+                },
+                {
+                    "jointId": 78,
+                    "value": 0
+                },
+                {
+                    "jointId": 80,
+                    "value": 0
+                },
+                {
+                    "jointId": 115,
+                    "value": 30
+                },
+                {
+                    "jointId": 117,
+                    "value": 0
+                },
+                {
+                    "jointId": 119,
+                    "value": 0
+                },
+                {
+                    "jointId": 123,
+                    "value": 20
+                },
+                {
+                    "jointId": 127,
+                    "value": 0
+                },
+                {
+                    "jointId": 129,
+                    "value": 0
+                }
+            ]
+        },
+        {
+            "id": 198,
+            "name": "Humanoid Step R",
+            "values": [
+                {
+                    "jointId": 6,
+                    "value": 0
+                },
+                {
+                    "jointId": 8,
+                    "value": 0
+                },
+                {
+                    "jointId": 10,
+                    "value": 0
+                },
+                {
+                    "jointId": 14,
+                    "value": 0
+                },
+                {
+                    "jointId": 18,
+                    "value": 0
+                },
+                {
+                    "jointId": 20,
+                    "value": 0
+                },
+                {
+                    "jointId": 26,
+                    "value": 0
+                },
+                {
+                    "jointId": 28,
+                    "value": 0
+                },
+                {
+                    "jointId": 30,
+                    "value": 50
+                },
+                {
+                    "jointId": 34,
+                    "value": 75
+                },
+                {
+                    "jointId": 38,
+                    "value": 25
+                },
+                {
+                    "jointId": 40,
+                    "value": 0
+                },
+                {
+                    "jointId": 46,
+                    "value": 0
+                },
+                {
+                    "jointId": 48,
+                    "value": 0
+                },
+                {
+                    "jointId": 57,
+                    "value": 0
+                },
+                {
+                    "jointId": 59,
+                    "value": 0
+                },
+                {
+                    "jointId": 66,
+                    "value": 30
+                },
+                {
+                    "jointId": 68,
+                    "value": 0
+                },
+                {
+                    "jointId": 70,
+                    "value": 0
+                },
+                {
+                    "jointId": 74,
+                    "value": 20
+                },
+                {
+                    "jointId": 78,
+                    "value": 0
+                },
+                {
+                    "jointId": 80,
+                    "value": 0
+                },
+                {
+                    "jointId": 115,
+                    "value": -20
+                },
+                {
+                    "jointId": 117,
+                    "value": 0
+                },
+                {
+                    "jointId": 119,
+                    "value": 0
+                },
+                {
+                    "jointId": 123,
+                    "value": 20
+                },
+                {
+                    "jointId": 127,
+                    "value": 0
+                },
+                {
+                    "jointId": 129,
+                    "value": 0
+                }
+            ]
+        },
+        {
+            "id": 199,
+            "name": "Humanoid Bow",
+            "values": [
+                {
+                    "jointId": 6,
+                    "value": 0
+                },
+                {
+                    "jointId": 8,
+                    "value": 0
+                },
+                {
+                    "jointId": 10,
+                    "value": 0
+                },
+                {
+                    "jointId": 14,
+                    "value": 0
+                },
+                {
+                    "jointId": 18,
+                    "value": 0
+                },
+                {
+                    "jointId": 20,
+                    "value": 0
+                },
+                {
+                    "jointId": 26,
+                    "value": 0
+                },
+                {
+                    "jointId": 28,
+                    "value": 0
+                },
+                {
+                    "jointId": 30,
+                    "value": 0
+                },
+                {
+                    "jointId": 34,
+                    "value": 0
+                },
+                {
+                    "jointId": 38,
+                    "value": 0
+                },
+                {
+                    "jointId": 40,
+                    "value": 0
+                },
+                {
+                    "jointId": 46,
+                    "value": 0
+                },
+                {
+                    "jointId": 48,
+                    "value": 30
+                },
+                {
+                    "jointId": 57,
+                    "value": 0
+                },
+                {
+                    "jointId": 59,
+                    "value": 20
+                },
+                {
+                    "jointId": 66,
+                    "value": 0
+                },
+                {
+                    "jointId": 68,
+                    "value": 0
+                },
+                {
+                    "jointId": 70,
+                    "value": 0
+                },
+                {
+                    "jointId": 74,
+                    "value": 0
+                },
+                {
+                    "jointId": 78,
+                    "value": 0
+                },
+                {
+                    "jointId": 80,
+                    "value": 0
+                },
+                {
+                    "jointId": 115,
+                    "value": 0
+                },
+                {
+                    "jointId": 117,
+                    "value": 0
+                },
+                {
+                    "jointId": 119,
+                    "value": 0
+                },
+                {
+                    "jointId": 123,
+                    "value": 0
+                },
+                {
+                    "jointId": 127,
+                    "value": 0
+                },
+                {
+                    "jointId": 129,
+                    "value": 0
+                }
+            ]
+        }
+    ],
+    "rigidBodies": [
+    ],
+    "sequences": [
+        {
+            "enableCondition": "Start",
+            "id": 243,
+            "loop": true,
+            "name": "Patrol",
+            "operations": [
+                {
+                    "actuatorId": -1,
+                    "condition": "",
+                    "duration": "",
+                    "id": 233,
+                    "name": "To A",
+                    "onFinish": "",
+                    "onStart": "",
+                    "poseId": -1,
+                    "predecessors": [
+                    ],
+                    "startCondition": "",
+                    "target": "",
+                    "type": "Walk",
+                    "velocity": "Speed",
+                    "walkToId": 219,
+                    "walkerId": 1
+                },
+                {
+                    "actuatorId": -1,
+                    "condition": "",
+                    "duration": "",
+                    "id": 234,
+                    "name": "Wave",
+                    "onFinish": "",
+                    "onStart": "",
+                    "poseId": 195,
+                    "predecessors": [
+                        233
+                    ],
+                    "startCondition": "",
+                    "target": "",
+                    "type": "MoveToPose",
+                    "velocity": ""
+                },
+                {
+                    "actuatorId": -1,
+                    "condition": "",
+                    "duration": "",
+                    "id": 235,
+                    "name": "Wave",
+                    "onFinish": "",
+                    "onStart": "",
+                    "poseId": 196,
+                    "predecessors": [
+                        234
+                    ],
+                    "startCondition": "",
+                    "target": "",
+                    "type": "MoveToPose",
+                    "velocity": ""
+                },
+                {
+                    "actuatorId": -1,
+                    "condition": "",
+                    "duration": "",
+                    "id": 236,
+                    "name": "Wave",
+                    "onFinish": "",
+                    "onStart": "",
+                    "poseId": 195,
+                    "predecessors": [
+                        235
+                    ],
+                    "startCondition": "",
+                    "target": "",
+                    "type": "MoveToPose",
+                    "velocity": ""
+                },
+                {
+                    "actuatorId": -1,
+                    "condition": "",
+                    "duration": "",
+                    "id": 237,
+                    "name": "Home",
+                    "onFinish": "",
+                    "onStart": "",
+                    "poseId": 193,
+                    "predecessors": [
+                        236
+                    ],
+                    "startCondition": "",
+                    "target": "",
+                    "type": "MoveToPose",
+                    "velocity": ""
+                },
+                {
+                    "actuatorId": -1,
+                    "condition": "",
+                    "duration": "",
+                    "id": 238,
+                    "name": "To B",
+                    "onFinish": "",
+                    "onStart": "",
+                    "poseId": -1,
+                    "predecessors": [
+                        237
+                    ],
+                    "startCondition": "",
+                    "target": "",
+                    "type": "Walk",
+                    "velocity": "Speed",
+                    "walkToId": 222,
+                    "walkerId": 1
+                },
+                {
+                    "actuatorId": -1,
+                    "condition": "",
+                    "duration": "",
+                    "id": 239,
+                    "name": "To C",
+                    "onFinish": "",
+                    "onStart": "",
+                    "poseId": -1,
+                    "predecessors": [
+                        238
+                    ],
+                    "startCondition": "",
+                    "target": "",
+                    "type": "Walk",
+                    "velocity": "Speed",
+                    "walkToId": 225,
+                    "walkerId": 1
+                },
+                {
+                    "actuatorId": -1,
+                    "condition": "",
+                    "duration": "",
+                    "id": 240,
+                    "name": "Bow",
+                    "onFinish": "",
+                    "onStart": "",
+                    "poseId": 199,
+                    "predecessors": [
+                        239
+                    ],
+                    "startCondition": "",
+                    "target": "",
+                    "type": "MoveToPose",
+                    "velocity": ""
+                },
+                {
+                    "actuatorId": -1,
+                    "condition": "",
+                    "duration": "",
+                    "id": 241,
+                    "name": "Home",
+                    "onFinish": "",
+                    "onStart": "",
+                    "poseId": 193,
+                    "predecessors": [
+                        240
+                    ],
+                    "startCondition": "",
+                    "target": "",
+                    "type": "MoveToPose",
+                    "velocity": ""
+                },
+                {
+                    "actuatorId": -1,
+                    "condition": "",
+                    "duration": "",
+                    "id": 242,
+                    "name": "To D",
+                    "onFinish": "",
+                    "onStart": "",
+                    "poseId": -1,
+                    "predecessors": [
+                        241
+                    ],
+                    "startCondition": "",
+                    "target": "",
+                    "type": "Walk",
+                    "velocity": "Speed",
+                    "walkToId": 228,
+                    "walkerId": 1
+                }
+            ],
+            "startCondition": ""
+        }
+    ],
+    "signals": [
+        {
+            "description": "Switch on to patrol; off stops after the current operation",
+            "expression": "",
+            "id": 231,
+            "initialValue": 0,
+            "kind": "Input",
+            "name": "Start",
+            "type": "Bool"
+        },
+        {
+            "description": "Walking speed, m/s",
+            "expression": "",
+            "id": 232,
+            "initialValue": 0.45,
+            "kind": "Internal",
+            "name": "Speed",
+            "type": "Real"
+        }
+    ],
+    "version": 3
+}

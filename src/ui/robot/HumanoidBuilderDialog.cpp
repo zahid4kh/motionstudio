@@ -191,8 +191,9 @@ HumanoidBuilderDialog::HumanoidBuilderDialog(QWidget* parent)
 
     fl->addWidget(subheading("MOTION"));
     m_demo = new QCheckBox("Demo poses and a looping sequence");
-    m_demo->setToolTip("Adds T-Pose, Wave, Step and Bow poses and a sequence that runs through them on Play. "
-                       "Without it you get the Home pose only.");
+    m_demo->setToolTip("Adds T-Pose, Wave, Step and Bow poses and a sequence that runs through them on Play; on "
+                       "legs it also walks out, turns round and walks back. Without it you get the Home pose only.\n"
+                       "Programs can walk it too (Tools › Robot API).");
     fl->addWidget(m_demo);
     m_problems = new QLabel;
     m_problems->setObjectName("warningText");

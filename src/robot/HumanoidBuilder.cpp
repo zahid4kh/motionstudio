@@ -1,4 +1,5 @@
 #include "HumanoidBuilder.h"
+#include "Gait.h"
 #include "automation/Automation.h"
 #include "scene/SceneGraph.h"
 #include <QJsonArray>
@@ -6,6 +7,7 @@
 #include <QQuaternion>
 #include <algorithm>
 #include <cmath>
+#include <tuple>
 
 namespace humanoid {
 
@@ -821,6 +823,23 @@ Built build(SceneGraph& scene, Spec spec) {
                 if (prev >= 0) op.predecessors = {prev};
                 prev = op.id;
                 seq.operations.push_back(op);
+            }
+            // On legs that can walk, it then walks out, turns round, walks back and turns to face the way it did
+            if (legs && gait::canWalk(scene, b.root)) {
+                const QString out = QString::number(std::max(0.2, std::round(height(spec) * 6) / 10.0));
+                for (auto [label, forward, turn] : std::initializer_list<std::tuple<const char*, QString, const char*>>{
+                         {"Walk out", out, ""}, {"Turn round", "", "180"}, {"Walk back", out, ""}, {"Turn back", "", "180"}}) {
+                    Operation op;
+                    op.id = scene.allocateId();
+                    op.name = label;
+                    op.type = OperationType::Walk;
+                    op.walkerId = b.root;
+                    op.forward = forward;
+                    op.turn = turn;
+                    op.predecessors = {prev};
+                    prev = op.id;
+                    seq.operations.push_back(op);
+                }
             }
             b.sequence = scene.addSequence(seq);
         }

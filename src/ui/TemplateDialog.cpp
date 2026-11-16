@@ -41,6 +41,15 @@ const QList<TemplateDialog::TemplateInfo> TemplateDialog::s_templates = {
         "bot"
     },
     {
+        "Humanoid Patrol",
+        "A humanoid walks round four spots on the floor with Walk operations, waving at\n"
+        "the first and bowing at the third. Move a spot and it walks there instead;\n"
+        "change Speed to walk faster. Programs can walk it too (Tools › Robot API).\n"
+        "Press Play, then switch Start ON.",
+        ":/templates/humanoid_patrol.mstudio",
+        "footprints"
+    },
+    {
         "Indexing Table",
         "A turntable indexes 90° (target = Table.target + 90), then a press stamps\n"
         "the part and retracts. A derived Safe signal interlocks the table; a counter\n"

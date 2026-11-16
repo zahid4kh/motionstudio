@@ -3429,6 +3429,62 @@ TEST(walkEveryLeggedPreset) {
     }
 }
 
+TEST(walkHumanoidDemoComesBack) {
+    SceneGraph g;
+    const humanoid::Built b = walkingHumanoid(g, true);
+    const Sequence* q = g.getSequence(b.sequence);
+    CHECK(q && std::count_if(q->operations.begin(), q->operations.end(),
+                             [](const Operation& op) { return op.type == OperationType::Walk; }) == 4);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+    AutomationEngine e(&g);
+    CHECK(e.start(nullptr));
+    bool walked = false;
+    for (int i = 0; i < 6000 && e.seqStatus(b.sequence).cycles < 1; ++i) {
+        e.scan(0.016);
+        if (!e.walks().empty()) {
+            walked = true;
+            const gait::Place p = placeNow(g, b.root);
+            CHECK(std::hypot(p.x, p.z) < 1.2);
+        }
+    }
+    CHECK(e.seqStatus(b.sequence).cycles >= 1);
+    CHECK(walked);
+    CHECK(e.warnings().isEmpty());
+    const gait::Place end = placeNow(g, b.root);
+    CHECK_NEAR(end.x, 0, 1e-3);
+    CHECK_NEAR(end.z, 0, 1e-3);
+    CHECK_NEAR(std::fabs(gait::angleDiff(end.heading, 0)), 0, 1e-3);
+}
+
+TEST(walkPatrolTemplateMakesALap) {
+    SceneGraph g;
+    CHECK(ProjectSerializer::load(g, MS_SOURCE_DIR "/templates/humanoid_patrol.mstudio"));
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+    int root = -1, patrol = -1;
+    for (auto& [id, o] : g.allObjects()) if (o.name == "Humanoid" && o.parentId == -1) root = id;
+    for (auto& [id, q] : g.allSequences()) if (q.name == "Patrol") patrol = id;
+    CHECK(root != -1 && patrol != -1);
+    CHECK(gait::canWalk(g, root));
+    AutomationEngine e(&g);
+    CHECK(e.start(nullptr));
+    e.scan(0.016);
+    CHECK(e.walks().empty());                     // waits for Start
+    e.setInput("Start", 1);
+    double far = 0;
+    for (int i = 0; i < 12000 && e.seqStatus(patrol).cycles < 1; ++i) {
+        e.scan(0.016);
+        const gait::Place p = placeNow(g, root);
+        far = std::max(far, std::hypot(p.x - 2, p.z - 2));
+    }
+    CHECK(e.seqStatus(patrol).cycles >= 1);
+    CHECK(e.warnings().isEmpty());
+    CHECK(far > 2.5);                              // it went round the spots
+    const gait::Place end = placeNow(g, root);
+    CHECK_NEAR(end.x, 0, 1e-3);
+    CHECK_NEAR(end.z, 0, 1e-3);
+    std::printf("  a patrol lap in %.1f s\n", e.seqStatus(patrol).lastCycleTime);
+}
+
 TEST(walkRejectsWhatItCantDo) {
     SceneGraph g;
     const humanoid::Built b = walkingHumanoid(g);
