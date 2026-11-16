@@ -280,6 +280,11 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene, MeshPool* pool) {
             if (op.partId != -1)    oo["partId"]    = op.partId;
             if (op.sensorId != -1)  oo["sensorId"]  = op.sensorId;
             if (op.toolId != -1)    oo["toolId"]    = op.toolId;
+            if (op.walkerId != -1)  oo["walkerId"]  = op.walkerId;
+            if (op.walkToId != -1)  oo["walkToId"]  = op.walkToId;
+            if (!op.forward.isEmpty())  oo["forward"]  = op.forward;
+            if (!op.sideways.isEmpty()) oo["sideways"] = op.sideways;
+            if (!op.turn.isEmpty())     oo["turn"]     = op.turn;
             oo["target"]         = op.target;
             oo["velocity"]       = op.velocity;
             oo["duration"]       = op.duration;
@@ -665,6 +670,11 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root, con
             op.partId         = ref(idMap, oo["partId"]);
             op.sensorId       = ref(signalIdMap, oo["sensorId"]);
             op.toolId         = ref(idMap, oo["toolId"]);
+            op.walkerId       = ref(idMap, oo["walkerId"]);
+            op.walkToId       = ref(idMap, oo["walkToId"]);
+            op.forward        = oo["forward"].toString();
+            op.sideways       = oo["sideways"].toString();
+            op.turn           = oo["turn"].toString();
             op.target         = oo["target"].toString();
             op.velocity       = oo["velocity"].toString();
             op.duration       = oo["duration"].toString();

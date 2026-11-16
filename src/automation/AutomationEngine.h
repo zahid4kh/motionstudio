@@ -5,6 +5,7 @@
 #include <QStringList>
 #include <deque>
 #include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <vector>
@@ -14,6 +15,7 @@
 #include "MotionProfile.h"
 #include "../scene/Motor.h"
 #include "../scene/SceneQuery.h"
+#include "../robot/Gait.h"
 
 class SceneGraph;
 
@@ -145,7 +147,22 @@ public:
                                             // tool's orientation, some missing keep theirs
         bool hasRotation() const { return rx || ry || rz; }
     };
-    enum class MotionKind { Joints, JointsToPose, Linear };
+    enum class MotionKind { Joints, JointsToPose, Linear, Walk };
+    // A legged robot walks (see gait::): by distances and a turn from where
+    // it stands, or through points on the floor
+    struct WalkRequest {
+        int  root = -1;                    // the robot: its root object is carried along
+        int  leftFoot = -1, rightFoot = -1;   // -1 = found by name
+        bool path = false;                 // false: forward / left / turn; true: through `points`
+        double forward = 0, left = 0;      // m, in the robot's frame (left is its −Z)
+        double turn = 0;                   // degrees, positive to its left
+        std::vector<QPointF> points;       // x, z (m) in the frame below
+        std::optional<double> heading;     // degrees about +Y, turned to after the points
+        int  frameId = -1;                 // points and heading are in this object's frame (-1 = world)
+        bool fromStart = false;            // ... or in the robot's own frame where the walk starts
+                                           //     (x ahead, z to its right)
+        gait::Params params;
+    };
     struct MotionRequest {
         MotionKind kind = MotionKind::Joints;
         std::map<int, double> joints;   // Joints: joint id → target (deg or m)
@@ -157,6 +174,7 @@ public:
         // Linear: tool speed in m/s (0 = 0.25)
         double speed = 0;
         QString label;                  // what to call it in messages ("moveL")
+        WalkRequest walk;               // Walk
     };
     enum class MotionState { Queued, Running, Done, Failed, Cancelled };
     struct MotionStatus {
@@ -184,6 +202,22 @@ public:
     // Runs an actuator in speed mode at `speed` (deg/s or m/s; 0 stops it),
     // cancelling motions that move its joint
     bool runActuator(int jointId, double speed, QString* error = nullptr);
+    // Ends the walks of the robot at `root` after the step under way, the
+    // feet together, and cancels its queued walks; returns how many walks
+    int  stopWalking(int root);
+    // A walk under way (from a program or a Walk operation), for status and drawing
+    struct WalkView {
+        int    root = -1;
+        int    motion = 0;              // the motion's id; 0 for a Walk operation
+        int    stepsDone = 0, steps = 0;
+        double elapsed = 0, duration = 0;
+        std::vector<gait::Walker::Print> prints;
+        double footLength = 0, footWidth = 0;
+    };
+    std::vector<WalkView> walks() const;
+    // Checks a walk request and makes its walker from where the robot is now
+    // (returns null with an error code and message)
+    std::shared_ptr<gait::Walker> makeWalker(const WalkRequest& w, QString* code, QString* error) const;
     // Where `goal` puts `tool` now (world frame, unscaled)
     QMatrix4x4 goalFrame(int tool, const CartesianGoal& goal) const;
     // Compiles a condition against this run's symbols, and evaluates it on
@@ -242,6 +276,10 @@ private:
         // MoveL: the tool path; to a part, `path.to` follows the part every scan
         LinearPath       path;
         bool             pathWarned = false;
+        // Walk
+        expr::Expression forward, sideways, turn;
+        std::shared_ptr<gait::Walker> walker;
+        double           walkStart = 0;
     };
 
     struct MotionRt {
@@ -252,6 +290,8 @@ private:
         std::vector<std::pair<int, double>> targets;       // Joints / JointsToPose: (actIdx, target)
         std::vector<double> from;
         LinearPath    path;
+        std::shared_ptr<gait::Walker> walker;   // Walk
+        double        walkStart = 0;
     };
 
     struct SeqRt {
@@ -342,6 +382,9 @@ private:
     // path parameter (1 at the end)
     double stepPath(LinearPath& p, kin::Result* result);
     void advanceMotions();
+    // One scan of a walk: the root and the legs where the plan has them now;
+    // false when a foot can't reach (`error` m off)
+    bool stepWalk(gait::Walker& w, double start, double* error, double* progress);
     bool startMotion(MotionRt& m);
     void finishMotion(MotionRt& m, MotionState state, const QString& code = {}, const QString& error = {});
     void holdJoints(const std::vector<int>& joints);

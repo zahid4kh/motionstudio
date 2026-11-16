@@ -147,6 +147,8 @@ std::vector<int> mergeScene(SceneGraph& target, SceneGraph& source, int parentId
             op.gripperId = remap(objects, op.gripperId);
             op.partId = remap(objects, op.partId);
             op.toolId = remap(objects, op.toolId);
+            op.walkerId = remap(objects, op.walkerId);
+            op.walkToId = remap(objects, op.walkToId);
             op.sensorId = remap(signalIds, op.sensorId);
             for (int& p : op.predecessors) p = remap(ops, p);
         }

@@ -5,6 +5,7 @@
 #include "../io/ModbusServer.h"
 #include "../scene/PrimitiveMesh.h"
 #include <QSet>
+#include <QtMath>
 #include <algorithm>
 #include <cmath>
 #include <functional>
@@ -276,6 +277,25 @@ QStringList AutomationEngine::validateAll(const SceneGraph& scene) {
                     chk(where + " speed", op.velocity);
                     break;
                 }
+                case OperationType::Walk: {
+                    QString why;
+                    gait::Legs legs;
+                    // findLegs straightens the legs for a moment and puts them back
+                    if (!scene.getObject(op.walkerId))
+                        errs << where + (op.walkerId == -1 ? ": no robot selected" : ": the robot no longer exists");
+                    else if (!gait::findLegs(const_cast<SceneGraph&>(scene), op.walkerId, &legs, &why))
+                        errs << where + ": " + why;
+                    if (op.walkToId != -1 && !scene.getObject(op.walkToId))
+                        errs << where + ": the place to walk to no longer exists";
+                    else if (op.walkToId == -1 && op.forward.trimmed().isEmpty() && op.sideways.trimmed().isEmpty() &&
+                             op.turn.trimmed().isEmpty())
+                        errs << where + ": nothing to walk: give a distance, a turn or a place";
+                    chk(where + " forward", op.forward);
+                    chk(where + " sideways", op.sideways);
+                    chk(where + " turn", op.turn);
+                    chk(where + " speed", op.velocity);
+                    break;
+                }
             }
             // The part a pose taught on a part is applied to
             if (const Pose* pose = scene.getPose(op.poseId);
@@ -499,6 +519,9 @@ bool AutomationEngine::start(QStringList* errors) {
             o.duration.compile(op.duration, res.r());
             o.condition.compile(op.condition, res.r());
             o.startCond.compile(op.startCondition, res.r());
+            o.forward.compile(op.forward, res.r());
+            o.sideways.compile(op.sideways, res.r());
+            o.turn.compile(op.turn, res.r());
             expr::compileAssignments(op.onStart, res.r(), res.w(), o.onStart);
             expr::compileAssignments(op.onFinish, res.r(), res.w(), o.onFinish);
             for (int p : op.predecessors) {
@@ -845,6 +868,30 @@ void AutomationEngine::startOperation(SeqRt& seq, OpRt& op) {
             planLinearMove(op);
             break;
         }
+        case OperationType::Walk: {
+            WalkRequest w;
+            w.root = op.def.walkerId;
+            if (const SceneObject* to = m_scene->getObject(op.def.walkToId)) {
+                const gait::Place place = gait::placeOf(kin::toolFrame(*m_scene, to->id));
+                w.path = true;
+                w.points = {QPointF(place.x, place.z)};
+                w.heading = qRadiansToDegrees(place.heading);
+                op.status.detail = "walking to " + to->name;
+            } else {
+                w.forward = op.forward.isEmpty() ? 0.0 : op.forward.eval(c);
+                w.left = op.sideways.isEmpty() ? 0.0 : op.sideways.eval(c);
+                w.turn = op.turn.isEmpty() ? 0.0 : op.turn.eval(c);
+                op.status.detail = "walking";
+            }
+            if (!op.velocity.isEmpty()) w.params.speed = std::max(0.0, op.velocity.eval(c));
+            QString code, err;
+            op.walker = makeWalker(w, &code, &err);
+            op.walkStart = m_time;
+            op.pathWarned = false;
+            if (op.walker) op.walker->begin(*m_scene);
+            else m_warnings << QString("%1: %2").arg(op.def.name.isEmpty() ? QString("Walk") : op.def.name, err);
+            break;
+        }
         case OperationType::Release:
             m_holds.erase(std::remove_if(m_holds.begin(), m_holds.end(),
                                          [&](const Hold& h) { return h.gripperId == op.def.gripperId; }),
@@ -905,6 +952,22 @@ bool AutomationEngine::operationFinished(OpRt& op) {
             return true;
         case OperationType::MoveL:
             return stepLinearMove(op);
+        case OperationType::Walk: {
+            if (!op.walker) return true;
+            double error = 0, progress = 0;
+            if (!stepWalk(*op.walker, op.walkStart, &error, &progress) && !op.pathWarned) {
+                op.pathWarned = true;
+                m_warnings << QString("%1: a foot can't reach its spot (%2 mm off)")
+                                  .arg(op.def.name.isEmpty() ? QString("Walk") : op.def.name)
+                                  .arg(error * 1000, 0, 'f', 1);
+            }
+            op.status.progress = progress;
+            const int done = op.walker->stepsDone(m_time + m_dt - op.walkStart), total = op.walker->stepCount();
+            if (total > 0) op.status.detail = QString("step %1 of %2").arg(std::min(done + 1, total)).arg(total);
+            if (progress < 1.0) return false;
+            op.walker.reset();
+            return true;
+        }
     }
     return true;
 }
@@ -1333,6 +1396,14 @@ int AutomationEngine::submitMotion(const MotionRequest& r, QString* code, QStrin
                                   .arg(shown(*j, a.limMin)).arg(shown(*j, a.limMax)));
             m.joints.push_back(jid);
         }
+    } else if (r.kind == MotionKind::Walk) {
+        QString c, e;
+        const std::shared_ptr<gait::Walker> w = makeWalker(r.walk, &c, &e);
+        if (!w) return reject(c, e);
+        m.joints = w->joints();
+        for (int jid : m.joints)
+            if (actIndexForJoint(jid) < 0)
+                return reject("not_actuated", QString("%1 has no actuator").arg(jointLabel(*m_scene, jid)));
     } else {
         if (!m_scene->getObject(r.tool)) return reject("not_found", "the tool does not exist");
         if (m.req.chain.empty()) m.req.chain = kin::chainTo(*m_scene, r.tool);
@@ -1352,7 +1423,8 @@ int AutomationEngine::submitMotion(const MotionRequest& r, QString* code, QStrin
         m.joints = m.req.chain;
     }
     if (m.req.label.isEmpty())
-        m.req.label = r.kind == MotionKind::Linear ? "moveL" : r.kind == MotionKind::JointsToPose ? "moveJ" : "moveJoints";
+        m.req.label = r.kind == MotionKind::Linear ? "moveL" : r.kind == MotionKind::JointsToPose ? "moveJ"
+                    : r.kind == MotionKind::Walk ? "walk" : "moveJoints";
     m.id = m_nextMotionId++;
     m_motions.push_back(std::move(m));
     return m_motions.back().id;
@@ -1481,6 +1553,16 @@ bool AutomationEngine::startMotion(MotionRt& m) {
         return false;
     };
     const MotionRequest& r = m.req;
+    if (r.kind == MotionKind::Walk) {
+        // Planned from where the robot stands now (after the walks before it)
+        QString code, err;
+        m.walker = makeWalker(r.walk, &code, &err);
+        if (!m.walker) return fail(code, err);
+        m.walker->begin(*m_scene);
+        m.walkStart = m_time;
+        m.status.state = MotionState::Running;
+        return true;
+    }
     if (r.kind == MotionKind::Joints) {
         std::map<int, double> values;
         for (auto& [jid, v] : r.joints) {
@@ -1580,7 +1662,22 @@ void AutomationEngine::advanceMotions() {
                 }
             }
         } else if (m.status.state == MotionState::Running) {
-            if (m.req.kind == MotionKind::Linear) {
+            if (m.req.kind == MotionKind::Walk) {
+                double error = 0, progress = 0;
+                if (!stepWalk(*m.walker, m.walkStart, &error, &progress)) {
+                    const int step = m.walker->stepsDone(m_time + m_dt - m.walkStart) + 1;
+                    finishMotion(m, MotionState::Failed, "out_of_reach",
+                                 QString("a foot can't reach its spot at step %1 (%2 mm off): take shorter steps")
+                                     .arg(step).arg(error * 1000, 0, 'f', 1));
+                    finished = true;
+                } else {
+                    m.status.progress = progress;
+                    if (progress >= 1.0) {
+                        finishMotion(m, MotionState::Done);
+                        finished = true;
+                    }
+                }
+            } else if (m.req.kind == MotionKind::Linear) {
                 kin::Result res;
                 const double s = stepPath(m.path, &res);
                 m.status.progress = s;
@@ -1605,6 +1702,118 @@ void AutomationEngine::advanceMotions() {
         if (finished) m_motions.erase(m_motions.begin() + long(i));
         else ++i;
     }
+}
+
+// ── Walking ──────────────────────────────────────────────────────────────────
+
+std::shared_ptr<gait::Walker> AutomationEngine::makeWalker(const WalkRequest& w, QString* code, QString* error) const {
+    auto reject = [&](const QString& c, const QString& e) {
+        if (code) *code = c;
+        if (error) *error = e;
+        return std::shared_ptr<gait::Walker>();
+    };
+    if (!m_scene->getObject(w.root)) return reject("not_found", "the robot does not exist");
+    gait::Legs legs;
+    QString why;
+    if (!gait::findLegs(*m_scene, w.root, &legs, &why, w.leftFoot, w.rightFoot)) return reject("bad_request", why);
+    gait::Params p = w.params;
+    why = gait::resolve(p, legs);
+    if (!why.isEmpty()) return reject("bad_request", why);
+    auto finite = [](double v) { return std::isfinite(v); };
+    if (!finite(w.forward) || !finite(w.left) || !finite(w.turn) || (w.heading && !finite(*w.heading)))
+        return reject("bad_request", "the distances and angles must be numbers");
+    for (const QPointF& q : w.points)
+        if (!finite(q.x()) || !finite(q.y())) return reject("bad_request", "the points must be numbers");
+    if (w.path && w.points.empty() && !w.heading) return reject("bad_request", "a path needs at least one point");
+
+    const gait::Place start = gait::placeOf(kin::toolFrame(*m_scene, w.root));
+    // Points in a frame: on the floor below that frame's spot, turned with it
+    if (w.frameId != -1 && !m_scene->getObject(w.frameId)) return reject("not_found", "the reference frame does not exist");
+    const gait::Place ref = w.fromStart ? start : w.frameId != -1 ? gait::placeOf(kin::toolFrame(*m_scene, w.frameId))
+                                                                   : gait::Place{};
+    const QMatrix4x4 refFrame = gait::frameOf(ref);
+    std::vector<QPointF> points;
+    for (const QPointF& q : w.points) {
+        const QVector3D v = refFrame.map(QVector3D(float(q.x()), 0, float(q.y())));
+        points.push_back(QPointF(v.x(), v.z()));
+    }
+    std::optional<double> heading;
+    if (w.heading) heading = ref.heading + qDegreesToRadians(*w.heading);
+    const std::vector<gait::Place> places = w.path
+        ? gait::pathPlaces(start, points, heading, p)
+        : gait::relativePlaces(start, w.forward, w.left, qDegreesToRadians(w.turn), p);
+    if (places.size() > 5000) return reject("bad_request", "the walk is too long (over 5000 steps)");
+    return std::make_shared<gait::Walker>(std::move(legs), gait::makePlan(start, places, p));
+}
+
+bool AutomationEngine::stepWalk(gait::Walker& w, double start, double* error, double* progress) {
+    const double t = m_time + m_dt - start;
+    std::map<int, double> values;
+    const bool ok = w.apply(*m_scene, t, &values, error);
+    for (auto& [jid, v] : values) {
+        const int idx = actIndexForJoint(jid);
+        if (idx < 0) continue;
+        ActuatorRt& ax = m_actuators[size_t(idx)];
+        const double c = clampToLimits(ax, v);
+        ax.st.vel = m_dt > 0 ? (c - ax.st.pos) / m_dt : 0.0;
+        ax.st.pos = c;
+        ax.target = c;
+        ax.mode   = ActuatorMode::Position;
+        ax.active = true;
+        ax.direct = true;
+    }
+    const double T = w.duration();
+    *progress = T > 1e-9 ? std::clamp(t / T, 0.0, 1.0) : 1.0;
+    if (*progress >= 1.0)
+        for (auto& [jid, v] : values)
+            if (const int idx = actIndexForJoint(jid); idx >= 0) m_actuators[size_t(idx)].st.vel = 0;
+    return ok;
+}
+
+int AutomationEngine::stopWalking(int root) {
+    int n = 0;
+    for (size_t i = 0; i < m_motions.size();) {
+        MotionRt& m = m_motions[i];
+        if (m.req.kind != MotionKind::Walk || m.req.walk.root != root) { ++i; continue; }
+        ++n;
+        if (m.status.state == MotionState::Running && m.walker) {
+            m.walker->stopAfter(m_time - m.walkStart);
+            ++i;
+        } else {
+            finishMotion(m, MotionState::Cancelled, "cancelled", "the walk was stopped");
+            m_motions.erase(m_motions.begin() + long(i));
+        }
+    }
+    for (auto& s : m_sequences)
+        for (auto& op : s.ops)
+            if (op.walker && op.walker->legs().root == root) {
+                op.walker->stopAfter(m_time - op.walkStart);
+                ++n;
+            }
+    return n;
+}
+
+std::vector<AutomationEngine::WalkView> AutomationEngine::walks() const {
+    std::vector<WalkView> out;
+    auto view = [&](const gait::Walker& w, double start, int motion) {
+        WalkView v;
+        v.root = w.legs().root;
+        v.motion = motion;
+        v.elapsed = std::max(0.0, m_time - start);
+        v.duration = w.duration();
+        v.steps = w.stepCount();
+        v.stepsDone = w.stepsDone(v.elapsed);
+        v.prints = w.prints(v.elapsed);
+        v.footLength = w.legs().footLength;
+        v.footWidth = w.legs().footWidth;
+        out.push_back(std::move(v));
+    };
+    for (const MotionRt& m : m_motions)
+        if (m.walker && m.status.state == MotionState::Running) view(*m.walker, m.walkStart, m.id);
+    for (const auto& s : m_sequences)
+        for (const auto& op : s.ops)
+            if (op.walker && op.status.state == OpState::Running) view(*op.walker, op.walkStart, 0);
+    return out;
 }
 
 // ── Runtime queries ──────────────────────────────────────────────────────────

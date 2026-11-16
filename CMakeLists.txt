@@ -74,6 +74,7 @@ add_library(MotionStudioCore STATIC
     src/robot/RobotBuilder.cpp
     src/robot/RobotAnalysis.cpp
     src/robot/HumanoidBuilder.cpp
+    src/robot/Gait.cpp
 )
 target_include_directories(MotionStudioCore PUBLIC src)
 target_link_libraries(MotionStudioCore PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::Xml)

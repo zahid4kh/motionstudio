@@ -27,7 +27,9 @@
 #include "robot/RobotBuilder.h"
 #include "robot/RobotAnalysis.h"
 #include "robot/HumanoidBuilder.h"
+#include "robot/Gait.h"
 #include <QTemporaryDir>
+#include <QtMath>
 #ifdef MUJOCO_ENABLED
 #include <mujoco/mujoco.h>
 #endif
@@ -2643,6 +2645,12 @@ TEST(apiServerActuatorValueInMillimetres) {
     CHECK(errorCode(c.call("actuator.get", {{"name", "Nobody"}})) == "not_found");
 }
 
+humanoid::Built walkingHumanoid(SceneGraph& g, bool demo = false) {
+    humanoid::Spec spec = humanoid::defaultSpec();
+    spec.demo = demo;
+    return humanoid::build(g, spec);
+}
+
 TEST(robotBuilderArticulatedMatchesDimensions) {
     robot::Spec s = robot::defaultSpec(robot::Kind::Articulated);
     s.dims = {{"h0", .2}, {"h1", .5}, {"a1", .17}, {"a2", .6}, {"a3", .05}, {"d4", .55}, {"d6", .09}};
@@ -3056,6 +3064,374 @@ TEST(humanoidBuilderJointChoiceAndNames) {
     const humanoid::Built b3 = humanoid::build(g2, p);
     CHECK(b3.leftFoot < 0 && b3.joints.count("LKnee") == 0);
     CHECK(AutomationEngine::validateAll(g2).isEmpty());
+}
+
+// ── Walking ──────────────────────────────────────────────────────────────────
+
+namespace {
+gait::Place placeNow(const SceneGraph& g, int root) { return gait::placeOf(kin::toolFrame(g, root)); }
+
+// Runs a walk motion and checks that a foot always stands still on the floor
+// (flat, or rolled on its toes or heel: one of them stays put) and that no
+// sole goes through it
+struct WalkWatch {
+    SceneGraph& g;
+    gait::Legs legs;
+    QVector3D last[2][2];    // [foot][toe, heel]
+    double maxSlip = 0;      // the least moving foot's motion in one scan, m
+    double lowest = 1e9;     // the lowest toe or heel seen, m above the floor
+    double floorY = 0;
+    WalkWatch(SceneGraph& graph, const humanoid::Built& b) : g(graph) {
+        QString why;
+        gait::findLegs(g, b.root, &legs, &why);
+        floorY = g.worldTransform(b.root)(1, 3);
+        points(last);
+    }
+    void points(QVector3D out[2][2]) const {
+        const QVector3D half(float(legs.footLength / 2), 0, 0);
+        for (int s = 0; s < 2; ++s) {
+            const QMatrix4x4 f = kin::toolFrame(g, legs.foot[s]);
+            out[s][0] = f.map(legs.soleCentre + half);
+            out[s][1] = f.map(legs.soleCentre - half);
+        }
+    }
+    void operator()() {
+        QVector3D now[2][2];
+        points(now);
+        double d[2];
+        for (int s = 0; s < 2; ++s) {
+            d[s] = std::min((now[s][0] - last[s][0]).length(), (now[s][1] - last[s][1]).length());
+            for (int e = 0; e < 2; ++e) {
+                lowest = std::min(lowest, double(now[s][e].y()) - floorY);
+                last[s][e] = now[s][e];
+            }
+        }
+        maxSlip = std::max(maxSlip, std::min(d[0], d[1]));
+    }
+};
+} // namespace
+
+TEST(walkPlansStepsAndPaths) {
+    gait::Params p;
+    p.stepLength = 0.3; p.sideStep = 0.1; p.turnPerStep = qDegreesToRadians(20.0); p.stepTime = 0.5;
+    const gait::Place start{1, 2, 0};
+    // 1 m ahead: four equal steps, then the other foot alongside
+    std::vector<gait::Place> q = gait::relativePlaces(start, 1.0, 0, 0, p);
+    CHECK(q.size() == 4);
+    CHECK_NEAR(q.back().x, 2, 1e-9);
+    CHECK_NEAR(q.back().z, 2, 1e-9);
+    gait::Plan plan = gait::makePlan(start, q, p);
+    CHECK(plan.steps.size() == 5);
+    CHECK(plan.steps[0].side != plan.steps[1].side);
+    CHECK(plan.steps[3].side != plan.steps[4].side);
+    CHECK_NEAR(plan.end().x, 2, 1e-9);
+    CHECK_NEAR(plan.duration(), 2 * plan.prep + 5 * 0.5, 1e-9);
+    // Its left is −Z; a turn to the left is a positive heading and starts with the left foot
+    q = gait::relativePlaces(start, 0, 0.25, 0, p);
+    CHECK(q.size() == 3);
+    CHECK_NEAR(q.back().z, 1.75, 1e-9);
+    CHECK(gait::makePlan(start, q, p).steps[0].side == 0);
+    q = gait::relativePlaces(start, 0, 0, qDegreesToRadians(-90.0), p);
+    CHECK(q.size() == 5);
+    CHECK_NEAR(q.back().heading, qDegreesToRadians(-90.0), 1e-9);
+    CHECK(gait::makePlan(start, q, p).steps[0].side == 1);
+    // A heading of 90° faces −Z
+    const QMatrix4x4 f = gait::frameOf({0, 0, qDegreesToRadians(90.0)});
+    CHECK_NEAR(f.map(QVector3D(1, 0, 0)).z(), -1, 1e-6);
+    CHECK_NEAR(gait::placeOf(f).heading, qDegreesToRadians(90.0), 1e-6);
+
+    // A square path: steps no longer than a step, turns no sharper than a step's turn
+    const std::vector<QPointF> square{{2, 2}, {2, 3}, {1, 3}, {1, 2}};
+    q = gait::pathPlaces(start, square, 0.0, p);
+    CHECK(q.size() > 10);
+    gait::Place prev = start;
+    bool short_ = true, gentle = true;
+    for (const gait::Place& x : q) {
+        if (std::hypot(x.x - prev.x, x.z - prev.z) > p.stepLength + 1e-9) short_ = false;
+        if (std::fabs(gait::angleDiff(x.heading, prev.heading)) > p.turnPerStep + 1e-9) gentle = false;
+        prev = x;
+    }
+    CHECK(short_);
+    CHECK(gentle);
+    CHECK_NEAR(q.back().x, 1, 1e-9);
+    CHECK_NEAR(q.back().z, 2, 1e-9);
+    CHECK_NEAR(q.back().heading, 0, 1e-9);
+    // Points behind it: it turns round on the spot first
+    q = gait::pathPlaces(start, {{0, 2}}, std::nullopt, p);
+    CHECK(std::fabs(gait::angleDiff(q[size_t(8)].heading, qDegreesToRadians(180.0))) < 1e-6);
+    CHECK_NEAR(q.back().x, 0, 1e-9);
+}
+
+TEST(walkHumanoidFindsItsLegs) {
+    SceneGraph g;
+    const humanoid::Built b = walkingHumanoid(g);
+    gait::Legs legs;
+    QString why;
+    CHECK(gait::findLegs(g, b.root, &legs, &why));
+    CHECK(legs.foot[0] == b.leftFoot && legs.foot[1] == b.rightFoot);
+    CHECK(legs.chain[0].size() == 6 && legs.chain[1].size() == 6);
+    CHECK(legs.arm[0] == b.joints.at("LShoulderPitch") && legs.arm[1] == b.joints.at("RShoulderPitch"));
+    const humanoid::Spec spec = humanoid::defaultSpec();
+    CHECK_NEAR(legs.legLength, spec.dim("Lt") + spec.dim("Ls"), 1e-4);
+    CHECK_NEAR(legs.hipWidth, spec.dim("Wh"), 1e-4);
+    CHECK_NEAR(legs.ankleHeight, spec.dim("Ha"), 1e-4);
+    CHECK(legs.footLength > 0.8 * spec.dim("Lft") && legs.footLength < 1.2 * spec.dim("Lft"));
+    // The left foot is on its left (−Z)
+    CHECK(legs.footHome[0](2, 3) < 0 && legs.footHome[1](2, 3) > 0);
+    // A humanoid on a pedestal can't walk
+    SceneGraph p;
+    humanoid::Spec ps = humanoid::defaultSpec();
+    ps.base = humanoid::Base::Pedestal;
+    const humanoid::Built pb = humanoid::build(p, ps);
+    CHECK(!gait::findLegs(p, pb.root, &legs, &why));
+    CHECK(why.contains("Left Foot"));
+    CHECK(!gait::canWalk(p, pb.root));
+}
+
+TEST(walkHumanoidForwardKeepsAFootPlanted) {
+    SceneGraph g;
+    const humanoid::Built b = walkingHumanoid(g);
+    // Turned and moved: the walk is in its own frame
+    g.getObject(b.root)->transform.position = {0.5f, 0, -1};
+    g.getObject(b.root)->transform.rotation = {0, 30, 0};
+    AutomationEngine e(&g);
+    CHECK(e.start(nullptr));
+    const gait::Place start = placeNow(g, b.root);
+    std::map<int, float> legs0;
+    for (auto& [name, jid] : b.joints) legs0[jid] = g.getJoint(jid)->currentValue;
+
+    AutomationEngine::MotionRequest r;
+    r.kind = AutomationEngine::MotionKind::Walk;
+    r.walk.root = b.root;
+    r.walk.forward = 1.0;
+    QString code, err;
+    const int id = e.submitMotion(r, &code, &err);
+    if (!id) std::printf("  %s %s\n", qPrintable(code), qPrintable(err));
+    CHECK(id > 0);
+    WalkWatch watch(g, b);
+    int walking = 0;
+    const auto st = runMotion(e, id, 30, [&] {
+        watch();
+        if (!e.walks().empty()) ++walking;
+    });
+    if (st.state != AutomationEngine::MotionState::Done) std::printf("  %s\n", qPrintable(st.error));
+    CHECK(st.state == AutomationEngine::MotionState::Done);
+    CHECK(walking > 10);
+    if (watch.maxSlip >= 2e-4 || watch.lowest < -1e-3)
+        std::printf("  slip %g lowest %g\n", watch.maxSlip, watch.lowest);
+    CHECK(watch.maxSlip < 2e-4);                       // one foot always stands
+    CHECK(watch.lowest > -1e-3);                       // and no sole sinks into the floor
+    const gait::Place end = placeNow(g, b.root);
+    CHECK_NEAR(gait::angleDiff(end.heading, start.heading), 0, 1e-4);
+    const gait::Place want = gait::advance(start, 1.0, 0, 0);
+    CHECK_NEAR(end.x, want.x, 1e-4);
+    CHECK_NEAR(end.z, want.z, 1e-4);
+    CHECK_NEAR(g.worldTransform(b.root)(1, 3), 0, 1e-5);   // standing up again
+    // Legs straight, arms back where they were
+    for (auto& [jid, v] : legs0) CHECK_NEAR(g.getJoint(jid)->currentValue, v, 0.05);
+    CHECK(e.walks().empty());
+}
+
+TEST(walkHumanoidPathTurnAndStop) {
+    SceneGraph g;
+    const humanoid::Built b = walkingHumanoid(g);
+    AutomationEngine e(&g);
+    CHECK(e.start(nullptr));
+    using MS = AutomationEngine::MotionState;
+    QString code, err;
+    // A square back to where it started, facing the way it started
+    AutomationEngine::MotionRequest r;
+    r.kind = AutomationEngine::MotionKind::Walk;
+    r.walk.root = b.root;
+    r.walk.path = true;
+    r.walk.points = {{1, 0}, {1, -1}, {0, -1}, {0, 0}};
+    r.walk.heading = 0;
+    const int id = e.submitMotion(r, &code, &err);
+    CHECK(id > 0);
+    WalkWatch watch(g, b);
+    CHECK(runMotion(e, id, 120, [&] { watch(); }).state == MS::Done);
+    CHECK(watch.maxSlip < 2e-4);
+    gait::Place p = placeNow(g, b.root);
+    CHECK_NEAR(p.x, 0, 1e-4);
+    CHECK_NEAR(p.z, 0, 1e-4);
+    CHECK_NEAR(p.heading, 0, 1e-4);
+
+    // Sideways and a turn on the spot
+    AutomationEngine::MotionRequest side = r;
+    side.walk = {};
+    side.walk.root = b.root;
+    side.walk.left = 0.3;
+    side.walk.turn = 90;
+    CHECK(runMotion(e, e.submitMotion(side, &code, &err), 60).state == MS::Done);
+    p = placeNow(g, b.root);
+    CHECK_NEAR(qRadiansToDegrees(p.heading), 90, 1e-3);
+
+    // A long walk stopped: it finishes the step under way and brings its feet together
+    AutomationEngine::MotionRequest far = side;
+    far.walk.left = 0;
+    far.walk.turn = 0;
+    far.walk.forward = 5;
+    const int fid = e.submitMotion(far, &code, &err);
+    const int queued = e.submitMotion(far, &code, &err);
+    for (int i = 0; i < 100; ++i) e.scan(0.016);
+    CHECK(e.walks().size() == 1 && e.walks()[0].stepsDone >= 1);
+    const int total = e.walks()[0].steps;
+    CHECK(e.stopWalking(b.root) == 2);
+    CHECK(e.motionStatus(queued).state == MS::Cancelled);
+    CHECK(e.walks()[0].steps < total);
+    CHECK(runMotion(e, fid, 10).state == MS::Done);
+    const gait::Place stopped = placeNow(g, b.root);
+    CHECK(std::hypot(stopped.x - p.x, stopped.z - p.z) < 1.5);
+    gait::Legs legs;
+    CHECK(gait::findLegs(g, b.root, &legs, &err));
+    // Feet together: both at their home spots around the root
+    const QMatrix4x4 floor = gait::frameOf(stopped, 0);
+    for (int s = 0; s < 2; ++s)
+        CHECK_NEAR((worldPos(g, legs.foot[s]) - (floor * legs.footHome[s]).column(3).toVector3D()).length(), 0, 2e-3);
+}
+
+TEST(walkEveryLeggedPreset) {
+    for (const humanoid::Preset& pr : humanoid::presets()) {
+        if (pr.spec.base != humanoid::Base::Legs) continue;
+        SceneGraph g;
+        humanoid::Spec spec = pr.spec;
+        spec.demo = false;
+        const humanoid::Built b = humanoid::build(g, spec);
+        AutomationEngine e(&g);
+        CHECK(e.start(nullptr));
+        QString code, err;
+        AutomationEngine::MotionRequest r;
+        r.kind = AutomationEngine::MotionKind::Walk;
+        r.walk.root = b.root;
+        r.walk.forward = 0.8;
+        r.walk.turn = 60;
+        const int id = e.submitMotion(r, &code, &err);
+        if (!id) std::printf("  %s: %s\n", qPrintable(pr.name), qPrintable(err));
+        WalkWatch watch(g, b);
+        const auto st = runMotion(e, id, 60, [&] { watch(); });
+        if (st.state != AutomationEngine::MotionState::Done || watch.maxSlip >= 2e-4 || watch.lowest < -1e-3)
+            std::printf("  %s: %s slip %g lowest %g\n", qPrintable(pr.name), qPrintable(st.error), watch.maxSlip, watch.lowest);
+        CHECK(st.state == AutomationEngine::MotionState::Done);
+        CHECK(watch.maxSlip < 2e-4);
+        CHECK(watch.lowest > -1e-3);
+        CHECK_NEAR(qRadiansToDegrees(placeNow(g, b.root).heading), 60, 1e-3);
+        // Short steps, ahead and backwards
+        r.walk.turn = 0;
+        r.walk.params.stepLength = 0.15;
+        for (double d : {0.3, -0.3}) {
+            r.walk.forward = d;
+            const auto st2 = runMotion(e, e.submitMotion(r, &code, &err), 60, [&] { watch(); });
+            if (st2.state != AutomationEngine::MotionState::Done)
+                std::printf("  %s short steps %g: %s\n", qPrintable(pr.name), d, qPrintable(st2.error));
+            CHECK(st2.state == AutomationEngine::MotionState::Done);
+        }
+        r.walk.params.stepLength = 0;
+        // Backwards too
+        r.walk.forward = -0.5;
+        r.walk.turn = 0;
+        const auto back = runMotion(e, e.submitMotion(r, &code, &err), 60, [&] { watch(); });
+        if (back.state != AutomationEngine::MotionState::Done || watch.maxSlip >= 2e-4)
+            std::printf("  %s backwards: %s slip %g\n", qPrintable(pr.name), qPrintable(back.error), watch.maxSlip);
+        CHECK(back.state == AutomationEngine::MotionState::Done);
+        CHECK(watch.maxSlip < 2e-4);
+    }
+}
+
+TEST(walkRejectsWhatItCantDo) {
+    SceneGraph g;
+    const humanoid::Built b = walkingHumanoid(g);
+    humanoid::Spec ps = humanoid::defaultSpec();
+    ps.base = humanoid::Base::Pedestal;
+    ps.name = "Bust";
+    const humanoid::Built pb = humanoid::build(g, ps);
+    AutomationEngine e(&g);
+    CHECK(e.start(nullptr));
+    QString code, err;
+    AutomationEngine::MotionRequest r;
+    r.kind = AutomationEngine::MotionKind::Walk;
+    r.walk.root = pb.root;
+    r.walk.forward = 1;
+    CHECK(e.submitMotion(r, &code, &err) == 0 && code == "bad_request");
+    r.walk.root = b.root;
+    r.walk.params.stepLength = 5;
+    CHECK(e.submitMotion(r, &code, &err) == 0 && code == "bad_request" && err.contains("at most"));
+    r.walk.params.stepLength = 0;
+    r.walk.params.speed = 50;   // m/s
+    CHECK(e.submitMotion(r, &code, &err) == 0 && err.contains("too fast"));
+    r.walk.params.speed = 0;
+    r.walk.forward = std::nan("");
+    CHECK(e.submitMotion(r, &code, &err) == 0 && code == "bad_request");
+    // A walk shares the leg joints: a joint move of a knee waits for it
+    r.walk.forward = 0.5;
+    const int w = e.submitMotion(r, &code, &err);
+    AutomationEngine::MotionRequest knee;
+    knee.joints[b.joints.at("LKnee")] = 20;
+    const int k = e.submitMotion(knee, &code, &err);
+    e.scan(0.016);
+    CHECK(e.motionStatus(w).state == AutomationEngine::MotionState::Running);
+    CHECK(e.motionStatus(k).state == AutomationEngine::MotionState::Queued);
+    CHECK(runMotion(e, k, 30).state == AutomationEngine::MotionState::Done);
+    CHECK(e.motionStatus(w).state == AutomationEngine::MotionState::Done);
+}
+
+TEST(walkOperationInASequence) {
+    SceneGraph g;
+    const humanoid::Built b = walkingHumanoid(g);
+    const int mark = g.addObject("Spot", PrimitiveType::ImportedMesh);
+    g.getObject(mark)->transform.position = {1.2f, 0, 0.6f};
+    g.getObject(mark)->transform.rotation = {0, -90, 0};
+    Sequence q;
+    q.name = "Patrol";
+    Operation a;
+    a.id = g.allocateId();
+    a.type = OperationType::Walk;
+    a.walkerId = b.root;
+    a.forward = "0.6";
+    a.turn = "Angle";
+    Operation c;
+    c.id = g.allocateId();
+    c.type = OperationType::Walk;
+    c.walkerId = b.root;
+    c.walkToId = mark;
+    c.velocity = "0.5";
+    c.predecessors = {a.id};
+    q.operations = {a, c};
+    Signal angle;
+    angle.name = "Angle"; angle.kind = SignalKind::Internal; angle.type = SignalType::Real; angle.initialValue = 45;
+    g.addSignal(angle);
+    const int seq = g.addSequence(q);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+    // Saved and loaded, renamed symbols follow
+    SceneGraph loaded;
+    roundTrip(g, loaded);
+    CHECK(AutomationEngine::validateAll(loaded).isEmpty());
+    CHECK(loaded.allSequences().begin()->second.operations[1].walkToId != -1);
+    CHECK(loaded.allSequences().begin()->second.operations[0].turn == "Angle");
+    g.renameSymbolReferences("Angle", "Heading");
+    CHECK(g.getSequence(seq)->operations[0].turn == "Heading");
+    g.renameSymbolReferences("Heading", "Angle");
+
+    AutomationEngine e(&g);
+    CHECK(e.start(nullptr));
+    bool sawWalk = false;
+    for (int i = 0; i < 2000 && e.seqStatus(seq).state != AutomationEngine::SeqState::Finished; ++i) {
+        e.scan(0.016);
+        if (!e.walks().empty()) sawWalk = true;
+    }
+    CHECK(e.seqStatus(seq).state == AutomationEngine::SeqState::Finished);
+    CHECK(sawWalk);
+    CHECK(e.warnings().isEmpty());
+    const gait::Place p = placeNow(g, b.root);
+    CHECK_NEAR(p.x, 1.2, 1e-4);
+    CHECK_NEAR(p.z, 0.6, 1e-4);
+    CHECK_NEAR(qRadiansToDegrees(p.heading), -90, 1e-3);
+
+    // Nothing to walk, or a robot without legs, is reported
+    g.getSequence(seq)->operations[0].forward.clear();
+    g.getSequence(seq)->operations[0].turn.clear();
+    CHECK(AutomationEngine::validateAll(g).join(" ").contains("nothing to walk"));
+    g.getSequence(seq)->operations[0].walkerId = mark;
+    CHECK(AutomationEngine::validateAll(g).join(" ").contains("no legs"));
 }
 
 int main(int argc, char** argv) {

@@ -566,6 +566,7 @@ void SceneGraph::renameSymbolReferences(const QString& oldName, const QString& n
         for (auto& op : q.operations) {
             fix(op.target); fix(op.velocity); fix(op.duration); fix(op.condition);
             fix(op.startCondition); fix(op.onStart); fix(op.onFinish);
+            fix(op.forward); fix(op.sideways); fix(op.turn);
         }
     }
     for (auto& [id, src] : m_sources) { fix(src.interval); fix(src.trigger); fix(src.enable); }

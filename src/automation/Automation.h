@@ -88,6 +88,7 @@ enum class OperationType {
     Grip,        // gripper picks up a part (from a sensor or a fixed object); done when held
     Release,     // gripper lets go of everything it holds; done immediately
     MoveL,       // tool moves in a straight line to where it is in a pose (inverse kinematics)
+    Walk,        // a legged robot walks by distances and a turn, or to an object's place; done when it stands
 };
 
 struct Operation {
@@ -103,6 +104,8 @@ struct Operation {
                                      // MoveL / MoveToPose to a pose taught on a part: the part
                                      // (partId, or what sensorId detects; neither = the pose's own)
     int           toolId     = -1;   // MoveL: object whose frame is the tool centre point
+    int           walkerId   = -1;   // Walk: the legged robot (its root object)
+    int           walkToId   = -1;   // Walk: walk to this object's place and face its way (-1 = by distance)
 
     // All numeric/boolean fields are expressions (a constant is a valid expression)
     QString       target;            // Move: position
@@ -112,6 +115,9 @@ struct Operation {
     QString       startCondition;    // extra gate before starting (empty = true)
     QString       onStart;           // "Sig = expr; Other = expr"
     QString       onFinish;
+    QString       forward;           // Walk: metres ahead (negative = back)
+    QString       sideways;          // Walk: metres to its left (negative = right)
+    QString       turn;              // Walk: degrees to its left (negative = right)
 
     std::vector<int> predecessors;   // operation ids (same sequence) that must be done first
 };
@@ -215,6 +221,7 @@ inline QString operationTypeName(OperationType t) {
         case OperationType::Grip:       return "Grip";
         case OperationType::Release:    return "Release";
         case OperationType::MoveL:      return "MoveL";
+        case OperationType::Walk:       return "Walk";
     }
     return "Move";
 }
@@ -229,6 +236,7 @@ inline OperationType operationTypeFromName(const QString& s) {
     if (s == "Grip")       return OperationType::Grip;
     if (s == "Release")    return OperationType::Release;
     if (s == "MoveL")      return OperationType::MoveL;
+    if (s == "Walk")       return OperationType::Walk;
     return OperationType::Move;
 }
 
