@@ -31,7 +31,9 @@ Born out of an interest in robotics, automation, and digital twins — a place t
 - **Undo/redo** — full history across every kind of scene edit
 - **Hierarchy & Properties panels** — Unity-style tree view and inspector
 - **Robot Builder & Analyzer** — build a SCARA, palletizer or 6-axis robot from 28 presets and your own dimensions, axis ranges, end effector (16 tools: grippers, suction, magnet, drill, screwdriver, welding torch, dispenser, spray gun, laser, camera…) and style, with a live dimensioned drawing; analyse any robot's workspace, reach, DH parameters, dexterity and singularities
-- **Templates** — working automation examples (pick & place arm, 6-axis robot cell, indexing table with press, pendulum, solar system, spinning top, crank arm)
+- **Humanoid Builder & walking** — build a humanoid on legs or a pedestal from 7 presets; humanoids walk ahead, sideways, turning, to a marker or along a path (feet planted on the floor, toe-off, arm swing), from a sequence's Walk operation or from code
+- **Robot API** — drive robots and humanoids from Python, C++ or Kotlin programs over TCP: straight-line and joint moves, taught poses, walking paths, signals (`api/`, and `motionstudio-server` to run headless)
+- **Templates** — working automation examples (pick & place arm, 6-axis robot cell, humanoid patrol, indexing table with press, pendulum, solar system, spinning top, crank arm)
 - **Save/Load** — JSON-based `.mstudio` project files
 
 MotionStudio runs fully kinematically out of the box. Installing [MuJoCo](https://mujoco.org/) unlocks real rigid-body physics (gravity, collisions, forces); installing [OpenCASCADE](https://dev.opencascade.org/) unlocks STEP import. Both are optional, detected at build time.

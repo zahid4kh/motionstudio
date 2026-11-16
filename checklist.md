@@ -107,7 +107,8 @@ Goal: Projects persist.
 - [ ] Path Planning
 - [x] PLC Integration
   - Modbus TCP server (Tools › External I/O): a real PLC writes Input signals and reads everything else, sensors included. OPC UA is not supported.
-- [ ] Robot Programming
+- [x] Robot Programming
+  - Robot API (Tools › Robot API, `motionstudio-server`): Python, C++ and Kotlin libraries for straight-line and joint moves, taught poses, signals, and walking humanoids along paths.
 - [x] Sensors (beam and zone/contact sensors as Bool signals; actuator limit flags like `J1.atMax`)
 - [ ] Digital Twin
 - [x] Undo / Redo (whole-scene snapshots, Ctrl+Z / Ctrl+Shift+Z)
@@ -141,3 +142,6 @@ Goal: Projects persist.
 - [x] UI redesign: Islands dark/light themes and Lucide icons
 - [x] Per-theme viewport lighting controls
 - [x] View cube, orthographic/perspective projection, Fit All (F)
+- [x] Robot Builder and Robot Analyzer (SCARA, palletizer, 6-axis; workspace, DH, dexterity)
+- [x] Humanoid Builder (on legs or a pedestal, hands, poses, demo sequence)
+- [x] Walking humanoids: Walk operation (by distance or to a marker), footprints in the viewport, API walk / walkTo / walkPath, Humanoid Patrol template
