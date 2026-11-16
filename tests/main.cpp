@@ -2699,6 +2699,13 @@ TEST(apiServerRecordsAndPlaysATake) {
     CHECK(result(r).value("state").toString() == "done");
     CHECK_NEAR(place().value("x").toDouble(), 500, 0.1);
     CHECK_NEAR(place().value("z").toDouble(), 0, 0.1);
+    // On the floor at a height
+    const double y0 = g.worldTransform(h.root)(1, 3);
+    r = c.call("robot.play", {{"robot", name}, {"columns", QJsonArray{"t", "x", "y", "z", "heading"}},
+                              {"rows", QJsonArray{QJsonArray{0, 500, y0 * 1000, 0, 0}, QJsonArray{0.5, 600, y0 * 1000 - 30, 0, 10}}}});
+    CHECK(result(r).value("state").toString() == "done");
+    CHECK_NEAR(g.worldTransform(h.root)(1, 3), y0 - 0.03, 1e-5);
+    CHECK_NEAR(place().value("heading").toDouble(), 10, 1e-3);
 
     // Refused: no joint and no place, rows of the wrong length
     CHECK(errorCode(c.call("robot.play", {{"robot", name}, {"columns", QJsonArray{"t", "foo"}},

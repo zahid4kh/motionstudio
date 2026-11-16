@@ -1079,7 +1079,8 @@ QJsonValue ApiServer::robotPlay(const QJsonObject& p, Call& c) {
         fail("bad_request", QString("no column names a joint of %1 (its actuators: %2)")
                                 .arg(r.name, listOf([&] { QStringList n; for (int j : r.joints)
                                     if (const Motor* m = m_scene->motorForJoint(j)) n << m->name; return n; }())));
-    // On the floor: its top object keeps its height and tilt over its floor spot
+    // On the floor: its top object keeps its tilt (and, without a y column,
+    // its height) over its floor spot
     const QMatrix4x4 now = kin::toolFrame(*m_scene, r.root);
     const gait::Place here = gait::placeOf(now);
     const QMatrix4x4 offset = gait::frameOf(here).inverted() * now;
@@ -1102,7 +1103,9 @@ QJsonValue ApiServer::robotPlay(const QJsonObject& p, Call& c) {
                 f.rotation = QVector3D(float(at(rx)), float(at(ry)), float(at(rz)));
             } else {
                 const gait::Place place{at(x) / kMm, at(z) / kMm, qDegreesToRadians(at(hd))};
-                const Transform t = SceneGraph::toTransform(gait::frameOf(place) * offset);
+                QMatrix4x4 m = gait::frameOf(place) * offset;
+                if (y >= 0) m(1, 3) = float(at(y) / kMm);   // its height, when given
+                const Transform t = SceneGraph::toTransform(m);
                 f.position = t.position;
                 f.rotation = t.rotation;
             }
