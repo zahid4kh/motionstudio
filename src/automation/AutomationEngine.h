@@ -230,6 +230,7 @@ public:
         std::vector<gait::Walker::Print> prints;
         double footLength = 0, footWidth = 0;
         gait::Walker::Phase phase;      // the step under way
+        gait::Place target;             // where its foot lands: the place whose home spot it takes
         gait::Place goal;               // where the walk ends
     };
     std::vector<WalkView> walks() const;

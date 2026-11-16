@@ -53,7 +53,7 @@ Recorder::Recorder(SceneGraph& scene, int root, std::vector<int> joints, double 
     m_take.columns = QStringList{"t", "x", "y", "z", "rx", "ry", "rz"};
     if (m_legs)
         m_take.columns << "heading" << "walking" << "step" << "swing" << "progress"
-                       << "goal_x" << "goal_z" << "goal_heading";
+                       << "step_x" << "step_z" << "step_heading" << "goal_x" << "goal_z" << "goal_heading";
     for (int jid : m_joints) {
         const Motor* m = scene.motorForJoint(jid);
         const Joint* j = scene.getJoint(jid);
@@ -83,13 +83,14 @@ void Recorder::sample(const AutomationEngine& a) {
                            tf.rotation.x(), tf.rotation.y(), tf.rotation.z()});
     if (m_legs) {
         const gait::Place at = gait::placeOf(frame);
-        gait::Place goal = at;
+        gait::Place goal = at, target = at;
         gait::Walker::Phase ph;
         bool walking = false;
         for (const AutomationEngine::WalkView& v : a.walks())
-            if (v.root == m_root) { walking = true; ph = v.phase; goal = v.goal; break; }
+            if (v.root == m_root) { walking = true; ph = v.phase; goal = v.goal; target = v.target; break; }
         row.insert(row.end(), {qRadiansToDegrees(at.heading), walking ? 1.0 : 0.0, double(ph.step), double(ph.side),
-                               ph.progress, goal.x * 1000.0, goal.z * 1000.0, qRadiansToDegrees(goal.heading)});
+                               ph.progress, target.x * 1000.0, target.z * 1000.0, qRadiansToDegrees(target.heading),
+                               goal.x * 1000.0, goal.z * 1000.0, qRadiansToDegrees(goal.heading)});
     }
     for (int jid : m_joints) {
         const Joint* j = m_scene.getJoint(jid);

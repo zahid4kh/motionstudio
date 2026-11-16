@@ -13,12 +13,16 @@ class SceneGraph;
 // Columns, in API units (mm, degrees, seconds):
 //   t                        seconds since the take started
 //   x y z rx ry rz           the robot's top object in the world (Euler XYZ)
-//   heading walking step swing progress goal_x goal_z goal_heading
+//   heading walking step swing progress step_x step_z step_heading
+//   goal_x goal_z goal_heading
 //                            only for a robot with legs: where it faces, 1
 //                            while it walks, the step under way (-1 none),
 //                            its swinging foot (0 left, 1 right, -1 none),
-//                            how far through the step (0..1), and where the
-//                            walk ends (its place when standing)
+//                            how far through the step (0..1), where the
+//                            step puts that foot (the place it would stand
+//                            at with that foot on its home spot; the goal
+//                            between steps), and where the walk ends (its
+//                            place when standing)
 //   <actuator names>         each joint (degrees, or mm for sliding joints)
 namespace take {
 

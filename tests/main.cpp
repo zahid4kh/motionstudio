@@ -3676,7 +3676,7 @@ TEST(takePlaysBackAWalk) {
             f.rotation = QVector3D(float(row[4]), float(row[5]), float(row[6]));
             p->frames.push_back(f);
             std::vector<double> v;
-            for (size_t j = 0; j < joints.size(); ++j) v.push_back(row[15 + j]);
+            for (size_t j = 0; j < joints.size(); ++j) v.push_back(row[18 + j]);
             p->values.push_back(v);
         }
         AutomationEngine::MotionRequest m;
@@ -3698,13 +3698,13 @@ TEST(takePlaysBackAWalk) {
     double worst = 0;
     for (int i = 1; i + 1 < std::min(again.frames(), rec.frames()); ++i)
         for (size_t j = 0; j < joints.size(); ++j) {
-            const double a = again.take().rows[size_t(i)][15 + j];
+            const double a = again.take().rows[size_t(i)][18 + j];
             double best = 1e9;
-            for (int k = i - 1; k <= i + 1; ++k) best = std::min(best, std::abs(a - t.rows[size_t(k)][15 + j]));
+            for (int k = i - 1; k <= i + 1; ++k) best = std::min(best, std::abs(a - t.rows[size_t(k)][18 + j]));
             worst = std::max(worst, best);
         }
     CHECK(worst < 1e-3);
-    for (size_t j = 0; j < joints.size(); ++j) CHECK_NEAR(g.getJoint(joints[j])->currentValue, t.rows.back()[15 + j], 1e-3);
+    for (size_t j = 0; j < joints.size(); ++j) CHECK_NEAR(g.getJoint(joints[j])->currentValue, t.rows.back()[18 + j], 1e-3);
 
     // Absolute: back to where the take was recorded
     CHECK(runMotion(e, e.submitMotion(request(false)), 30).state == AutomationEngine::MotionState::Done);
@@ -3740,9 +3740,9 @@ TEST(takeRecordsAWalk) {
     take::Recorder every(g, b.root, joints), tenth(g, b.root, joints, 10);
     const take::Take& t = every.take();
     CHECK(t.column("t") == 0 && t.column("x") == 1 && t.column("heading") == 7);
-    CHECK(t.column("goal_heading") == 14);
-    CHECK(t.columns.size() == 15 + int(joints.size()));
-    CHECK(t.column(g.motorForJoint(joints.front())->name) == 15);
+    CHECK(t.column("step_x") == 12 && t.column("goal_heading") == 17);
+    CHECK(t.columns.size() == 18 + int(joints.size()));
+    CHECK(t.column(g.motorForJoint(joints.front())->name) == 18);
 
     AutomationEngine::MotionRequest r;
     r.kind = AutomationEngine::MotionKind::Walk;
@@ -3770,6 +3770,12 @@ TEST(takeRecordsAWalk) {
             ++walked;
             CHECK_NEAR(row[size_t(t.column("goal_x"))], 1000, 0.1);
             CHECK_NEAR(row[size_t(t.column("goal_z"))], 0, 0.1);
+        }
+        // Footsteps along the way, ahead of the body while it steps
+        if (row[size_t(step)] >= 0) {
+            CHECK(row[size_t(t.column("step_x"))] > row[1] - 1);
+            CHECK(row[size_t(t.column("step_x"))] <= 1000.001);
+            CHECK_NEAR(row[size_t(t.column("step_z"))], 0, 0.1);
         }
         maxStep = std::max(maxStep, int(row[size_t(step)]));
         if (row[size_t(swing)] >= 0) sides.insert(int(row[size_t(swing)]));

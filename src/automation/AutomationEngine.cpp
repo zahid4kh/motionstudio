@@ -1915,6 +1915,7 @@ std::vector<AutomationEngine::WalkView> AutomationEngine::walks() const {
         v.footWidth = w.legs().footWidth;
         v.phase = w.phaseAt(v.elapsed);
         v.goal = w.plan().end();
+        v.target = v.phase.step >= 0 ? w.plan().steps[size_t(v.phase.step)].at : v.goal;
         out.push_back(std::move(v));
     };
     for (const MotionRt& m : m_motions)
