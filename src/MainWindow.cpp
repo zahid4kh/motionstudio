@@ -634,6 +634,10 @@ void MainWindow::buildDocks() {
         QTimer::singleShot(0, this, [this]{ resizeDocks({m_automationDock}, {320}, Qt::Vertical); });
     });
     connect(m_automation, &AutomationPanel::statusMessage, this, &MainWindow::showStatus);
+    m_automation->setRecordAction(m_valueRecorder->action());
+    connect(m_valueRecorder, &ValueRecorder::motionRecorded, this, [this](int id) {
+        if (m_automationDock->isVisible()) m_automation->showMotion(id);
+    });
     connect(m_automation, &AutomationPanel::externalIoRequested, this, &MainWindow::openExternalIo);
     connect(m_hierarchy, &HierarchyPanel::analyzeRobotRequested, this, &MainWindow::openRobotAnalyzer);
     connect(m_hierarchy, &HierarchyPanel::addSensorRequested, this, [this](int objectId){

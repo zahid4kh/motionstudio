@@ -10,10 +10,11 @@ class SceneGraph;
 class SimulationEngine;
 namespace take { class Recorder; }
 
-// Record Values (Simulation toolbar, Tools menu): records one robot's joint
-// values and where it stands, every scan or at a rate, while the simulation
-// runs, and saves them as a take (CSV, see take::Take) when you stop it,
-// when the robot stands still again, or on Reset. Pressing it starts Play.
+// Record Values (Simulation toolbar, Tools menu, Motions tab): records one
+// robot's joint values and where it stands, every scan or at a rate, while
+// the simulation runs, and keeps them as a motion in the project (see
+// MotionClip; also a CSV take when asked) when you stop it, when the robot
+// stands still again, or on Reset. Pressing it starts Play.
 class ValueRecorder : public QObject {
     Q_OBJECT
 public:
@@ -25,6 +26,7 @@ public:
 
 signals:
     void statusMessage(const QString& msg, bool ok);
+    void motionRecorded(int motionId);
 
 private:
     void toggle();
@@ -38,7 +40,8 @@ private:
     QWidget*          m_window;
     QAction*          m_action = nullptr;
     std::unique_ptr<take::Recorder> m_rec;
-    QString           m_path;
+    QString           m_name;        // the motion's name in the project
+    QString           m_path;        // also saved here, when not empty
     bool              m_stopWhenStill = true;
     bool              m_moved = false;
     double            m_stillSince = -1;

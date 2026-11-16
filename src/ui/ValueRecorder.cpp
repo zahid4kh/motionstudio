@@ -52,8 +52,8 @@ void ValueRecorder::sync() {
     m_action->setIconText(on ? "Stop" : "Record");   // the toolbar's short label
     m_action->setIcon(Theme::icon(on ? "circle-stop" : "circle-dot"));
     m_action->setToolTip(on ? "Stop recording and save the values"
-                            : "Record a robot's joint values and where it stands while it moves,\n"
-                              "and save them to a file (a CSV take for analysis or machine learning)");
+                            : "Record a robot's joint values and where it stands while it moves, and keep\n"
+                              "them as a motion in the project (Automation › Motions), to play again or learn from");
 }
 
 void ValueRecorder::toggle() {
@@ -78,9 +78,10 @@ bool ValueRecorder::begin() {
     auto* title = new QLabel("Record a robot's values");
     title->setObjectName("dialogTitle");
     vb->addWidget(title);
-    auto* sub = new QLabel("While the simulation runs, its joint values and where it stands are written to a CSV "
-                           "file, one row per sample. A walking robot also gets its step, its swinging foot and "
-                           "where the walk goes. Recording starts Play; press Stop to save.");
+    auto* sub = new QLabel("While the simulation runs, its joint values and where it stands are recorded, one row "
+                           "per sample, and kept in the project as a motion (Automation › Motions) that a Play Motion "
+                           "operation plays back. A walking robot also gets its step, its swinging foot and where "
+                           "the walk goes. Recording starts Play; press Stop to keep it.");
     sub->setObjectName("hint");
     sub->setWordWrap(true);
     sub->setMinimumWidth(440);
@@ -104,6 +105,11 @@ bool ValueRecorder::begin() {
     rate->addItem("Every scan (62.5 per second)", 0.0);
     for (double r : {50.0, 25.0, 10.0}) rate->addItem(QString("%1 per second").arg(r), r);
     rate->setCurrentIndex(std::max(0, rate->findData(settings.value("take/rate", 0.0).toDouble())));
+    auto* name = new QLineEdit;
+    name->setToolTip("What the motion is called in the project (Motions tab)");
+    auto* csv = new QCheckBox("Also save it as a CSV file");
+    csv->setToolTip("For analysis, or your own learning code (numpy, pandas)");
+    csv->setChecked(settings.value("take/csv", false).toBool());
     auto* file = new QLineEdit;
     auto* browse = new QPushButton("Browse…");
     browse->setAutoDefault(false);   // Enter in the File field records, it doesn't browse
@@ -112,8 +118,9 @@ bool ValueRecorder::begin() {
     fileRow->addWidget(browse);
     const QString dir = settings.value("take/dir", QDir::homePath()).toString();
     auto suggest = [&] {
-        const QString name = robots[size_t(robot->currentData().toInt())].name;
-        file->setText(QDir(dir).filePath(QString("%1-%2.csv").arg(QString(name).replace(' ', '-').toLower(),
+        const QString who = robots[size_t(robot->currentData().toInt())].name;
+        name->setText(m_scene->makeMotionName(who + " motion"));
+        file->setText(QDir(dir).filePath(QString("%1-%2.csv").arg(QString(who).replace(' ', '-').toLower(),
                                                                   QDateTime::currentDateTime().toString("yyyyMMdd-hhmmss"))));
     };
     suggest();
@@ -128,8 +135,16 @@ bool ValueRecorder::begin() {
     still->setChecked(settings.value("take/stopWhenStill", true).toBool());
     form->addRow("Robot", robot);
     form->addRow("Samples", rate);
+    form->addRow("Name", name);
+    form->addRow("", csv);
     form->addRow("File", fileRow);
     form->addRow("", still);
+    auto syncFile = [&] {
+        file->setEnabled(csv->isChecked());
+        browse->setEnabled(csv->isChecked());
+    };
+    syncFile();
+    connect(csv, &QCheckBox::toggled, &dlg, syncFile);
     vb->addLayout(form);
     auto* btns = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     btns->button(QDialogButtonBox::Ok)->setText("Record");
@@ -138,17 +153,20 @@ bool ValueRecorder::begin() {
     btns->button(QDialogButtonBox::Cancel)->setAutoDefault(false);   // Enter records, never cancels
     vb->addWidget(btns);
     connect(file, &QLineEdit::returnPressed, &dlg, &QDialog::accept);
+    connect(name, &QLineEdit::returnPressed, &dlg, &QDialog::accept);
     connect(btns, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
     connect(btns, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
     if (dlg.exec() != QDialog::Accepted) return false;
 
     const ApiServer::Robot& r = robots[size_t(robot->currentData().toInt())];
-    m_path = file->text().trimmed();
-    if (m_path.isEmpty()) return false;
-    if (QFileInfo(m_path).suffix().isEmpty()) m_path += ".csv";
+    m_name = name->text().trimmed();
+    if (m_name.isEmpty()) m_name = r.name + " motion";
+    m_path = csv->isChecked() ? file->text().trimmed() : QString();
+    if (!m_path.isEmpty() && QFileInfo(m_path).suffix().isEmpty()) m_path += ".csv";
     settings.setValue("take/robot", r.name);
     settings.setValue("take/rate", rate->currentData().toDouble());
-    settings.setValue("take/dir", QFileInfo(m_path).absolutePath());
+    if (!m_path.isEmpty()) settings.setValue("take/dir", QFileInfo(m_path).absolutePath());
+    settings.setValue("take/csv", csv->isChecked());
     settings.setValue("take/stopWhenStill", still->isChecked());
 
     m_rec = std::make_unique<take::Recorder>(*m_scene, r.root, r.joints, rate->currentData().toDouble());
@@ -166,7 +184,7 @@ bool ValueRecorder::begin() {
         sync();
         return true;
     }
-    emit statusMessage(QString("Recording %1 — press Stop to save").arg(r.name), true);
+    emit statusMessage(QString("Recording %1 — press Stop to keep it").arg(r.name), true);
     return true;
 }
 
@@ -196,15 +214,28 @@ void ValueRecorder::finish(const QString& why) {
         emit statusMessage("Recording stopped — nothing was recorded (the simulation did not run)", false);
         return;
     }
-    QString error;
-    if (!t.save(m_path, &error)) {
-        QMessageBox::warning(m_window, "Record Values", QString("Could not save %1:\n\n%2").arg(m_path, error));
+    if (t.rows.size() < 2) {
+        emit statusMessage("Recording stopped — too short to keep (one sample)", false);
         return;
     }
-    const QString msg = QString("Saved %1 rows × %2 values of %3 (%4 s)%5 to %6")
-                            .arg(t.rows.size()).arg(t.columns.size()).arg(t.robot)
-                            .arg(t.duration(), 0, 'f', 2).arg(why.isEmpty() ? QString() : " — stopped: " + why)
-                            .arg(QDir::toNativeSeparators(m_path));
+    QString where = "the project's Motions";
+    if (!m_path.isEmpty()) {
+        QString error;
+        if (!t.save(m_path, &error))
+            QMessageBox::warning(m_window, "Record Values", QString("Could not save %1:\n\n%2").arg(m_path, error));
+        else
+            where += " and " + QDir::toNativeSeparators(m_path);
+    }
+    MotionClip clip;
+    clip.name = m_name;
+    clip.robotId = rec->root();
+    clip.take = std::make_shared<take::Take>(t);
+    const int id = m_scene->addMotion(clip);
+    const QString kept = m_scene->getMotion(id)->name;
+    const QString msg = QString("Kept “%1”: %2 s of %3%4, in %5")
+                            .arg(kept).arg(t.duration(), 0, 'f', 2).arg(t.robot)
+                            .arg(why.isEmpty() ? QString() : " (stopped: " + why + ")").arg(where);
+    emit motionRecorded(id);
     // After the message of whatever stopped it (Reset says it restored the scene)
     QTimer::singleShot(0, this, [this, msg] { emit statusMessage(msg, true); });
 }
