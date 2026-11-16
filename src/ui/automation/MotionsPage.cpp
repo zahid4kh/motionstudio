@@ -1,4 +1,5 @@
 #include "MotionsPage.h"
+#include "TrainDialog.h"
 #include "io/ApiServer.h"
 #include "physics/SimulationEngine.h"
 #include "ui/Theme.h"
@@ -51,11 +52,14 @@ MotionsPage::MotionsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* pare
     m_import->setToolTip("Add a take saved as CSV (by Record Values, robot.record() or your own program)");
     m_export = new QPushButton(Theme::icon("download"), "Export CSV…");
     m_export->setToolTip("Save the motion as a CSV take, for analysis or your own learning code");
+    m_train = new QPushButton(Theme::icon("lightbulb"), "Train…");
+    m_train->setToolTip("Teach a model a robot's motions: it then plays each at any length, or blends two");
     m_delete = new QPushButton(Theme::icon("trash-2", Theme::Tint::Danger), "Delete");
     m_delete->setProperty("danger", true);
     bar->addWidget(m_record);
     bar->addWidget(m_import);
     bar->addWidget(m_export);
+    bar->addWidget(m_train);
     bar->addStretch();
     bar->addWidget(m_delete);
     lv->addLayout(bar);
@@ -74,7 +78,8 @@ MotionsPage::MotionsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* pare
     lv->addWidget(m_list, 1);
     m_empty = new QLabel("No motions yet. Press <b>Record</b>, pick a robot and make it move (with a sequence, "
                          "the Actuators &amp; Poses jog, or a program); when you stop, the motion is kept here. "
-                         "A <b>Play Motion</b> operation then plays it in any sequence.");
+                         "A <b>Play Motion</b> operation then plays it in any sequence, and <b>Train</b> teaches a "
+                         "model several of them, to play at any length or blended.");
     m_empty->setObjectName("hint");
     m_empty->setWordWrap(true);
     lv->addWidget(m_empty);
@@ -85,6 +90,7 @@ MotionsPage::MotionsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* pare
     auto* bv = new QVBoxLayout(box);
     bv->setContentsMargins(6, 12, 6, 6);
     auto* form = new QFormLayout;
+    m_form = form;
     form->setLabelAlignment(Qt::AlignRight);
     form->setVerticalSpacing(4);
     m_name = new QLineEdit;
@@ -93,6 +99,9 @@ MotionsPage::MotionsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* pare
                         "Its actuators are matched to the motion's columns by name.");
     form->addRow("Name", m_name);
     form->addRow("Robot", m_robot);
+    m_clip = new QComboBox;
+    m_clip->setToolTip("The clip to play or export: one of the motions the model learned");
+    form->addRow("Clip", m_clip);
     bv->addLayout(form);
     m_play = new QPushButton(Theme::icon("play"), "Play on the robot");
     m_play->setToolTip("Starts the simulation and plays the motion from where the robot stands.\n"
@@ -122,6 +131,7 @@ MotionsPage::MotionsPage(SceneGraph* scene, SimulationEngine* sim, QWidget* pare
     connect(m_import, &QPushButton::clicked, this, &MotionsPage::importCsv);
     connect(m_export, &QPushButton::clicked, this, &MotionsPage::exportCsv);
     connect(m_delete, &QPushButton::clicked, this, &MotionsPage::remove);
+    connect(m_train, &QPushButton::clicked, this, &MotionsPage::train);
     connect(m_play, &QPushButton::clicked, this, &MotionsPage::play);
     refresh();
 }
@@ -137,7 +147,28 @@ void MotionsPage::setLocked(bool locked) {
 }
 
 int MotionsPage::currentId() const {
-    return m_scene->getMotion(m_selected) ? m_selected : -1;
+    return m_scene->getMotion(m_selected) || m_scene->getLearned(m_selected) ? m_selected : -1;
+}
+
+QString* MotionsPage::nameRef(int id) {
+    if (MotionClip* m = m_scene->getMotion(id)) return &m->name;
+    if (LearnedMotion* m = m_scene->getLearned(id)) return &m->name;
+    return nullptr;
+}
+
+int* MotionsPage::robotRef(int id) {
+    if (MotionClip* m = m_scene->getMotion(id)) return &m->robotId;
+    if (LearnedMotion* m = m_scene->getLearned(id)) return &m->robotId;
+    return nullptr;
+}
+
+Operation MotionsPage::previewOperation() const {
+    Operation op;
+    op.type = OperationType::PlayMotion;
+    op.motionId = currentId();
+    op.relative = true;
+    if (m_scene->getLearned(op.motionId)) op.clip = m_clip->currentText();
+    return op;
 }
 
 void MotionsPage::selectMotion(int id) {
@@ -160,39 +191,98 @@ void MotionsPage::refresh() {
         m_list->setItem(i, C_Joints, new QTableWidgetItem(m.take ? QString::number(m.take->jointColumns().size()) : QString()));
         if (id == m_selected) row = i;
     }
+    for (const auto& [id, m] : m_scene->allLearned()) {
+        const int i = m_list->rowCount();
+        m_list->insertRow(i);
+        auto* name = new QTableWidgetItem(Theme::icon("lightbulb"), m.name);
+        name->setData(Qt::UserRole, id);
+        name->setToolTip("A model trained on motions");
+        m_list->setItem(i, C_Name, name);
+        m_list->setItem(i, C_Robot, new QTableWidgetItem(nameOf(*m_scene, m.robotId)));
+        const int clips = m.model ? int(m.model->clips.size()) : 0;
+        m_list->setItem(i, C_Length, new QTableWidgetItem(QString("%1 clip%2").arg(clips).arg(clips == 1 ? "" : "s")));
+        m_list->setItem(i, C_Joints, new QTableWidgetItem(m.model ? QString::number(m.model->joints.size()) : QString()));
+        if (id == m_selected) row = i;
+    }
     if (row < 0 && m_list->rowCount() > 0) {
         row = m_list->rowCount() - 1;   // the newest
         m_selected = m_list->item(row, C_Name)->data(Qt::UserRole).toInt();
     }
     if (row >= 0) m_list->selectRow(row);
     m_empty->setVisible(m_list->rowCount() == 0);
+    m_train->setEnabled(!m_scene->allMotions().empty());
     loadDetails();
 }
 
 void MotionsPage::loadDetails() {
-    const MotionClip* m = m_scene->getMotion(currentId());
-    m_name->setEnabled(m);
-    m_robot->setEnabled(m);
-    m_play->setEnabled(m);
-    m_export->setEnabled(m);
-    m_delete->setEnabled(m);
-    const QSignalBlocker b1(m_name), b2(m_robot);
-    m_name->setText(m ? m->name : QString());
+    const int id = currentId();
+    const MotionClip* m = m_scene->getMotion(id);
+    const LearnedMotion* lm = m_scene->getLearned(id);
+    const bool any = m || lm;
+    m_name->setEnabled(any);
+    m_robot->setEnabled(any);
+    m_play->setEnabled(any);
+    m_export->setEnabled(any);
+    m_delete->setEnabled(any);
+    m_form->setRowVisible(m_clip, lm);
+    m_export->setToolTip(lm ? "Save the chosen clip, as the model plays it, as a CSV take"
+                            : "Save the motion as a CSV take, for analysis or your own learning code");
+    const QSignalBlocker b1(m_name), b2(m_robot), b3(m_clip);
+    m_name->setText(any ? *const_cast<MotionsPage*>(this)->nameRef(id) : QString());
     m_robot->clear();
-    if (!m) {
-        m_info->setText(m_scene->allMotions().empty() ? QString() : QString("Select a motion."));
+    if (!any) {
+        m_info->setText(m_scene->allMotions().empty() && m_scene->allLearned().empty() ? QString() : QString("Select a motion."));
         return;
     }
+    const int robot = m ? m->robotId : lm->robotId;
     for (const ApiServer::Robot& r : ApiServer::findRobots(*m_scene))
         m_robot->addItem(Theme::icon("bot"), r.name, r.root);
-    int idx = m_robot->findData(m->robotId);
+    int idx = m_robot->findData(robot);
     if (idx < 0) {
-        m_robot->insertItem(0, m->take && !m->take->robot.isEmpty() ? QString("(%1 is gone: choose)").arg(m->take->robot)
-                                                                    : QString("(choose)"), m->robotId);
+        const QString was = m && m->take ? m->take->robot : lm && lm->model ? lm->model->robot : QString();
+        m_robot->insertItem(0, !was.isEmpty() ? QString("(%1 is gone: choose)").arg(was) : QString("(choose)"), robot);
         idx = 0;
     }
     m_robot->setCurrentIndex(idx);
-    m_info->setText(describe(*m));
+    if (lm) {
+        const QString was = m_clip->currentText();
+        m_clip->clear();
+        if (lm->model) m_clip->addItems(lm->model->clips);
+        m_clip->setCurrentIndex(std::max(0, m_clip->findText(was)));
+    }
+    m_info->setText(m ? describe(*m) : describe(*lm));
+}
+
+QString MotionsPage::fit(int robot, const QStringList& joints, const QString& verb, const QString& more) const {
+    const std::vector<int> mine = AutomationEngine::actuatedJointsBelow(*m_scene, robot);
+    QStringList matched, unused;
+    for (int jid : mine)
+        if (const Motor* mo = m_scene->motorForJoint(jid)) (joints.contains(mo->name) ? matched : unused) << mo->name;
+    QStringList missing;
+    for (const QString& c : joints)
+        if (!matched.contains(c)) missing << c;
+    QStringList lines;
+    lines << QString("%1 %2 of %3's %4 actuators%5.").arg(verb).arg(matched.size()).arg(nameOf(*m_scene, robot)).arg(mine.size()).arg(more);
+    if (!unused.isEmpty() && unused.size() <= 12) lines << "Left where they are: " + unused.join(", ") + ".";
+    if (!missing.isEmpty())
+        lines << QString("<span style='color:%1'>No actuator for: %2</span>")
+                     .arg(Theme::css(Theme::colors().warning), missing.mid(0, 12).join(", ") + (missing.size() > 12 ? " …" : ""));
+    return lines.join("<br>");
+}
+
+QString MotionsPage::describe(const LearnedMotion& m) const {
+    if (!m.model) return {};
+    const learn::AnimationModel& a = *m.model;
+    QStringList clips;
+    for (int i = 0; i < a.clips.size(); ++i) clips << QString("%1 (%2 s)").arg(a.clips[i]).arg(a.durations[size_t(i)], 0, 'f', 1);
+    QStringList lines;
+    lines << QString("A model trained on %1 motion%2: %3.").arg(a.clips.size()).arg(a.clips.size() == 1 ? "" : "s").arg(clips.join(", "));
+    lines << QString("It learned from %1 samples; error after training %2 (0 = exact).").arg(a.samples).arg(a.net.loss(), 0, 'g', 2);
+    if (m_scene->getObject(m.robotId)) {
+        lines << fit(m.robotId, a.joints, "Its clips move", a.place ? " and carry it over the floor" : "");
+    }
+    lines << "A <b>Play Motion</b> operation plays a clip from where the robot stands, at any length, or blends two.";
+    return lines.join("<br>");
 }
 
 QString MotionsPage::describe(const MotionClip& m) const {
@@ -207,21 +297,8 @@ QString MotionsPage::describe(const MotionClip& m) const {
         lines << QString("Its %1 joint columns: %2.").arg(joints.size()).arg(joints.join(", "));
         return lines.join("<br>");
     }
-    const std::vector<int> mine = AutomationEngine::actuatedJointsBelow(*m_scene, m.robotId);
-    QStringList matched, unused;
-    for (int jid : mine)
-        if (const Motor* mo = m_scene->motorForJoint(jid)) (joints.contains(mo->name) ? matched : unused) << mo->name;
-    QStringList missing;
-    for (const QString& c : joints)
-        if (!matched.contains(c)) missing << c;
     const bool moves = t.column("x") >= 0 && t.column("z") >= 0;
-    lines << QString("It moves %1 of %2's %3 actuators%4.")
-                 .arg(matched.size()).arg(nameOf(*m_scene, m.robotId)).arg(mine.size())
-                 .arg(moves ? " and carries it over the floor" : "");
-    if (!unused.isEmpty() && unused.size() <= 12) lines << "Left where they are: " + unused.join(", ") + ".";
-    if (!missing.isEmpty())
-        lines << QString("<span style='color:%1'>No actuator for: %2</span>")
-                     .arg(Theme::css(Theme::colors().warning), missing.mid(0, 12).join(", ") + (missing.size() > 12 ? " …" : ""));
+    lines << fit(m.robotId, joints, "It moves", moves ? " and carries it over the floor" : "");
     if (t.column("walking") >= 0) {
         int walking = 0;
         for (const auto& row : t.rows) walking += row[size_t(t.column("walking"))] > 0;
@@ -237,28 +314,43 @@ void MotionsPage::refreshRuntime() {
 }
 
 void MotionsPage::rename() {
-    MotionClip* m = m_scene->getMotion(currentId());
-    if (!m) return;
+    const int id = currentId();
+    QString* current = nameRef(id);
+    if (!current) return;
     const QString name = m_name->text().trimmed();
-    if (name.isEmpty() || name == m->name) { m_name->setText(m->name); return; }
+    if (name.isEmpty() || name == *current) { m_name->setText(*current); return; }
     edit([&] {
-        m->name = m_scene->makeMotionName(name, m->id);
+        *current = m_scene->makeMotionName(name, id);
         m_scene->notifyAutomationChanged();
     });
-    m_name->setText(m->name);
-    if (QTableWidgetItem* it = m_list->currentItem() ? m_list->item(m_list->currentRow(), C_Name) : nullptr)
-        it->setText(m->name);
+    m_name->setText(*current);
+    if (m_list->currentRow() >= 0)
+        if (QTableWidgetItem* it = m_list->item(m_list->currentRow(), C_Name)) it->setText(*current);
 }
 
 void MotionsPage::setRobot() {
-    MotionClip* m = m_scene->getMotion(currentId());
+    int* robot = robotRef(currentId());
     const int root = m_robot->currentData().toInt();
-    if (!m || root == m->robotId || !m_scene->getObject(root)) return;
+    if (!robot || root == *robot || !m_scene->getObject(root)) return;
     edit([&] {
-        m->robotId = root;
+        *robot = root;
         m_scene->notifyAutomationChanged();
     });
     refresh();
+}
+
+void MotionsPage::train() {
+    const int* robot = robotRef(currentId());
+    TrainDialog dlg(m_scene, robot ? *robot : -1, this);
+    m_selfEdit = true;   // the new model is selected below
+    const bool ok = dlg.exec() == QDialog::Accepted;
+    m_selfEdit = false;
+    if (!ok || dlg.learnedId() == -1) return;
+    selectMotion(dlg.learnedId());
+    const LearnedMotion* lm = m_scene->getLearned(dlg.learnedId());
+    if (lm && lm->model)
+        emit statusMessage(QString("Trained “%1” on %2 motion%3 — play its clips with a Play Motion operation")
+                               .arg(lm->name).arg(lm->model->clips.size()).arg(lm->model->clips.size() == 1 ? "" : "s"), true);
 }
 
 void MotionsPage::importCsv() {
@@ -299,6 +391,25 @@ void MotionsPage::importCsv() {
 
 void MotionsPage::exportCsv() {
     const MotionClip* m = m_scene->getMotion(currentId());
+    const LearnedMotion* lm = m_scene->getLearned(currentId());
+    if (lm && lm->model) {
+        const learn::AnimationModel& a = *lm->model;
+        const std::vector<double> w = a.weights(m_clip->currentText());
+        if (w.empty()) return;
+        QSettings settings("MotionStudio", "MotionStudio");
+        const QString suggested = QDir(settings.value("take/dir", QDir::homePath()).toString())
+                                      .filePath(QString("%1-%2.csv").arg(lm->name, m_clip->currentText()).replace(' ', '-').toLower());
+        QString path = QFileDialog::getSaveFileName(this, "Export clip", suggested, "CSV take (*.csv)");
+        if (path.isEmpty()) return;
+        if (QFileInfo(path).suffix().isEmpty()) path += ".csv";
+        settings.setValue("take/dir", QFileInfo(path).absolutePath());
+        take::Take t = a.generate(w, 0, 50);
+        t.robot = nameOf(*m_scene, lm->robotId);
+        QString err;
+        if (!t.save(path, &err)) QMessageBox::warning(this, "Export clip", QString("Could not save %1:\n\n%2").arg(path, err));
+        else emit statusMessage(QString("Saved the clip %1 to %2").arg(m_clip->currentText(), QDir::toNativeSeparators(path)), true);
+        return;
+    }
     if (!m || !m->take) return;
     QSettings settings("MotionStudio", "MotionStudio");
     const QString suggested = QDir(settings.value("take/dir", QDir::homePath()).toString())
@@ -315,36 +426,39 @@ void MotionsPage::exportCsv() {
 }
 
 void MotionsPage::remove() {
-    const MotionClip* m = m_scene->getMotion(currentId());
-    if (!m) return;
+    const int id = currentId();
+    const QString* name = nameRef(id);
+    if (!name) return;
     int uses = 0;
     for (const auto& [sid, s] : m_scene->allSequences())
-        for (const Operation& op : s.operations) uses += op.type == OperationType::PlayMotion && op.motionId == m->id;
+        for (const Operation& op : s.operations) uses += op.type == OperationType::PlayMotion && op.motionId == id;
     if (uses && QMessageBox::question(this, "Delete motion",
                                       QString("%1 is played by %2 operation%3. Delete it anyway?")
-                                          .arg(m->name).arg(uses).arg(uses == 1 ? "" : "s")) != QMessageBox::Yes)
+                                          .arg(*name).arg(uses).arg(uses == 1 ? "" : "s")) != QMessageBox::Yes)
         return;
-    const int id = m->id;
-    edit([&] { m_scene->removeMotion(id); });
+    edit([&] {
+        if (m_scene->getMotion(id)) m_scene->removeMotion(id);
+        else m_scene->removeLearned(id);
+    });
     m_selected = -1;
     refresh();
 }
 
 void MotionsPage::play() {
-    const MotionClip* m = m_scene->getMotion(currentId());
-    if (!m || !m->take) return;
-    if (!m_scene->getObject(m->robotId)) {
-        emit statusMessage("Choose the robot that plays " + m->name, false);
+    const int id = currentId();
+    const QString* name = nameRef(id);
+    if (!name) return;
+    const Operation op = previewOperation();
+    const int root = AutomationEngine::playMotionRobot(*m_scene, op);
+    if (!m_scene->getObject(root)) {
+        emit statusMessage("Choose the robot that plays " + *name, false);
         return;
     }
     QString err;
-    std::shared_ptr<AutomationEngine::PlayRequest> req = AutomationEngine::playRequestFor(
-        *m_scene, m->robotId, AutomationEngine::actuatedJointsBelow(*m_scene, m->robotId), *m->take, true, &err);
-    if (!req) {
-        emit statusMessage(m->name + ": " + err, false);
+    if (!AutomationEngine::playMotionRequest(*m_scene, op, root, 0, 0, &err)) {   // checked here; made when it starts
+        emit statusMessage(*name + ": " + err, false);
         return;
     }
-    req->relative = true;
     if (!m_sim->isRunning()) {
         if (!m_sim->isActive()) {
             const QStringList errs = AutomationEngine::validateAll(*m_scene);
@@ -356,14 +470,18 @@ void MotionsPage::play() {
         m_sim->play();
         if (!m_sim->isRunning()) return;
     }
+    // From where the robot stands now that the simulation runs
+    std::shared_ptr<AutomationEngine::PlayRequest> req = AutomationEngine::playMotionRequest(*m_scene, op, root, 0, 0, &err);
+    if (!req) return;
     AutomationEngine* a = m_sim->automation();
     if (m_playing && a->hasMotion(m_playing)) a->cancelMotion(m_playing, "another motion was played");
     AutomationEngine::MotionRequest r;
     r.kind = AutomationEngine::MotionKind::Play;
     r.play = req;
-    r.label = "play " + m->name;
+    r.label = "play " + *name;
     QString code;
     m_playing = a->submitMotion(r, &code, &err);
-    if (!m_playing) emit statusMessage(m->name + ": " + err, false);
-    else emit statusMessage(QString("Playing %1 on %2 — Reset puts the robot back").arg(m->name, nameOf(*m_scene, m->robotId)), true);
+    const QString what = op.clip.isEmpty() ? *name : QString("%1 (%2)").arg(*name, op.clip);
+    if (!m_playing) emit statusMessage(what + ": " + err, false);
+    else emit statusMessage(QString("Playing %1 on %2 — Reset puts the robot back").arg(what, nameOf(*m_scene, root)), true);
 }

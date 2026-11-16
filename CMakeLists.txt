@@ -134,6 +134,7 @@ set(SOURCES
     src/ui/automation/ActuatorsPage.cpp
     src/ui/automation/SequencesPage.cpp
     src/ui/automation/MotionsPage.cpp
+    src/ui/automation/TrainDialog.cpp
     src/ui/automation/RuntimePage.cpp
     src/ui/automation/GanttView.cpp
     src/ui/automation/SignalTracePlot.cpp
