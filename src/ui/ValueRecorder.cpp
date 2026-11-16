@@ -21,6 +21,7 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSettings>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <cmath>
 
@@ -48,6 +49,7 @@ void ValueRecorder::sync() {
     const bool on = recording();
     m_action->setChecked(on);
     m_action->setText(on ? "Stop Recording" : "Record Values");
+    m_action->setIconText(on ? "Stop" : "Record");   // the toolbar's short label
     m_action->setIcon(Theme::icon(on ? "circle-stop" : "circle-dot"));
     m_action->setToolTip(on ? "Stop recording and save the values"
                             : "Record a robot's joint values and where it stands while it moves,\n"
@@ -78,7 +80,7 @@ bool ValueRecorder::begin() {
     vb->addWidget(title);
     auto* sub = new QLabel("While the simulation runs, its joint values and where it stands are written to a CSV "
                            "file, one row per sample. A walking robot also gets its step, its swinging foot and "
-                           "where the walk goes. Recording starts Play; press Stop Recording to save.");
+                           "where the walk goes. Recording starts Play; press Stop to save.");
     sub->setObjectName("hint");
     sub->setWordWrap(true);
     sub->setMinimumWidth(440);
@@ -104,6 +106,7 @@ bool ValueRecorder::begin() {
     rate->setCurrentIndex(std::max(0, rate->findData(settings.value("take/rate", 0.0).toDouble())));
     auto* file = new QLineEdit;
     auto* browse = new QPushButton("Browse…");
+    browse->setAutoDefault(false);   // Enter in the File field records, it doesn't browse
     auto* fileRow = new QHBoxLayout;
     fileRow->addWidget(file, 1);
     fileRow->addWidget(browse);
@@ -132,7 +135,9 @@ bool ValueRecorder::begin() {
     btns->button(QDialogButtonBox::Ok)->setText("Record");
     btns->button(QDialogButtonBox::Ok)->setIcon(Theme::icon("circle-dot"));
     btns->button(QDialogButtonBox::Ok)->setDefault(true);
+    btns->button(QDialogButtonBox::Cancel)->setAutoDefault(false);   // Enter records, never cancels
     vb->addWidget(btns);
+    connect(file, &QLineEdit::returnPressed, &dlg, &QDialog::accept);
     connect(btns, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
     connect(btns, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
     if (dlg.exec() != QDialog::Accepted) return false;
@@ -161,7 +166,7 @@ bool ValueRecorder::begin() {
         sync();
         return true;
     }
-    emit statusMessage(QString("Recording %1 — press Stop Recording to save").arg(r.name), true);
+    emit statusMessage(QString("Recording %1 — press Stop to save").arg(r.name), true);
     return true;
 }
 
@@ -196,8 +201,10 @@ void ValueRecorder::finish(const QString& why) {
         QMessageBox::warning(m_window, "Record Values", QString("Could not save %1:\n\n%2").arg(m_path, error));
         return;
     }
-    emit statusMessage(QString("Saved %1 rows × %2 values of %3 (%4 s)%5 to %6")
-                           .arg(t.rows.size()).arg(t.columns.size()).arg(t.robot)
-                           .arg(t.duration(), 0, 'f', 2).arg(why.isEmpty() ? QString() : " — stopped: " + why)
-                           .arg(QDir::toNativeSeparators(m_path)), true);
+    const QString msg = QString("Saved %1 rows × %2 values of %3 (%4 s)%5 to %6")
+                            .arg(t.rows.size()).arg(t.columns.size()).arg(t.robot)
+                            .arg(t.duration(), 0, 'f', 2).arg(why.isEmpty() ? QString() : " — stopped: " + why)
+                            .arg(QDir::toNativeSeparators(m_path));
+    // After the message of whatever stopped it (Reset says it restored the scene)
+    QTimer::singleShot(0, this, [this, msg] { emit statusMessage(msg, true); });
 }
