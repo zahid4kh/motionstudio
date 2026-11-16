@@ -1789,6 +1789,8 @@ std::shared_ptr<gait::Walker> AutomationEngine::makeWalker(const WalkRequest& w,
     for (const QPointF& q : w.points)
         if (!finite(q.x()) || !finite(q.y())) return reject("bad_request", "the points must be numbers");
     if (w.path && w.points.empty() && !w.heading) return reject("bad_request", "a path needs at least one point");
+    for (const gait::Place& q : w.footsteps)
+        if (!finite(q.x) || !finite(q.z) || !finite(q.heading)) return reject("bad_request", "the footsteps must be numbers");
 
     const gait::Place start = gait::placeOf(kin::toolFrame(*m_scene, w.root));
     // Points in a frame: on the floor below that frame's spot, turned with it
@@ -1803,6 +1805,26 @@ std::shared_ptr<gait::Walker> AutomationEngine::makeWalker(const WalkRequest& w,
     }
     std::optional<double> heading;
     if (w.heading) heading = ref.heading + qDegreesToRadians(*w.heading);
+    if (!w.footsteps.empty()) {
+        // Each step at most a leg's length and a quarter turn from the one before
+        std::vector<gait::Place> places;
+        gait::Place prev = start;
+        for (size_t i = 0; i < w.footsteps.size(); ++i) {
+            const gait::Place& f = w.footsteps[i];
+            const QVector3D v = refFrame.map(QVector3D(float(f.x), 0, float(f.z)));
+            const gait::Place q{v.x(), v.z(), ref.heading + qDegreesToRadians(f.heading)};
+            const double reach = std::hypot(q.x - prev.x, q.z - prev.z);
+            if (reach > legs.legLength)
+                return reject("bad_request", QString("footstep %1 is %2 mm from the one before: more than a leg's length (%3 mm)")
+                                                 .arg(i + 1).arg(reach * 1000, 0, 'f', 0).arg(legs.legLength * 1000, 0, 'f', 0));
+            if (std::fabs(gait::angleDiff(q.heading, prev.heading)) > qDegreesToRadians(90.0) + 1e-9)
+                return reject("bad_request", QString("footstep %1 turns more than 90° from the one before").arg(i + 1));
+            places.push_back(q);
+            prev = q;
+        }
+        if (places.size() > 5000) return reject("bad_request", "the walk is too long (over 5000 steps)");
+        return std::make_shared<gait::Walker>(std::move(legs), gait::makePlan(start, places, p, w.firstSide));
+    }
     const std::vector<gait::Place> places = w.path
         ? gait::pathPlaces(start, points, heading, p)
         : gait::relativePlaces(start, w.forward, w.left, qDegreesToRadians(w.turn), p);

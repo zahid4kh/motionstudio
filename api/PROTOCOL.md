@@ -124,6 +124,7 @@ A place on the floor is `{x, z, heading}`: mm, and degrees about +Y (0 faces +X;
 | `humanoid.walk` | `robot`, `forward?` (mm, negative: back), `sideways?` (mm to its left), `turn?` (degrees to its left), gait, `wait?` | a motion |
 | `humanoid.walkTo` | `robot`, `x`, `z` (mm), `heading?` (degrees), `frame?`, gait, `wait?` | a motion |
 | `humanoid.walkPath` | `robot`, `points: [{x, z} \| [x, z], …]` (mm), `heading?`, `frame?`, gait, `wait?` | a motion |
+| `humanoid.steps` | `robot`, `steps: [{x, z, heading} \| [x, z, heading], …]` (mm, degrees), `first?` (`"left"` / `"right"`), `frame?`, gait, `wait?` | a motion |
 | `humanoid.stop` | `robot` | `{stopping: n}`: walks that end after the step under way, feet together (queued walks are cancelled) |
 | `humanoid.state` | `robot` | `{x, z, heading, walking, motion?, step?, steps?, legs: {left, right, length, hipWidth}, gait: {…}}` |
 
@@ -131,6 +132,7 @@ Details:
 
 - **walk:** a turn given with a distance is spread over the walk, so the robot walks an arc. All zero: done at once.
 - **walkTo / walkPath:** the robot faces the way it goes; corners are rounded so it turns while it walks; a point behind it makes it turn on the spot first. With `heading`, it turns on the spot at the end to face that way.
+- **steps:** footsteps, one step each: a footstep is the place (x, z, heading) the robot would stand at with that foot on its home spot, so walking ahead by steps of 200 mm is `[[200, 0, 0], [400, 0, 0], …]`. The feet alternate, the first towards the turn unless `first` says; after the last footstep the other foot comes alongside, so the robot ends standing at the last place. Each footstep is at most a leg's length and a quarter turn from the one before (else `bad_request`). It is what the walk planner makes of `walkTo` and `walkPath`, and what a program that decides its own steps (a learned policy) sends.
 - **frame:** `"world"` (the default); `"robot"`: the robot's place when the walk starts (x ahead, z to its right; so queued walks chain); or any object's name or path: points are on the floor below that object, turned with it, and `heading` is relative to its heading.
 - **gait** (all optional, flat in `params`): `stepLength`, `sideStep`, `stepHeight`, `crouch`, `sway` (mm), `turnPerStep`, `armSwing` (degrees; 0 keeps the arms still), `stepTime` (s), `speed` (mm/s, sets the step time from the step length), `leftFoot` / `rightFoot` (object names, for a model whose feet are named differently). What is left out comes from the legs' size; `humanoid.state` returns the values.
 - **Queueing:** a walk moves the leg joints (and the shoulder pitch joints while the arms swing), so walks of one robot queue one after another, and a joint move of a leg waits for the walk.

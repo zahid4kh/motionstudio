@@ -126,6 +126,7 @@ private:
     QJsonValue humanoidWalk(const QJsonObject& p, Call& c);
     QJsonValue humanoidWalkTo(const QJsonObject& p, Call& c);
     QJsonValue humanoidWalkPath(const QJsonObject& p, Call& c);
+    QJsonValue humanoidSteps(const QJsonObject& p, Call& c);
     QJsonValue humanoidStop(const QJsonObject& p, Call& c);
     QJsonValue humanoidState(const QJsonObject& p, Call& c);
     QJsonValue robotPlay(const QJsonObject& p, Call& c);

@@ -2715,6 +2715,57 @@ TEST(apiServerRecordsAndPlaysATake) {
     CHECK(errorCode(c.call("take.start", {{"robot", name}, {"rate", -1}})) == "bad_request");
 }
 
+TEST(apiServerWalksFootsteps) {
+    SceneGraph g;
+    const humanoid::Built h = walkingHumanoid(g, false);
+    SimulationEngine sim(&g);
+    sim.setSpeedFactor(20);
+    ApiServer server(&g, &sim);
+    CHECK(server.start(0));
+    ApiClient c;
+    CHECK(c.connectTo(server.port()));
+    const QString name = g.getObject(h.root)->name;
+    auto state = [&] { return result(c.call("humanoid.state", {{"robot", name}})); };
+
+    // Three steps ahead, a fourth turning: each footstep lands where it was put
+    const int take = result(c.call("take.start", {{"robot", name}})).value("take").toInt();
+    const QJsonArray steps{QJsonArray{200, 0, 0}, QJsonArray{400, 0, 0}, QJsonObject{{"x", 600}, {"z", 0}, {"heading", 0}},
+                           QJsonArray{750, -50, 20}};
+    QJsonObject r = c.call("humanoid.steps", {{"robot", name}, {"steps", steps}, {"first", "right"}});
+    CHECK(result(r).value("state").toString() == "done");
+    QJsonObject st = state();
+    CHECK_NEAR(st.value("x").toDouble(), 750, 0.1);
+    CHECK_NEAR(st.value("z").toDouble(), -50, 0.1);
+    CHECK_NEAR(st.value("heading").toDouble(), 20, 1e-3);
+    const QJsonObject t = result(c.call("take.stop", {{"take", take}}));
+    const QVariantList cols = t.value("columns").toArray().toVariantList();
+    const int stepCol = int(cols.indexOf("step")), swingCol = int(cols.indexOf("swing")), sx = int(cols.indexOf("step_x"));
+    std::map<int, std::pair<int, double>> seen;   // step → side, where its foot lands
+    for (const QJsonValue& v : t.value("rows").toArray()) {
+        const QJsonArray row = v.toArray();
+        if (row[stepCol].toInt() >= 0) seen[row[stepCol].toInt()] = {row[swingCol].toInt(), row[sx].toDouble()};
+    }
+    CHECK(seen.size() == 5);                       // the four, then the other foot alongside
+    CHECK(seen[0].first == 1 && seen[1].first == 0 && seen[4].first == 1);
+    CHECK_NEAR(seen[0].second, 200, 0.01);
+    CHECK_NEAR(seen[2].second, 600, 0.01);
+    CHECK_NEAR(seen[4].second, 750, 0.01);
+
+    // In the robot's frame (x ahead, z to its right), from where it stands
+    r = c.call("humanoid.steps", {{"robot", name}, {"frame", "robot"}, {"steps", QJsonArray{QJsonArray{150, 0, 0}, QJsonArray{300, 0, 0}}}});
+    CHECK(result(r).value("state").toString() == "done");
+    st = state();
+    CHECK_NEAR(st.value("x").toDouble(), 750 + 300 * std::cos(qDegreesToRadians(20.0)), 0.1);
+    CHECK_NEAR(st.value("z").toDouble(), -50 - 300 * std::sin(qDegreesToRadians(20.0)), 0.1);
+
+    // Refused before it moves
+    CHECK(errorCode(c.call("humanoid.steps", {{"robot", name}, {"frame", "robot"}, {"steps", QJsonArray{QJsonArray{3000, 0, 0}}}})) == "bad_request");
+    CHECK(errorCode(c.call("humanoid.steps", {{"robot", name}, {"frame", "robot"}, {"steps", QJsonArray{QJsonArray{0, 0, 120}}}})) == "bad_request");
+    CHECK(errorCode(c.call("humanoid.steps", {{"robot", name}, {"steps", QJsonArray{QJsonArray{0, 0}}}})) == "bad_request");
+    CHECK(errorCode(c.call("humanoid.steps", {{"robot", name}, {"steps", QJsonArray{}}})) == "bad_request");
+    CHECK(errorCode(c.call("humanoid.steps", {{"robot", name}, {"first", "middle"}, {"steps", steps}})) == "bad_request");
+}
+
 TEST(apiServerWalksAHumanoid) {
     SceneGraph g;
     const humanoid::Built h = walkingHumanoid(g, false);

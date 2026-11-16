@@ -361,6 +361,7 @@ const std::map<QString, ApiServer::Handler>& ApiServer::handlers() {
         {"humanoid.walk",     &ApiServer::humanoidWalk},
         {"humanoid.walkTo",   &ApiServer::humanoidWalkTo},
         {"humanoid.walkPath", &ApiServer::humanoidWalkPath},
+        {"humanoid.steps",    &ApiServer::humanoidSteps},
         {"humanoid.stop",     &ApiServer::humanoidStop},
         {"humanoid.state",    &ApiServer::humanoidState},
         {"robot.play",        &ApiServer::robotPlay},
@@ -939,7 +940,34 @@ QPointF pointOf(const QJsonValue& v, int index) {
         return QPointF(v.toObject().value("x").toDouble() / kMm, v.toObject().value("z").toDouble() / kMm);
     fail("bad_request", QString("point %1 must be {\"x\": …, \"z\": …} or [x, z] in mm").arg(index + 1));
 }
+gait::Place footstepOf(const QJsonValue& v, int index) {
+    const QJsonArray a = v.toArray();
+    if (v.isArray() && a.size() == 3 && a[0].isDouble() && a[1].isDouble() && a[2].isDouble())
+        return {a[0].toDouble() / kMm, a[1].toDouble() / kMm, a[2].toDouble()};
+    const QJsonObject o = v.toObject();
+    if (v.isObject() && o.value("x").isDouble() && o.value("z").isDouble() && o.value("heading").isDouble())
+        return {o.value("x").toDouble() / kMm, o.value("z").toDouble() / kMm, o.value("heading").toDouble()};
+    fail("bad_request", QString("footstep %1 must be {\"x\", \"z\", \"heading\"} or [x, z, heading] (mm, degrees)").arg(index + 1));
+}
 } // namespace
+
+QJsonValue ApiServer::humanoidSteps(const QJsonObject& p, Call& c) {
+    const Robot r = robotParam(p);
+    AutomationEngine::WalkRequest w = walkRequest(p, r);
+    const QJsonValue steps = p.value("steps");
+    if (!steps.isArray() || steps.toArray().isEmpty())
+        fail("bad_request", "\"steps\" must be a list of footsteps {\"x\", \"z\", \"heading\"} (mm, degrees)");
+    const QJsonArray a = steps.toArray();
+    for (int i = 0; i < a.size(); ++i) w.footsteps.push_back(footstepOf(a[i], i));
+    const QString first = text(p, "first", false);
+    if (first == "left") w.firstSide = 0;
+    else if (first == "right") w.firstSide = 1;
+    else if (!first.isEmpty()) fail("bad_request", "\"first\" must be \"left\" or \"right\"");
+    const QString frame = text(p, "frame", false);
+    if (frame == "robot" || frame == "base") w.fromStart = true;
+    else if (!frame.isEmpty() && frame != "world") w.frameId = objectParam("frame", frame);
+    return submitWalk(p, c, std::move(w), "steps");
+}
 
 QJsonValue ApiServer::humanoidWalkTo(const QJsonObject& p, Call& c) {
     QJsonObject q = p;

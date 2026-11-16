@@ -162,6 +162,12 @@ public:
         int  frameId = -1;                 // points and heading are in this object's frame (-1 = world)
         bool fromStart = false;            // ... or in the robot's own frame where the walk starts
                                            //     (x ahead, z to its right)
+        // Footsteps instead: one step to each place (x, z in m, heading in
+        // degrees, in the frame above); each puts a foot where it stands
+        // when the robot stands at that place, then the other foot comes
+        // alongside the last
+        std::vector<gait::Place> footsteps;
+        int  firstSide = -1;               // footsteps: 0 left foot first, 1 right, -1 towards the turn
         gait::Params params;
     };
     // Motion played back over time (a take, or one a program made): joint
