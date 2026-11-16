@@ -2,6 +2,7 @@
 #include "HelpDialog.h"
 #include "Theme.h"
 #include "io/ApiServer.h"
+#include "robot/Gait.h"
 #include "scene/SceneGraph.h"
 #include <QApplication>
 #include <QCheckBox>
@@ -27,6 +28,7 @@ enum Col { C_Robot, C_Joints, C_Tools, C_Count };
 // Example values for the quick start: the scene's first robot, else placeholders
 struct Example {
     QString robot = "Robot", tool, joint = "J1";
+    QString walker;                 // a robot with legs, if there is one
     int port = ApiServer::kDefaultPort;
 };
 
@@ -57,6 +59,14 @@ QString pythonCode(const Example& e) {
     l.push_back({QString("    %1.move_by(y=-50, speed=100)").arg(t), "and back down at 100 mm/s"});
     l.push_back({QString("    robot.move_joints(%1=30)").arg(e.joint), "a joint move, in degrees"});
     l.push_back({"    robot.home()", ""});
+    if (!e.walker.isEmpty()) {
+        l.push_back({"", ""});
+        l.push_back({QString("    walker = studio.humanoid(%1)").arg(quote(e.walker)), "it has legs"});
+        l.push_back({"    walker.walk(1000)", "a metre ahead"});
+        l.push_back({"    walker.turn(90)", "a quarter turn to its left"});
+        l.push_back({"    walker.walk_path([(800, 0), (800, 800)], frame=\"robot\")", "x ahead, z to its right"});
+        l.push_back({"    print(walker.place)", "x, z (mm) and heading"});
+    }
     return aligned(l, "#");
 }
 
@@ -75,6 +85,14 @@ QString cppCode(const Example& e) {
     l.push_back({QString("    %1.moveBy(ms::Target().y(-50), {.speed = 100});").arg(t), "and back down at 100 mm/s"});
     l.push_back({QString("    robot.moveJoints({{\"%1\", 30}});").arg(e.joint), "a joint move, in degrees"});
     l.push_back({"    robot.home();", ""});
+    if (!e.walker.isEmpty()) {
+        l.push_back({"", ""});
+        l.push_back({QString("    auto walker = studio.humanoid(%1);").arg(quote(e.walker)), "it has legs"});
+        l.push_back({"    walker.walk(1000);", "a metre ahead"});
+        l.push_back({"    walker.turn(90);", "a quarter turn to its left"});
+        l.push_back({"    walker.walkPath({{800, 0}, {800, 800}}, {}, {.frame = \"robot\"});", "x ahead, z to its right"});
+        l.push_back({"    std::cout << walker.place() << \"\\n\";", "x, z (mm) and heading"});
+    }
     l.push_back({"}", ""});
     return aligned(l, "//");
 }
@@ -83,7 +101,7 @@ QString kotlinCode(const Example& e) {
     const QString port = e.port == ApiServer::kDefaultPort ? QString() : QString("port = %1").arg(e.port);
     const QString t = e.tool.isEmpty() ? "robot" : "tool";
     std::vector<std::pair<QString, QString>> l = {
-        {"// Maven Central: implementation(\"io.github.zahid4kh:motionstudio:0.1.1\")", ""},
+        {"// Maven Central: implementation(\"io.github.zahid4kh:motionstudio:0.2.0\")", ""},
         {"import io.motionstudio.MotionStudio", ""}, {"", ""},
         {QString("fun main() = MotionStudio.connect(%1).use { studio ->").arg(port), ""},
         {QString("    val robot = studio.robot(%1)").arg(quote(e.robot)), ""}};
@@ -93,6 +111,14 @@ QString kotlinCode(const Example& e) {
     l.push_back({QString("    %1.moveBy(y = -50, speed = 100)").arg(t), "and back down at 100 mm/s"});
     l.push_back({QString("    robot.moveJoints(\"%1\" to 30)").arg(e.joint), "a joint move, in degrees"});
     l.push_back({"    robot.home()", ""});
+    if (!e.walker.isEmpty()) {
+        l.push_back({"", ""});
+        l.push_back({QString("    val walker = studio.humanoid(%1)").arg(quote(e.walker)), "it has legs"});
+        l.push_back({"    walker.walk(1000)", "a metre ahead"});
+        l.push_back({"    walker.turn(90)", "a quarter turn to its left"});
+        l.push_back({"    walker.walkPath(800 to 0, 800 to 800, frame = \"robot\")", "x ahead, z to its right"});
+        l.push_back({"    println(walker.place)", "x, z (mm) and heading"});
+    }
     l.push_back({"}", ""});
     return aligned(l, "//");
 }
@@ -119,7 +145,8 @@ ApiServerDialog::ApiServerDialog(SceneGraph* scene, ApiServer* server, QWidget* 
     title->setObjectName("dialogTitle");
     vb->addWidget(title);
     auto* sub = new QLabel("Programs in <b>Python</b>, <b>C++</b> or <b>Kotlin</b> connect here to move robots "
-                           "(straight lines, joint moves, taught poses) and read and write signals. The libraries "
+                           "(straight lines, joint moves, taught poses), walk humanoids along paths, and read and "
+                           "write signals. The libraries "
                            "are in <b>api/</b> of the MotionStudio source. Lengths are millimetres, angles degrees; "
                            "Y is up. A move starts the simulation if it isn't running.");
     sub->setObjectName("hint");
@@ -255,6 +282,11 @@ void ApiServerDialog::rebuild() {
         m_robots->insertRow(r);
         auto* name = new QTableWidgetItem(rb.path);
         QFont f = name->font(); f.setBold(true); name->setFont(f);
+        if (gait::canWalk(*m_scene, rb.root)) {
+            name->setIcon(Theme::icon("footprints"));
+            name->setToolTip("It walks: humanoid.walk / walkTo / walkPath");
+            if (ex.walker.isEmpty()) ex.walker = rb.path;
+        }
         m_robots->setItem(r, C_Robot, name);
         auto* j = new QTableWidgetItem(joints.join(", "));
         j->setToolTip(joints.join(", "));
