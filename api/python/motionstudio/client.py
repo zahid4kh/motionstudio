@@ -593,6 +593,28 @@ class Humanoid(Robot):
             params["heading"] = float(heading)
         return self._walk("humanoid.walkPath", params, gait, options, wait)
 
+    def walk_steps(self, steps: Iterable[Union[Place, Sequence[Number], Mapping[str, Number]]], *, first: Optional[str] = None,
+                   frame: str = "world", gait: Optional[Gait] = None, wait: bool = True, **options: Any) -> Motion:
+        """Steps exactly where you say: one step to each footstep, then the other
+        foot comes alongside the last. A footstep is the place the robot would
+        stand at with that foot on its home spot: ``(x, z, heading)`` in mm and
+        degrees, a ``Place`` or a dict. ``first`` is ``"left"`` or ``"right"``
+        (default: towards the turn). Each is at most a leg's length and a
+        quarter turn from the one before. ``frame`` as for ``walk_to``."""
+        out = []
+        for s in steps:
+            if isinstance(s, Place):
+                out.append([s.x, s.z, s.heading])
+            elif isinstance(s, Mapping):
+                out.append([float(s["x"]), float(s["z"]), float(s["heading"])])
+            else:
+                x, z, h = s
+                out.append([float(x), float(z), float(h)])
+        params: Dict[str, Any] = {"steps": out, "frame": frame}
+        if first is not None:
+            params["first"] = first
+        return self._walk("humanoid.steps", params, gait, options, wait)
+
     def stop_walking(self) -> int:
         """Ends its walks after the step under way, the feet together; returns how many."""
         return int(self.studio._call("humanoid.stop", {"robot": self.path})["stopping"])

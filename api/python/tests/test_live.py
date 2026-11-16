@@ -5,6 +5,7 @@
 The server is found through $MOTIONSTUDIO_SERVER, else build/motionstudio-server
 at the top of the repository.
 """
+import math
 import os
 import tempfile
 import socket
@@ -243,6 +244,14 @@ class WalkingTests(unittest.TestCase):
         self.assertPlace(self.h.place, 500, 300, 180)
         self.h.walk_path([ms.Place(300, 0), {"x": 300, "z": 300}], frame="robot")   # x ahead, z to its right
         self.assertPlace(self.h.place, 200, 0)
+
+    def test_footsteps(self):
+        self.h.walk_steps([(200, 0, 0), ms.Place(400, 0, 0), {"x": 550, "z": 50, "heading": -20}], first="left")
+        self.assertPlace(self.h.place, 550, 50, -20)
+        self.h.walk_steps([(150, 0, 0)], frame="robot")
+        self.assertPlace(self.h.place, 550 + 150 * math.cos(math.radians(20)), 50 + 150 * math.sin(math.radians(20)), -20)
+        with self.assertRaises(ms.MotionStudioError):
+            self.h.walk_steps([(5000, 0, 0)])
 
     def test_without_waiting_and_stopping(self):
         m = self.h.walk(4000, wait=False)

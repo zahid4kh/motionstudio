@@ -6,10 +6,12 @@ millimetres, degrees and seconds:
 
 - ``t``: seconds since the take started
 - ``x y z rx ry rz``: the robot's top object in the world
-- for a robot with legs: ``heading walking step swing progress goal_x goal_z
-  goal_heading`` (where it faces; 1 while it walks; the step under way, -1
-  none; the foot in the air, 0 left, 1 right, -1 none; how far through the
-  step, 0..1; where the walk ends)
+- for a robot with legs: ``heading walking step swing progress step_x step_z
+  step_heading goal_x goal_z goal_heading`` (where it faces; 1 while it
+  walks; the step under way, -1 none; the foot in the air, 0 left, 1 right,
+  -1 none; how far through the step, 0..1; where that foot lands, as the
+  place the robot would stand at with it on its home spot; where the walk
+  ends)
 - then one column per joint, named after its actuator
 
 No dependencies; ``Take.array()`` gives a NumPy array when NumPy is installed.
@@ -20,7 +22,8 @@ import os
 
 #: Columns that are not joints
 PLACE_COLUMNS = ("t", "x", "y", "z", "rx", "ry", "rz")
-WALK_COLUMNS = ("heading", "walking", "step", "swing", "progress", "goal_x", "goal_z", "goal_heading")
+WALK_COLUMNS = ("heading", "walking", "step", "swing", "progress", "step_x", "step_z", "step_heading",
+                "goal_x", "goal_z", "goal_heading")
 META_COLUMNS = PLACE_COLUMNS + WALK_COLUMNS
 
 

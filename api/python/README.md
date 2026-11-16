@@ -56,6 +56,7 @@ Units are mm, degrees and seconds, and Y is up. See [../README.md](../README.md)
 | `turn(degrees, …)`, `side_step(mm, …)` | On the spot / sideways |
 | `walk_to(x, z, heading=None, *, frame="world", …)` | To a spot on the floor (mm), then face `heading` |
 | `walk_path(points, heading=None, *, frame="world", …)` | Through `[(x, z), …]`; `frame="robot"`: x ahead, z to its right; or an object's name |
+| `walk_steps(steps, *, first=None, frame="world", …)` | Exactly these footsteps `[(x, z, heading), …]`, then the other foot alongside |
 | `stop_walking()` | Finishes the step under way, feet together |
 | `state()` → `WalkState(place, walking, motion, step, steps, gait)` | Also `place`, `walking`, `default_gait` |
 
@@ -81,7 +82,7 @@ Gait options, as keywords (`step_length=250, speed=400`) or `gait=Gait(...)`: `s
 
 | `Take` (a recording) | |
 |---|---|
-| `columns`, `rows`, `robot`, `rate`, `duration`, `len(take)` | `t`, `x y z rx ry rz`, for legs `heading walking step swing progress goal_x goal_z goal_heading`, then the joints |
+| `columns`, `rows`, `robot`, `rate`, `duration`, `len(take)` | `t`, `x y z rx ry rz`, for legs `heading walking step swing progress step_x step_z step_heading goal_x goal_z goal_heading`, then the joints |
 | `take["x"]`, `frame(i)`, `joints(i)`, `joint_names`, `walks` | Columns and rows |
 | `between(t0, t1)`, `select(columns)` | Parts of it |
 | `save(path)`, `Take.load(path)` | The CSV that MotionStudio's **Record Values** writes |
