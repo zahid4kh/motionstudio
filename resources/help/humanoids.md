@@ -82,12 +82,13 @@ It is kinematic: the legs follow the plan and the humanoid can't fall. The floor
 
 - **Forward**, **Sideways** and **Turn**: metres ahead, metres to its left and degrees to its left. Negative values walk backwards, step right or turn right. A turn given with a distance makes the walk an arc.
 - **Walk to** an object: it walks to where the object stands on the floor and turns to face the way it faces (the object's +X). Add an empty frame as a marker, place it, and walk to it. Move the marker and the humanoid walks there instead.
+- **Walk to › Points on the floor**: press **Pick on floor** and click the floor in the viewport, once per point; the route is drawn from the humanoid through the numbered points. **Enter** or **Esc** ends picking, the eraser button clears them. It walks through them in order, rounding the corners, and turns to **Face °** at the end (0 = +X, 90 = −Z; empty keeps the way it arrives).
 - **Speed** (m/s) is optional; without it the pace comes from the size of the legs.
 
 **From a program**, call `walk`, `turn`, `walk_to` and `walk_path` on a humanoid (see [Robot API](help:api)). A program can set the step length, the step height, the speed and the arm swing, and stop a walk gracefully after the step under way.
 
 **File › Open Template… › Humanoid Patrol** is a humanoid that walks round four spots, waving at one and bowing at another.
 
-**Recording it:** **Record Values** saves the humanoid's joint values, where it stands and its steps while it walks, as a CSV take (see [Running & Debugging](help:runtime)). From Python, takes like that teach a model to walk on its own (see [Robot API](help:api)).
+**Recording it:** **Record Values** keeps what the humanoid does (its joint values, where it stands and its steps) as a motion in the project, which a **Play Motion** operation plays again and **Train** learns from (see [Motions](help:motions)). Walking itself is best left to the Walk operation, which plans the steps to anywhere; record and train the actions it can't plan, such as a wave, a bow or a dance.
 
 Any model can walk if it has objects called **Left Foot** and **Right Foot** below one top object, each moved by at least a hip, a knee and an ankle joint with actuators, and its feet resting on the floor at the top object's height.

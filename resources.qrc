@@ -155,6 +155,7 @@
         <file alias="help/expressions.md">resources/help/expressions.md</file>
         <file alias="help/recipes.md">resources/help/recipes.md</file>
         <file alias="help/runtime.md">resources/help/runtime.md</file>
+        <file alias="help/motions.md">resources/help/motions.md</file>
 
         <file alias="help/io.md">resources/help/io.md</file>
 

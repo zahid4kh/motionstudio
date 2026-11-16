@@ -154,7 +154,7 @@ walker.walk_steps([(200, 0, 0), (400, 0, 0)])  # exactly these footsteps (x, z, 
 
 `play` sets the joints named in the take's columns and moves the robot to its `x y z rx ry rz` (or `x z heading` on the floor), interpolating between rows. With `relative=True` the motion starts where the robot stands.
 
-**Python only:** `motionstudio.learn` (needs NumPy) teaches small neural networks from takes:
+The app itself records, trains and plays motions without any code (see [Motions](help:motions)). **Python only:** `motionstudio.learn` (needs NumPy) teaches small neural networks from takes, for your own experiments:
 
 - `AnimationModel().fit({"wave": take1, "bow": take2})` learns animations and poses. `generate("wave", duration=3)` plays one at any length, `generate({"wave": 0.5, "bow": 0.5})` blends them, and `pose("bow", 0.5)` gives the joint values half way through.
 - `WalkPolicy().fit(takes)` learns to walk from takes of a humanoid walking to many goals. Its **step policy** decides each footstep towards a goal, and its **motion model** moves every joint through a step. `policy.walk(walker, x, z, heading)` makes the robot step where the policy decides, so its feet land exactly. `policy.motion(x, z, heading, start=walker)` makes the whole motion from the networks, as a take to play.

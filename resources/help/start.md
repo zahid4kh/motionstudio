@@ -12,6 +12,8 @@ MotionStudio turns a 3D model into a working machine in five steps. Each step bu
 
 Then press **Play** (Space) and drive the machine from the **Runtime** tab.
 
+> **Tip:** to reuse a motion a robot made (a wave, a bow, a handover), press **Record**, let it move, and play it again from any sequence with a **Play Motion** operation. **Train** in Automation › Motions teaches a model several of them, to play at any length or blended (see [Motions](help:motions)).
+
 > **Tip:** **File › Insert Component…** (Ctrl+Shift+I) adds ready-made pieces to your scene: a gripper, a conveyor with an end sensor, a gantry, a turntable, a light barrier, parts and a bin. Each comes with its actuators and sensors.
 
 > **Tip:** the fastest way to learn is to open a working example. Use **File › Open Template…**, load *Robotic Arm — Pick & Place*, press Play, then switch **Start** ON in the Runtime tab. Every tab shows how the pieces fit together.

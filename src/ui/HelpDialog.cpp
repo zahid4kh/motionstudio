@@ -32,6 +32,7 @@ const Topic kTopics[] = {
     {"robots",      "Robot Builder & Analyzer", "bot"},
     {"humanoids",   "Humanoid Builder",       "person-standing"},
     {"sequences",   "Sequences & Operations", "list-ordered"},
+    {"motions",     "Motions: Record, Train, Play", "film"},
     {"signals",     "Signals",                "toggle-right"},
     {"sensors",     "Sensors & Gripping",     "radio"},
     {"flow",        "Part Sources & Sinks",   "boxes"},
