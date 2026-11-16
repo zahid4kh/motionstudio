@@ -3,6 +3,7 @@
 #include <QString>
 #include <QVector3D>
 #include <QMatrix4x4>
+#include <QPointF>
 #include <map>
 #include <memory>
 #include <vector>
@@ -91,7 +92,7 @@ enum class OperationType {
     Grip,        // gripper picks up a part (from a sensor or a fixed object); done when held
     Release,     // gripper lets go of everything it holds; done immediately
     MoveL,       // tool moves in a straight line to where it is in a pose (inverse kinematics)
-    Walk,        // a legged robot walks by distances and a turn, or to an object's place; done when it stands
+    Walk,        // a legged robot walks by distances and a turn, to an object's place or through points; done when it stands
     PlayMotion,  // a robot plays a motion kept in the project (see MotionClip); done at its end
 };
 
@@ -116,6 +117,9 @@ struct Operation {
     QString       blend;             // ... by this much, 0..1 (expression; empty = 0.5)
     bool          relative   = true; // PlayMotion: start where the robot stands (else where it was recorded)
     int           walkToId   = -1;   // Walk: walk to this object's place and face its way (-1 = by distance)
+    bool          walkRoute  = false;// Walk (no walkToId): through `route` instead of by distance
+    std::vector<QPointF> route;      // Walk: points on the floor, x and z in the world (m), picked in the viewport
+    QString       routeHeading;      // Walk through a route: degrees to face at its end (empty = the way it arrives)
 
     // All numeric/boolean fields are expressions (a constant is a valid expression)
     QString       target;            // Move: position

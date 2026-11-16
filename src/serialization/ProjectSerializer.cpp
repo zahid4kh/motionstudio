@@ -283,6 +283,12 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene, MeshPool* pool) {
             if (op.walkerId != -1)  oo["walkerId"]  = op.walkerId;
             if (op.walkToId != -1)  oo["walkToId"]  = op.walkToId;
             if (op.motionId != -1)  oo["motionId"]  = op.motionId;
+            if (op.walkRoute) {
+                QJsonArray pts;
+                for (const QPointF& pt : op.route) pts.append(QJsonArray{pt.x(), pt.y()});
+                oo["route"] = pts;
+                if (!op.routeHeading.isEmpty()) oo["routeHeading"] = op.routeHeading;
+            }
             if (!op.relative)       oo["relative"]  = false;
             if (!op.clip.isEmpty())      oo["clip"]      = op.clip;
             if (!op.blendClip.isEmpty()) oo["blendClip"] = op.blendClip;
@@ -720,6 +726,12 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root, con
             op.walkerId       = ref(idMap, oo["walkerId"]);
             op.walkToId       = ref(idMap, oo["walkToId"]);
             op.motionId       = ref(motionIdMap, oo["motionId"]);
+            op.walkRoute      = oo.contains("route");
+            for (const QJsonValue& pv : oo["route"].toArray()) {
+                const QJsonArray a = pv.toArray();
+                if (a.size() == 2) op.route.push_back(QPointF(a[0].toDouble(), a[1].toDouble()));
+            }
+            op.routeHeading   = oo["routeHeading"].toString();
             op.relative       = oo["relative"].toBool(true);
             op.clip           = oo["clip"].toString();
             op.blendClip      = oo["blendClip"].toString();

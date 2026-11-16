@@ -287,9 +287,12 @@ QStringList AutomationEngine::validateAll(const SceneGraph& scene) {
                         errs << where + ": " + why;
                     if (op.walkToId != -1 && !scene.getObject(op.walkToId))
                         errs << where + ": the place to walk to no longer exists";
-                    else if (op.walkToId == -1 && op.forward.trimmed().isEmpty() && op.sideways.trimmed().isEmpty() &&
-                             op.turn.trimmed().isEmpty())
+                    else if (op.walkToId == -1 && op.walkRoute && op.route.empty())
+                        errs << where + ": no points to walk through: pick them on the floor";
+                    else if (op.walkToId == -1 && !op.walkRoute && op.forward.trimmed().isEmpty() &&
+                             op.sideways.trimmed().isEmpty() && op.turn.trimmed().isEmpty())
                         errs << where + ": nothing to walk: give a distance, a turn or a place";
+                    if (op.walkRoute) chk(where + " heading", op.routeHeading);
                     chk(where + " forward", op.forward);
                     chk(where + " sideways", op.sideways);
                     chk(where + " turn", op.turn);
@@ -545,6 +548,7 @@ bool AutomationEngine::start(QStringList* errors) {
             o.forward.compile(op.forward, res.r());
             o.sideways.compile(op.sideways, res.r());
             o.turn.compile(op.turn, res.r());
+            o.routeHeading.compile(op.routeHeading, res.r());
             o.blend.compile(op.blend, res.r());
             expr::compileAssignments(op.onStart, res.r(), res.w(), o.onStart);
             expr::compileAssignments(op.onFinish, res.r(), res.w(), o.onFinish);
@@ -901,6 +905,11 @@ void AutomationEngine::startOperation(SeqRt& seq, OpRt& op) {
                 w.points = {QPointF(place.x, place.z)};
                 w.heading = qRadiansToDegrees(place.heading);
                 op.status.detail = "walking to " + to->name;
+            } else if (op.def.walkRoute) {
+                w.path = true;
+                w.points = op.def.route;
+                if (!op.def.routeHeading.trimmed().isEmpty()) w.heading = op.routeHeading.eval(c);
+                op.status.detail = QString("walking through %1 point%2").arg(w.points.size()).arg(w.points.size() == 1 ? "" : "s");
             } else {
                 w.forward = op.forward.isEmpty() ? 0.0 : op.forward.eval(c);
                 w.left = op.sideways.isEmpty() ? 0.0 : op.sideways.eval(c);

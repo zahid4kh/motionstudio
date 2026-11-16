@@ -325,7 +325,7 @@ private:
         LinearPath       path;
         bool             pathWarned = false;
         // Walk
-        expr::Expression forward, sideways, turn;
+        expr::Expression forward, sideways, turn, routeHeading;
         expr::Expression blend;           // PlayMotion of a learned model
         std::shared_ptr<gait::Walker> walker;
         double           walkStart = 0;

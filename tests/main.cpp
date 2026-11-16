@@ -3698,6 +3698,42 @@ TEST(walkOperationInASequence) {
     CHECK(AutomationEngine::validateAll(g).join(" ").contains("no legs"));
 }
 
+TEST(walkOperationThroughPoints) {
+    SceneGraph g;
+    const humanoid::Built b = walkingHumanoid(g);
+    Sequence q;
+    q.name = "Route";
+    Operation a;
+    a.id = g.allocateId();
+    a.type = OperationType::Walk;
+    a.walkerId = b.root;
+    a.walkRoute = true;
+    q.operations = {a};
+    const int seq = g.addSequence(q);
+    CHECK(AutomationEngine::validateAll(g).join(" ").contains("no points to walk through"));
+    Operation& op = g.getSequence(seq)->operations[0];
+    op.route = {QPointF(0.8, 0.0), QPointF(1.2, 0.8)};
+    op.routeHeading = "Face";
+    Signal face;
+    face.name = "Face"; face.kind = SignalKind::Internal; face.type = SignalType::Real; face.initialValue = 180;
+    g.addSignal(face);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+    SceneGraph loaded;
+    roundTrip(g, loaded);
+    const Operation& lo = loaded.allSequences().begin()->second.operations[0];
+    CHECK(lo.walkRoute && lo.route.size() == 2 && lo.route[1] == QPointF(1.2, 0.8) && lo.routeHeading == "Face");
+
+    AutomationEngine e(&g);
+    CHECK(e.start(nullptr));
+    for (int i = 0; i < 3000 && e.seqStatus(seq).state != AutomationEngine::SeqState::Finished; ++i) e.scan(0.016);
+    CHECK(e.seqStatus(seq).state == AutomationEngine::SeqState::Finished);
+    CHECK(e.warnings().isEmpty());
+    const gait::Place p = placeNow(g, b.root);
+    CHECK_NEAR(p.x, 1.2, 1e-3);
+    CHECK_NEAR(p.z, 0.8, 1e-3);
+    CHECK_NEAR(std::abs(qRadiansToDegrees(p.heading)), 180, 0.1);
+}
+
 TEST(takePlaysBackAWalk) {
     SceneGraph g;
     const humanoid::Built b = walkingHumanoid(g);
