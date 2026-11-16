@@ -4,7 +4,9 @@
 #include <QVector3D>
 #include <QMatrix4x4>
 #include <map>
+#include <memory>
 #include <vector>
+#include "Take.h"
 
 // Definitions for the signal-driven automation system (see AUTOMATION_PLAN.md).
 // These are pure data, owned by SceneGraph and persisted in .mstudio files;
@@ -151,6 +153,17 @@ struct Pose {
         m.rotate(relRotation);
         return m;
     }
+};
+
+// A motion kept in the project (Automation panel › Motions): a take one
+// robot made, recorded with Record Values or imported from a CSV file.
+// Play Motion operations play it back. The take never changes once stored
+// (edits replace the pointer), so undo snapshots share it.
+struct MotionClip {
+    int     id = -1;
+    QString name;
+    int     robotId = -1;                  // the robot's top object (what it was recorded on)
+    std::shared_ptr<const take::Take> take;
 };
 
 // Object source: makes copies of a template object while simulating. The

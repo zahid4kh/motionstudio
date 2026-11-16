@@ -99,6 +99,15 @@ public:
     const Pose* getPose(int id) const;
     const std::map<int, Pose>& allPoses() const { return m_poses; }
 
+    // Motions kept in the project (recorded takes); names are unique but not symbols
+    int         addMotion(MotionClip m);
+    void        removeMotion(int id);
+    MotionClip* getMotion(int id);
+    const MotionClip* getMotion(int id) const;
+    const std::map<int, MotionClip>& allMotions() const { return m_motionClips; }
+    // `base`, or `base 2`, `base 3` … : a name no motion other than `exceptId` uses
+    QString     makeMotionName(const QString& base, int exceptId = -1) const;
+
     // Assembly mates (see scene/Assembly.h for solving them). Removing an
     // object removes the mates that refer to it or its subtree.
     int   addMate(Mate m);
@@ -230,6 +239,7 @@ private:
     std::map<int, Sequence>                m_sequences;
     std::map<int, Pose>                    m_poses;
     std::map<int, Mate>                    m_mates;
+    std::map<int, MotionClip>              m_motionClips;
     std::map<int, PartSource>              m_sources;
     std::map<int, PartSink>                m_sinks;
     std::vector<int>                       m_roots;

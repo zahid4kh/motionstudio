@@ -3854,6 +3854,50 @@ TEST(takeRecordsAWalk) {
     CHECK(f.open(QIODevice::ReadOnly) && QString::fromUtf8(f.readAll()) == csv);
 }
 
+TEST(takeKeptInTheProject) {
+    SceneGraph g;
+    const int robot = g.addObject("Arm", PrimitiveType::Cube);
+    take::Take t;
+    t.robot = "Arm";
+    t.rate = 10;
+    t.columns = QStringList{"t", "x", "y", "z", "rx", "ry", "rz", "J1", "J2"};
+    for (int i = 0; i < 30; ++i)
+        t.rows.push_back({i * 0.1, 0, 0, 0, 0, 0, 0, std::sin(i * 0.2) * 45.0, i * 1.25 + 0.001});
+    CHECK(t.jointColumns() == QStringList({"J1", "J2"}));
+
+    // CSV there and back
+    take::Take back;
+    QString err;
+    CHECK(take::Take::fromCsv(t.toCsv(), &back, &err));
+    CHECK(back.robot == "Arm" && back.rate == 10 && back.columns == t.columns && back.rows.size() == 30);
+    CHECK_NEAR(back.rows[7][7], std::round(std::sin(1.4) * 45000) / 1000, 1e-9);
+    CHECK(!take::Take::fromCsv("t,J1\n0,1\n0,2\n", &back, &err) && err.contains("increase"));
+    CHECK(!take::Take::fromCsv("J1,t\n0,1\n1,2\n", &back, &err) && err.contains("first column"));
+    CHECK(!take::Take::fromCsv("t,J1\n0,1\n1,x\n", &back, &err) && err.contains("not a number"));
+
+    // In the project: names stay apart, the robot follows its object
+    MotionClip m;
+    m.name = "Wave";
+    m.robotId = robot;
+    m.take = std::make_shared<take::Take>(t);
+    const int a = g.addMotion(m);
+    const int b = g.addMotion(m);
+    CHECK(g.getMotion(a)->name == "Wave" && g.getMotion(b)->name == "Wave 2");
+    SceneGraph h;
+    h.addObject("Spacer", PrimitiveType::Cube);   // ids move on load
+    CHECK(ProjectSerializer::fromJson(h, ProjectSerializer::toJson(g)));
+    CHECK(h.allMotions().size() == 2);
+    const MotionClip& loaded = h.allMotions().begin()->second;
+    CHECK(loaded.name == "Wave" && h.getObject(loaded.robotId) && h.getObject(loaded.robotId)->name == "Arm");
+    CHECK(loaded.take->columns == t.columns && loaded.take->rows == t.rows && loaded.take->rate == 10);
+    // a load → save round trip is stable
+    SceneGraph k;
+    CHECK(ProjectSerializer::fromJson(k, ProjectSerializer::toJson(h)));
+    CHECK(ProjectSerializer::toJson(k) == ProjectSerializer::toJson(h));
+    g.removeMotion(a);
+    CHECK(g.allMotions().size() == 1);
+}
+
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     const QString filter = argc > 1 ? QString(argv[1]) : QString();

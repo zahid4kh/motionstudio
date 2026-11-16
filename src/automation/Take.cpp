@@ -4,7 +4,9 @@
 #include "../robot/Gait.h"
 #include "../scene/SceneGraph.h"
 #include <QFile>
+#include <QJsonArray>
 #include <QSaveFile>
+#include <QTextStream>
 #include <QtMath>
 #include <cmath>
 
@@ -42,6 +44,103 @@ bool Take::save(const QString& path, QString* error) const {
         return false;
     }
     return true;
+}
+
+bool Take::load(const QString& path, Take* out, QString* error) {
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        if (error) *error = f.errorString();
+        return false;
+    }
+    return fromCsv(QString::fromUtf8(f.readAll()), out, error);
+}
+
+bool Take::fromCsv(const QString& text, Take* out, QString* error) {
+    auto failed = [&](const QString& why) {
+        if (error) *error = why;
+        return false;
+    };
+    Take t;
+    int line = 0;
+    for (QStringView raw : QStringView(text).split(u'\n')) {
+        ++line;
+        const QStringView s = raw.trimmed();
+        if (s.isEmpty()) continue;
+        if (s.startsWith(u'#')) {
+            const QStringView kv = s.mid(1).trimmed();
+            const qsizetype colon = kv.indexOf(u':');
+            if (colon < 0) continue;
+            const QString key = kv.left(colon).trimmed().toString().toLower();
+            const QString value = kv.mid(colon + 1).trimmed().toString();
+            if (key == "robot") t.robot = value;
+            else if (key == "rate") t.rate = value.toDouble();
+            continue;
+        }
+        const QList<QStringView> cells = s.split(u',');
+        if (t.columns.isEmpty()) {
+            for (QStringView c : cells) t.columns << c.trimmed().toString();
+            continue;
+        }
+        if (cells.size() != t.columns.size())
+            return failed(QString("line %1 has %2 values for %3 columns").arg(line).arg(cells.size()).arg(t.columns.size()));
+        std::vector<double> row;
+        row.reserve(size_t(cells.size()));
+        for (QStringView c : cells) {
+            bool ok = false;
+            const double v = c.trimmed().toDouble(&ok);
+            if (!ok || !std::isfinite(v)) return failed(QString("line %1: \"%2\" is not a number").arg(line).arg(c.trimmed()));
+            row.push_back(v);
+        }
+        t.rows.push_back(std::move(row));
+    }
+    if (t.columns.isEmpty()) return failed("there is no column row");
+    if (t.column("t") != 0) return failed("the first column must be \"t\" (seconds)");
+    if (t.rows.size() < 2) return failed("a take needs at least two rows");
+    for (size_t i = 1; i < t.rows.size(); ++i)
+        if (!(t.rows[i][0] > t.rows[i - 1][0])) return failed(QString("the times must increase (row %1)").arg(i + 1));
+    *out = std::move(t);
+    return true;
+}
+
+QJsonObject Take::toJson() const {
+    if (m_packed.isEmpty() && !rows.empty()) {
+        QByteArray raw;
+        raw.reserve(int(rows.size() * size_t(columns.size()) * sizeof(double)));
+        for (const std::vector<double>& row : rows)
+            raw.append(reinterpret_cast<const char*>(row.data()), qsizetype(row.size() * sizeof(double)));
+        m_packed = QString::fromLatin1(qCompress(raw).toBase64());
+    }
+    return QJsonObject{{"robot", robot}, {"rate", rate}, {"columns", QJsonArray::fromStringList(columns)},
+                       {"rows", int(rows.size())}, {"data", m_packed}};
+}
+
+Take Take::fromJson(const QJsonObject& o) {
+    Take t;
+    t.robot = o["robot"].toString();
+    t.rate = o["rate"].toDouble();
+    for (const QJsonValue& v : o["columns"].toArray()) t.columns << v.toString();
+    const int n = o["rows"].toInt(), cols = int(t.columns.size());
+    const QString packed = o["data"].toString();
+    const QByteArray raw = qUncompress(QByteArray::fromBase64(packed.toLatin1()));
+    if (n <= 0 || cols <= 0 || raw.size() != qsizetype(n) * cols * qsizetype(sizeof(double))) return t;
+    t.rows.resize(size_t(n));
+    const double* d = reinterpret_cast<const double*>(raw.constData());
+    for (int i = 0; i < n; ++i) t.rows[size_t(i)].assign(d + size_t(i) * size_t(cols), d + size_t(i + 1) * size_t(cols));
+    t.m_packed = packed;
+    return t;
+}
+
+bool Take::isMetaColumn(const QString& c) {
+    static const QStringList meta{"t", "x", "y", "z", "rx", "ry", "rz", "heading", "walking", "step", "swing",
+                                  "progress", "step_x", "step_z", "step_heading", "goal_x", "goal_z", "goal_heading"};
+    return meta.contains(c);
+}
+
+QStringList Take::jointColumns() const {
+    QStringList out;
+    for (const QString& c : columns)
+        if (!isMetaColumn(c)) out << c;
+    return out;
 }
 
 Recorder::Recorder(SceneGraph& scene, int root, std::vector<int> joints, double rate)

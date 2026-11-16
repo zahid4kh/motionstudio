@@ -381,6 +381,41 @@ void SceneGraph::removePose(int id) {
     emit automationChanged();
 }
 
+int SceneGraph::addMotion(MotionClip m) {
+    m.id = m_nextId++;
+    m.name = makeMotionName(m.name.trimmed().isEmpty() ? QString("Motion") : m.name.trimmed(), m.id);
+    const int id = m.id;
+    m_motionClips[id] = std::move(m);
+    emit automationChanged();
+    return id;
+}
+
+void SceneGraph::removeMotion(int id) {
+    if (!m_motionClips.erase(id)) return;
+    emit automationChanged();
+}
+
+MotionClip* SceneGraph::getMotion(int id) {
+    auto it = m_motionClips.find(id);
+    return it != m_motionClips.end() ? &it->second : nullptr;
+}
+
+const MotionClip* SceneGraph::getMotion(int id) const {
+    auto it = m_motionClips.find(id);
+    return it != m_motionClips.end() ? &it->second : nullptr;
+}
+
+QString SceneGraph::makeMotionName(const QString& base, int exceptId) const {
+    auto taken = [&](const QString& n) {
+        for (const auto& [id, m] : m_motionClips)
+            if (id != exceptId && m.name.compare(n, Qt::CaseInsensitive) == 0) return true;
+        return false;
+    };
+    if (!taken(base)) return base;
+    for (int i = 2;; ++i)
+        if (const QString n = QString("%1 %2").arg(base).arg(i); !taken(n)) return n;
+}
+
 int SceneGraph::addSource(PartSource src) {
     src.id = m_nextId++;
     if (!expr::isValidName(src.name) || isSymbolNameTaken(src.name, src.id))
@@ -898,6 +933,7 @@ void SceneGraph::clear() {
     m_sequences.clear();
     m_poses.clear();
     m_mates.clear();
+    m_motionClips.clear();
     m_sources.clear();
     m_sinks.clear();
     m_roots.clear();

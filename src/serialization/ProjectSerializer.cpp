@@ -319,6 +319,16 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene, MeshPool* pool) {
         poses.append(o);
     }
 
+    QJsonArray motions;
+    for (auto& [id, m] : scene.allMotions()) {
+        if (!m.take) continue;
+        QJsonObject o = m.take->toJson();
+        o["id"]      = m.id;
+        o["name"]    = m.name;
+        o["robotId"] = m.robotId;
+        motions.append(o);
+    }
+
     QJsonArray mates;
     for (auto& [id, m] : scene.allMates()) {
         auto feature = [](const MateFeature& f) {
@@ -415,6 +425,7 @@ QJsonObject ProjectSerializer::toJson(const SceneGraph& scene, MeshPool* pool) {
     if (!mates.isEmpty()) root["mates"] = mates;
     if (!sources.isEmpty()) root["sources"] = sources;
     if (!sinks.isEmpty()) root["sinks"] = sinks;
+    if (!motions.isEmpty()) root["motions"] = motions;
     return root;
 }
 
@@ -582,6 +593,20 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root, con
                                         float(q["y"].toDouble()), float(q["z"].toDouble())).normalized();
         }
         poseIdMap[o["id"].toInt(-1)] = scene.addPose(p);
+    }
+
+    // Motions
+    QHash<int, int> motionIdMap;
+    for (auto v : root["motions"].toArray()) {
+        const QJsonObject o = v.toObject();
+        auto take = std::make_shared<take::Take>(take::Take::fromJson(o));
+        if (take->rows.size() < 2) continue;   // damaged
+        MotionClip m;
+        m.name    = o["name"].toString();
+        const int robot = o["robotId"].toInt(-1);
+        m.robotId = robot == -1 ? -1 : idMap.value(robot, -2);
+        m.take    = std::move(take);
+        motionIdMap[o["id"].toInt(-1)] = scene.addMotion(m);
     }
 
     // Mates (dropped when a part they refer to is missing)

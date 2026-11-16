@@ -1,4 +1,5 @@
 #pragma once
+#include <QJsonObject>
 #include <QString>
 #include <QStringList>
 #include <vector>
@@ -38,6 +39,20 @@ struct Take {
     // with comments="#")
     QString toCsv() const;
     bool    save(const QString& path, QString* error = nullptr) const;
+    // Reads a CSV take (as toCsv writes it: "#" lines, a column row, numbers)
+    static bool load(const QString& path, Take* out, QString* error = nullptr);
+    static bool fromCsv(const QString& text, Take* out, QString* error = nullptr);
+
+    // For the project file: the rows packed (doubles, zlib, base64). The
+    // packed rows are kept, so a take that doesn't change packs once.
+    QJsonObject toJson() const;
+    static Take fromJson(const QJsonObject& o);
+    // The columns that aren't joints (see above)
+    static bool isMetaColumn(const QString& name);
+    QStringList jointColumns() const;
+
+private:
+    mutable QString m_packed;   // toJson's cache; clear it when changing rows
 };
 
 // Samples a robot after each scan
