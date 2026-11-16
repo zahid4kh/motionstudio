@@ -101,6 +101,48 @@ Errors derive from `MotionStudioError` (`.code`, `.message`). The subclasses are
 
 Handles are thread-safe. A background thread reads the replies, so threads can share one `Studio`.
 
+## Learning motion (`motionstudio.learn`)
+
+`pip install "motionstudio[learn]"` (it needs NumPy, nothing else). Small neural networks, trained on your CPU in seconds to minutes, learn from takes:
+
+| | |
+|---|---|
+| `AnimationModel(hidden=(128, 128)).fit({name: take, …}, epochs=400)` | Learns each take as a clip: joint values (and how the robot moves on the floor) over the clip's time |
+| `.generate(clip, *, duration=None, rate=50, place=True)` → `Take` | A clip at any length, or a blend `{"wave": 0.7, "bow": 0.3}`; play it with `robot.play(take)` |
+| `.pose(clip, at=0.5)` | The joint values at a moment of a clip (0 = start, 1 = end) |
+| `WalkPolicy().fit(takes, epochs=300, motion_epochs=100, verbose=True)` | Learns to walk from takes of a humanoid walking to many goals |
+| `.walk(walker, x, z, heading=None)` | The robot steps where the policy decides; its own walking plants each foot exactly |
+| `.motion(x, z, heading=None, *, start=walker)` → `Take` | The whole walk from the networks, every joint included; `robot.play(take)` |
+| `.footsteps(start, x, z, heading=None, *, exact=True)` | Only the footsteps `[(x, z, heading), …]` |
+| `.save(path)` / `.load(path)` | Both models save to one `.npz` |
+
+The walk policy is two networks:
+- The **step policy** sees where the goal is from the last footstep, and the step before, and decides the next footstep and whether it is the last.
+- The **motion model** gives every joint's value and how the body sways through a step, from the phase in the step and the steps around it.
+
+The policy ends within a few centimetres of a goal on its own. With `exact=True` (the default), its last footstep is then put on the goal, when that is less than half a step away.
+
+The learned motion (`motion`) has no foot contacts, so its feet slide slightly. Playing the policy's footsteps through the robot's own walking (`walk`) does not.
+
+```python
+import motionstudio as ms
+from motionstudio.learn import WalkPolicy
+
+takes = []
+with ms.connect() as studio:
+    walker = studio.humanoid()
+    for x, z in goals:                          # many places, near and far
+        with walker.record(rate=25) as rec:
+            studio.sleep(0.2)                   # standing before and after each walk
+            walker.walk_to(x, z)
+            studio.sleep(0.3)
+        takes.append(rec.take)
+    policy = WalkPolicy().fit(takes, verbose=True)
+    policy.walk(walker, 1500, 800, heading=90)  # a goal it never saw
+```
+
+`motionstudio.learn.walk_steps(take)` splits a walk take into its footsteps and steps, and `MLP` is the network underneath, if you want to build your own.
+
 ## Tests
 
 `python3 -m unittest discover -s tests` starts `motionstudio-server` (`$MOTIONSTUDIO_SERVER` or `../../build/motionstudio-server`).
