@@ -1259,6 +1259,92 @@ TEST(urdfAndMjcfRoundTrip) {
 #endif
 }
 
+TEST(mjcfReadsIncludesAndJointChains) {
+    // A planar walker: the torso rides on two slides and a hinge, the knee's
+    // hinge sits off the body origin, the colour comes from an included file
+    QTemporaryDir dir;
+    auto write = [&](const QString& name, const QByteArray& text) {
+        QFile f(dir.filePath(name));
+        CHECK(f.open(QIODevice::WriteOnly));
+        f.write(text);
+    };
+    QDir(dir.path()).mkpath("common");
+    write("common/materials.xml", R"(<mujoco><asset><material name="self" rgba=".7 .5 .3 1"/></asset></mujoco>)");
+    write("walker.xml", R"(<mujoco model="walker">
+  <include file="./common/materials.xml"/>
+  <default><default class="walker"><geom material="self" type="capsule"/><joint axis="0 -1 0"/></default></default>
+  <worldbody>
+    <body name="torso" pos="0 0 1.3" childclass="walker">
+      <joint name="rootz" axis="0 0 1" type="slide" limited="false"/>
+      <joint name="rootx" axis="1 0 0" type="slide" limited="false"/>
+      <joint name="rooty" axis="0 1 0" type="hinge" limited="false"/>
+      <geom name="torso" size="0.07 0.3"/>
+      <body name="thigh" pos="0 -.05 -0.3">
+        <joint name="hip" range="-20 100"/>
+        <geom name="thigh" pos="0 0 -0.225" size="0.05 0.225"/>
+        <body name="leg" pos="0 0 -0.7">
+          <joint name="knee" pos="0 0 0.25" range="-150 0"/>
+          <geom name="leg" size="0.04 0.25"/>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <actuator><motor joint="hip"/><motor joint="knee"/></actuator>
+</mujoco>)");
+    SceneGraph g;
+    const robotio::Result r = robotio::importMjcf(g, dir.filePath("walker.xml"));
+    CHECK(r.ok);
+    CHECK(g.allJoints().size() == 5);
+    CHECK(g.allMotors().size() == 2);   // only what the file's actuators drive
+    std::map<QString, int> joint, object;
+    for (auto& [id, j] : g.allJoints()) joint[j.name] = id;
+    int coloured = 0;
+    for (auto& [id, o] : g.allObjects()) {
+        if (o.type == PrimitiveType::ImportedMesh && !o.mesh) object[o.name] = id;   // body frames (geoms share names)
+        if (o.type == PrimitiveType::Cylinder && o.color.isValid() && std::fabs(o.color.redF() - 0.7) < 0.01) ++coloured;
+    }
+    CHECK(object.count("torso (rootz)") && object.count("torso (rootx)") && object.count("torso"));
+    CHECK(coloured == 3);
+    // Root slide x 0.4, z -0.2, pitch 25°, hip 40°, knee -60°
+    const std::map<QString, float> q = {{"rootz", -0.2f}, {"rootx", 0.4f}, {"rooty", 25}, {"hip", 40}, {"knee", -60}};
+    for (auto& [n, v] : q) g.getJoint(joint[n])->currentValue = v;
+    // By hand, in MJCF (Z up), then Y up = (x, z, -y): rooty turns about +Y,
+    // the hip and knee about −Y
+    auto rotY = [](float deg) { QMatrix4x4 m; m.rotate(deg, 0, 1, 0); return m; };
+    QMatrix4x4 torso;
+    torso.translate(0.4f, 0, 1.3f - 0.2f);
+    torso = torso * rotY(25);
+    QMatrix4x4 thigh = torso;
+    thigh.translate(0, -0.05f, -0.3f);
+    thigh = thigh * rotY(-40);
+    QMatrix4x4 leg = thigh;
+    leg.translate(0, 0, 0.25f - 0.7f);   // the knee
+    leg = leg * rotY(60);
+    leg.translate(0, 0, -0.25f);
+    auto yUp = [](const QVector3D& p) { return QVector3D(p.x(), p.z(), -p.y()); };
+    CHECK((worldPos(g, object["torso"]) - yUp(torso.map(QVector3D()))).length() < 1e-5f);
+    CHECK((worldPos(g, object["thigh"]) - yUp(thigh.map(QVector3D()))).length() < 1e-5f);
+    CHECK((worldPos(g, object["leg"]) - yUp(leg.map(QVector3D()))).length() < 1e-5f);
+#ifdef MUJOCO_ENABLED
+    // MuJoCo agrees about the leg
+    char err[1000] = {};
+    mjModel* m = mj_loadXML(qPrintable(dir.filePath("walker.xml")), nullptr, err, sizeof err);
+    CHECK(m != nullptr);
+    if (m) {
+        mjData* d = mj_makeData(m);
+        for (auto& [n, v] : q) {
+            const int jid = mj_name2id(m, mjOBJ_JOINT, qPrintable(n));
+            d->qpos[m->jnt_qposadr[jid]] = m->jnt_type[jid] == mjJNT_HINGE ? qDegreesToRadians(double(v)) : double(v);
+        }
+        mj_kinematics(m, d);
+        const double* p = d->xpos + 3 * mj_name2id(m, mjOBJ_BODY, "leg");
+        CHECK((worldPos(g, object["leg"]) - yUp(QVector3D(float(p[0]), float(p[1]), float(p[2])))).length() < 1e-5f);
+        mj_deleteData(d);
+        mj_deleteModel(m);
+    }
+#endif
+}
+
 TEST(stlWriteAndRead) {
     QTemporaryDir dir;
     const std::vector<float>& soup = primitiveSoup(PrimitiveType::Cylinder);

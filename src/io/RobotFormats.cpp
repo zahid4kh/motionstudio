@@ -407,7 +407,24 @@ Result importMjcf(SceneGraph& scene, const QString& path) {
     if (!f.open(QIODevice::ReadOnly) || !doc.setContent(&f)) { im.res.error = "Not a readable MJCF (XML) file."; return im.res; }
     const QDomElement model = doc.documentElement();
     if (model.tagName() != "mujoco") { im.res.error = "The file has no <mujoco> element."; return im.res; }
-    if (!model.firstChildElement("include").isNull()) im.res.warnings << "<include> files are not read";
+
+    // <include file="…"/>: the included file's top-level children replace it
+    // (paths relative to the main file; includes may nest)
+    for (int guard = 0; guard < 1000; ++guard) {
+        const QDomNodeList incs = doc.elementsByTagName("include");
+        if (incs.isEmpty()) break;
+        QDomElement inc = incs.at(0).toElement();
+        const QString file = inc.attribute("file");
+        QFile incFile(QDir(im.dir).filePath(file));
+        QDomDocument part;
+        if (incFile.open(QIODevice::ReadOnly) && part.setContent(&incFile)) {
+            for (QDomNode n = part.documentElement().firstChild(); !n.isNull(); n = n.nextSibling())
+                inc.parentNode().insertBefore(doc.importNode(n, true), inc);
+        } else {
+            im.res.warnings << "Include not read: " + file;
+        }
+        inc.parentNode().removeChild(inc);
+    }
 
     // Default classes: <default class="…"> nest; an element takes an
     // attribute from itself, else from its class (its own `class`, else the
@@ -547,22 +564,33 @@ Result importMjcf(SceneGraph& scene, const QString& path) {
         const QString cc = body.attribute("childclass", inherited);
         const QString name = body.attribute("name", "body");
         const QMatrix4x4 local = placement(body);
-        const int id = im.frame(name, parentId, local);
-        addGeoms(body, id, name, cc);
-        bool jointed = false;
+        // Its joints act one after another in the body's frame, so several
+        // joints become a chain: a frame per joint before the body's own
+        std::vector<QDomElement> joints;
         for (QDomElement j = body.firstChildElement("joint"); !j.isNull(); j = j.nextSiblingElement("joint")) {
             const QString type = attr(j, "type", cc, "hinge");
-            if (type == "free" || type == "ball") {
-                im.res.warnings << QString("Body %1: %2 joints are not imported").arg(name, type);
-                continue;
-            }
-            if (jointed) { im.res.warnings << QString("Body %1: only its first joint is imported").arg(name); break; }
-            jointed = true;
+            if (type == "free" || type == "ball") im.res.warnings << QString("Body %1: %2 joints are not imported").arg(name, type);
+            else joints.push_back(j);
+        }
+        int parent = parentId;
+        std::vector<int> links;   // the object each joint moves
+        for (size_t i = 0; i + 1 < joints.size(); ++i) {
+            parent = im.frame(QString("%1 (%2)").arg(name, joints[i].attribute("name", QString::number(i + 1))), parent,
+                              i == 0 ? local : QMatrix4x4());
+            links.push_back(parent);
+        }
+        const int id = im.frame(name, parent, joints.size() > 1 ? QMatrix4x4() : local);
+        links.push_back(id);
+        addGeoms(body, id, name, cc);
+        for (size_t i = 0; i < joints.size(); ++i) {
+            const QDomElement& j = joints[i];
+            const QString type = attr(j, "type", cc, "hinge");
+            const QMatrix4x4 inParent = i == 0 ? local : QMatrix4x4();   // the body frame in the joint's parent
             Joint jt;
-            jt.name = j.attribute("name", name + "_joint");
-            jt.parentBodyId = parentId;
-            jt.childBodyId = id;
-            jt.axis = local.mapVector(vec3(attr(j, "axis", cc), {0, 0, 1})).normalized();
+            jt.name = j.attribute("name", joints.size() > 1 ? QString("%1_joint%2").arg(name).arg(i + 1) : name + "_joint");
+            jt.parentBodyId = i == 0 ? parentId : links[i - 1];
+            jt.childBodyId = links[i];
+            jt.axis = inParent.mapVector(vec3(attr(j, "axis", cc), {0, 0, 1})).normalized();
             const auto range = numbers(attr(j, "range", cc));
             const bool limited = range.size() == 2 && attr(j, "limited", cc, "auto") != "false";
             if (type == "slide") {
@@ -571,7 +599,7 @@ Result importMjcf(SceneGraph& scene, const QString& path) {
                 jt.limitMax = limited ? float(range[1]) : 1.0f;
             } else {
                 jt.type = JointType::Revolute;
-                jt.pivot = local.map(vec3(attr(j, "pos", cc)));
+                jt.pivot = inParent.map(vec3(attr(j, "pos", cc)));
                 jt.continuous = !limited;
                 jt.limitMin = limited ? float(angle(range[0])) : -180.0f;
                 jt.limitMax = limited ? float(angle(range[1])) : 180.0f;
