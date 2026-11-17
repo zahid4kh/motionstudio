@@ -1287,15 +1287,19 @@ TEST(mjcfReadsIncludesAndJointChains) {
           <geom name="leg" size="0.04 0.25"/>
         </body>
       </body>
+      <body name="thigh2" pos="0 .05 -0.3"><joint name="hip2" range="-20 100"/><geom size="0.05 0.225"/></body>
     </body>
   </worldbody>
-  <actuator><motor joint="hip"/><motor joint="knee"/></actuator>
+  <actuator><motor joint="hip"/><motor joint="knee"/><motor joint="hip2"/></actuator>
 </mujoco>)");
     SceneGraph g;
     const robotio::Result r = robotio::importMjcf(g, dir.filePath("walker.xml"));
     CHECK(r.ok);
-    CHECK(g.allJoints().size() == 5);
-    CHECK(g.allMotors().size() == 2);   // only what the file's actuators drive
+    CHECK(g.allJoints().size() == 6);
+    CHECK(g.allMotors().size() == 3);   // only what the file's actuators drive
+    // Both legs on the torso, which the root joints carry: one robot
+    const auto robots = ApiServer::findRobots(g);
+    CHECK(robots.size() == 1 && robots[0].name == "walker" && robots[0].joints.size() == 3);
     std::map<QString, int> joint, object;
     for (auto& [id, j] : g.allJoints()) joint[j.name] = id;
     int coloured = 0;
@@ -1304,7 +1308,7 @@ TEST(mjcfReadsIncludesAndJointChains) {
         if (o.type == PrimitiveType::Cylinder && o.color.isValid() && std::fabs(o.color.redF() - 0.7) < 0.01) ++coloured;
     }
     CHECK(object.count("torso (rootz)") && object.count("torso (rootx)") && object.count("torso"));
-    CHECK(coloured == 3);
+    CHECK(coloured == 4);
     // Root slide x 0.4, z -0.2, pitch 25°, hip 40°, knee -60°
     const std::map<QString, float> q = {{"rootz", -0.2f}, {"rootx", 0.4f}, {"rooty", 25}, {"hip", 40}, {"knee", -60}};
     for (auto& [n, v] : q) g.getJoint(joint[n])->currentValue = v;

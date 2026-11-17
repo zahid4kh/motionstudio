@@ -143,7 +143,8 @@ QString ApiServer::pathOf(const SceneGraph& g, int id) {
 
 // Joints are one machine when one hangs below another, or when their top
 // joints sit on one rigid part below the scene's top (the pelvis of a
-// humanoid carries its waist and both hips). A machine's root is the highest
+// humanoid carries its waist and both hips) or on one a joint moves (an MJCF
+// walker's torso on unactuated root slides). A machine's root is the highest
 // object above them that holds no other machine's joints.
 std::vector<ApiServer::Robot> ApiServer::findRobots(const SceneGraph& g) {
     std::vector<int> joints;
@@ -198,7 +199,10 @@ std::vector<ApiServer::Robot> ApiServer::findRobots(const SceneGraph& g) {
         for (auto a = base.begin(); a != base.end() && !merged; ++a)
             for (auto b = std::next(a); b != base.end() && !merged; ++b) {
                 const int l = lca(a->second, b->second);
-                if (l == -1 || rigidRoot(a->second) != rigidRoot(b->second) || l == rigidRoot(a->second)) continue;
+                // Not on the static part they stand on (two arms on a floor),
+                // but on one a joint carries (a torso riding on root slides)
+                if (l == -1 || rigidRoot(a->second) != rigidRoot(b->second) || (l == rigidRoot(a->second) && !jointChildren.count(l)))
+                    continue;
                 unite(a->first, b->first);
                 const int keep = find(a->first);
                 const int at = l;
