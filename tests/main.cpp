@@ -889,6 +889,87 @@ TEST(sourceMakesCopiesAndSinkTakesThem) {
 
 // Inserting a component remaps its sources, sinks and part poses, and
 // renames clashing source / sink names; undo restores them
+// Moving a jointed part under another parent keeps its joint, which still
+// moves it the same way in the world
+TEST(reparentKeepsTheJoint) {
+    SceneGraph g;
+    const int base = g.addObject("Base", PrimitiveType::ImportedMesh);
+    g.getObject(base)->transform.position = {1, 0, 0};
+    g.getObject(base)->transform.rotation = {0, 30, 0};
+    const int arm = addBox(g, "Arm", {0.5f, 0.2f, 0}, {0.4f, 0.1f, 0.1f}, base);
+    Joint j;
+    j.parentBodyId = base;
+    j.childBodyId = arm;
+    j.pivot = {0.3f, 0.2f, 0};
+    j.axis = {0, 0, 1};
+    const int jid = g.addJoint(j);
+    const int slide = addBox(g, "Slide", {0, 0.3f, 0}, {0.1f, 0.1f, 0.1f}, arm);
+    Joint s;
+    s.type = JointType::Prismatic;
+    s.parentBodyId = arm;
+    s.childBodyId = slide;
+    s.axis = {1, 0, 0};
+    const int sid = g.addJoint(s);
+    const int other = g.addObject("Other", PrimitiveType::ImportedMesh);
+    g.getObject(other)->transform.position = {-2, 1, 0.5f};
+    g.getObject(other)->transform.rotation = {90, 0, 45};
+    auto poseAt = [&](float a, float d) {
+        g.getJoint(jid)->currentValue = a;
+        g.getJoint(sid)->currentValue = d;
+        return std::make_pair(g.worldTransform(arm), g.worldTransform(slide));
+    };
+    const auto a0 = poseAt(20, 0.1f), a1 = poseAt(-50, 0.3f);
+    CHECK(g.setParent(arm, other) == SceneGraph::ReparentResult::Ok);
+    CHECK(g.getJoint(jid) && g.getJoint(jid)->parentBodyId == other);
+    auto same = [](const QMatrix4x4& x, const QMatrix4x4& y) {
+        float e = 0; for (int i = 0; i < 16; ++i) e = std::max(e, std::fabs(x.constData()[i] - y.constData()[i]));
+        return e < 1e-4f;
+    };
+    const auto b0 = poseAt(20, 0.1f), b1 = poseAt(-50, 0.3f);
+    CHECK(same(a0.first, b0.first) && same(a0.second, b0.second));
+    CHECK(same(a1.first, b1.first) && same(a1.second, b1.second));
+    // At the top level there's no parent body: the joint goes, the part stays put
+    poseAt(-50, 0.3f);
+    CHECK(g.setParent(arm, -1) == SceneGraph::ReparentResult::Ok);
+    CHECK(!g.getJoint(jid) && g.getJoint(sid));
+    CHECK(same(a1.first, g.worldTransform(arm)) && same(a1.second, g.worldTransform(slide)));
+}
+
+// Grouping puts the parts in a new frame at their centre, under their
+// common ancestor, without moving anything
+TEST(groupObjectsKeepsEverythingInPlace) {
+    SceneGraph g;
+    const int cell = g.addObject("Cell", PrimitiveType::ImportedMesh);
+    g.getObject(cell)->transform.rotation = {-90, 0, 0};
+    const int sub = g.addObject("Sub", PrimitiveType::ImportedMesh, cell);
+    g.getObject(sub)->transform.position = {1, 0, 0};
+    const int a = addBox(g, "A", {0, 0, 0}, {0.2f, 0.2f, 0.2f}, cell);
+    const int b = addBox(g, "B", {1, 1, 0}, {0.2f, 0.2f, 0.2f}, sub);
+    const int bChild = addBox(g, "BChild", {0, 0, 0}, {0.1f, 0.1f, 0.1f}, b);   // inside B
+    Joint j;
+    j.parentBodyId = sub;
+    j.childBodyId = b;
+    j.pivot = {1, 1, 0};
+    j.axis = {0, 1, 0};
+    j.currentValue = 25;
+    const int jid = g.addJoint(j);
+    const QMatrix4x4 wa = g.worldTransform(a), wb = g.worldTransform(b), wc = g.worldTransform(bChild);
+    const int group = g.groupObjects({a, b, bChild}, "Group");
+    CHECK(group != -1);
+    CHECK(g.getObject(group)->parentId == cell);
+    CHECK(g.getObject(a)->parentId == group && g.getObject(b)->parentId == group);
+    CHECK(g.getObject(bChild)->parentId == b);
+    CHECK(g.getJoint(jid)->parentBodyId == group);
+    // The group's origin is the middle of A (0,0,0) and B (2,1,0) in the cell
+    // (B is turned, so its box reaches a little further)
+    const QVector3D c = g.getObject(group)->transform.position;
+    CHECK_NEAR(c.x(), 1.0, 0.02); CHECK_NEAR(c.y(), 0.5, 1e-4); CHECK_NEAR(c.z(), 0, 1e-4);
+    CHECK_NEAR((g.worldTransform(a).column(3) - wa.column(3)).length(), 0, 1e-5);
+    CHECK_NEAR((g.worldTransform(b).column(3) - wb.column(3)).length(), 0, 1e-5);
+    CHECK_NEAR((g.worldTransform(bChild).column(3) - wc.column(3)).length(), 0, 1e-5);
+    CHECK(g.groupObjects({}, "None") == -1);
+}
+
 // Parts moved into a group made after them (the group has the higher id)
 // stay in it through a save and load
 TEST(serializerKeepsPartsInLaterGroups) {

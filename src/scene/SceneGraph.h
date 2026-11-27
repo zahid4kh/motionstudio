@@ -156,14 +156,19 @@ public:
     CombineResult combineIntoRigidBody(const std::vector<int>& objectIds,
                                         const QString& groupName, int& outGroupId);
 
-    // Manually re-parent one object under another (e.g. to fix a STEP import's
-    // raw CAD assembly nesting not matching the intended kinematic structure).
-    // Preserves the child's current world position/orientation by baking the
-    // frame change into its local transform, and drops any existing joint on
-    // the child since a stored pivot/axis is only meaningful relative to the
-    // old parent's frame.
+    // Moves an object under another (-1 = top level), e.g. to fix a STEP
+    // import's CAD nesting. The child keeps its place in the world. Its joint
+    // goes with it (pivot and axis carried into the new parent's frame, so it
+    // moves the same way); only when the frames differ by a non-uniform scale
+    // or at the top level (no parent body) is the joint dropped and its
+    // current motion baked in.
     enum class ReparentResult { Ok, SameObject, WouldCreateCycle };
     ReparentResult setParent(int childId, int newParentId);
+    // Puts the objects into a new empty frame (an ImportedMesh without a mesh)
+    // under their deepest common ancestor, its origin at the centre of their
+    // bounds. Objects under another given object stay where they are. Returns
+    // the group, or -1 when there is nothing to group.
+    int groupObjects(const std::vector<int>& objectIds, const QString& name);
 
     // Conveyor belts
     void           addConveyorBelt(int objectId);

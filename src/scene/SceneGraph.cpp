@@ -1,5 +1,7 @@
 #include "SceneGraph.h"
 #include "../automation/Expression.h"
+#include "SceneQuery.h"
+#include <functional>
 #include <QRegularExpression>
 #include <QtMath>
 #include <algorithm>
@@ -878,20 +880,38 @@ SceneGraph::ReparentResult SceneGraph::setParent(int childId, int newParentId) {
 
     if (child->parentId == newParentId) return ReparentResult::Ok;
 
-    QMatrix4x4 childWorld = worldTransform(childId);
+    // D takes the old parent's frame into the new one's; the child keeps its
+    // place in the world with local = D · old local
+    const QMatrix4x4 oldParentWorld = child->parentId != -1 ? worldTransform(child->parentId) : QMatrix4x4();
+    const QMatrix4x4 newParentWorld = newParentId != -1 ? worldTransform(newParentId) : QMatrix4x4();
+    const QMatrix4x4 d = newParentWorld.inverted() * oldParentWorld;
+    QMatrix4x4 newLocal = d * localTransform(childId);
 
-    if (Joint* j = jointForChild(childId)) removeJoint(j->id);
+    // A joint moves along: its pivot and axis are carried into the new
+    // parent's frame, so the motion in the world stays the same. That needs
+    // D to keep angles (rotation and uniform scale); otherwise the joint is
+    // dropped and its current motion baked into the transform. A top-level
+    // object has no parent body, so it can't keep a joint either.
+    if (Joint* j = jointForChild(childId)) {
+        const QVector3D c0 = d.column(0).toVector3D(), c1 = d.column(1).toVector3D(), c2 = d.column(2).toVector3D();
+        const float s = c0.length();
+        const bool similar = s > 1e-8f && std::fabs(c1.length() - s) < 1e-4f * s && std::fabs(c2.length() - s) < 1e-4f * s
+                          && std::fabs(QVector3D::dotProduct(c0, c1)) < 1e-4f * s * s
+                          && std::fabs(QVector3D::dotProduct(c1, c2)) < 1e-4f * s * s
+                          && std::fabs(QVector3D::dotProduct(c0, c2)) < 1e-4f * s * s;
+        if (similar && newParentId != -1) {
+            j->parentBodyId = newParentId;
+            j->pivot = d.map(j->pivot);
+            j->axis = d.mapVector(j->axis);
+            if (j->type == JointType::Revolute) j->axis.normalize();
+        } else {
+            newLocal = d * jointMotion(*j) * localTransform(childId);
+            removeJoint(j->id);
+        }
+    }
 
     reparentObject(childId, newParentId);
-
-    QMatrix4x4 newParentWorld = newParentId != -1 ? worldTransform(newParentId) : QMatrix4x4();
-    QMatrix4x4 newLocal = newParentWorld.inverted() * childWorld;
-
-    QVector3D pos, eulerDeg, scale;
-    decomposeMatrix(newLocal, pos, eulerDeg, scale);
-    child->transform.position = pos;
-    child->transform.rotation = eulerDeg;
-    child->transform.scale    = scale;
+    decomposeMatrix(newLocal, child->transform.position, child->transform.rotation, child->transform.scale);
 
     emit objectChanged(childId);
     // Structure changed (moved to a new place in the tree) — reuse the same
@@ -899,6 +919,65 @@ SceneGraph::ReparentResult SceneGraph::setParent(int childId, int newParentId) {
     emit objectAdded(childId);
 
     return ReparentResult::Ok;
+}
+
+int SceneGraph::groupObjects(const std::vector<int>& objectIds, const QString& name) {
+    // Only the topmost of the given objects move; the others come with them
+    std::vector<int> top;
+    auto given = [&](int id) { return std::find(objectIds.begin(), objectIds.end(), id) != objectIds.end(); };
+    for (int id : objectIds) {
+        const SceneObject* o = getObject(id);
+        if (!o || o->copyOf != -1) continue;
+        bool under = false;
+        for (int p = o->parentId; p != -1 && !under; p = getObject(p) ? getObject(p)->parentId : -1)
+            under = given(p);
+        if (!under && std::find(top.begin(), top.end(), id) == top.end()) top.push_back(id);
+    }
+    if (top.empty()) return -1;
+
+    // The group goes where they all are: the deepest common ancestor of their parents
+    auto chain = [&](int id) {
+        std::vector<int> c;
+        for (int p = getObject(id)->parentId; p != -1; p = getObject(p)->parentId) c.insert(c.begin(), p);
+        return c;
+    };
+    std::vector<int> common = chain(top.front());
+    for (int id : top) {
+        const std::vector<int> c = chain(id);
+        size_t n = 0;
+        while (n < common.size() && n < c.size() && common[n] == c[n]) ++n;
+        common.resize(n);
+    }
+    const int parent = common.empty() ? -1 : common.back();
+
+    // Its origin is the centre of what it holds, its axes the parent's
+    QVector3D lo(1e30f, 1e30f, 1e30f), hi(-1e30f, -1e30f, -1e30f);
+    std::function<void(int)> grow = [&](int id) {
+        const SceneObject* o = getObject(id);
+        if (!o) return;
+        if (o->type != PrimitiveType::ImportedMesh || o->mesh) {
+            const scenequery::Obb b = scenequery::worldBox(*this, id);
+            for (int k = 0; k < 8; ++k) {
+                QVector3D p = b.center;
+                for (int a = 0; a < 3; ++a) p += b.axis[a] * b.half[a] * ((k >> a & 1) ? 1.f : -1.f);
+                lo = QVector3D(std::min(lo.x(), p.x()), std::min(lo.y(), p.y()), std::min(lo.z(), p.z()));
+                hi = QVector3D(std::max(hi.x(), p.x()), std::max(hi.y(), p.y()), std::max(hi.z(), p.z()));
+            }
+        }
+        for (int c : o->childIds) grow(c);
+    };
+    for (int id : top) grow(id);
+    QVector3D centre;
+    if (lo.x() <= hi.x()) centre = (lo + hi) / 2;
+    else for (int id : top) centre += worldTransform(id).column(3).toVector3D() / float(top.size());
+
+    const int group = addObject(name, PrimitiveType::ImportedMesh, parent);
+    SceneObject* g = getObject(group);
+    g->transform.scale = {1, 1, 1};
+    const QMatrix4x4 parentWorld = parent != -1 ? worldTransform(parent) : QMatrix4x4();
+    g->transform.position = parentWorld.inverted().map(centre);
+    for (int id : top) setParent(id, group);
+    return group;
 }
 
 SceneGraph::CombineResult SceneGraph::combineIntoRigidBody(const std::vector<int>& objectIds,
