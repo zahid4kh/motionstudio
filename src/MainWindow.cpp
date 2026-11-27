@@ -131,6 +131,7 @@ void MainWindow::updateTitle() {
         base += " — New Project";
     if(m_dirty) base += "  •";
     setWindowTitle(base);
+    if(m_api) m_api->setProjectPath(m_currentFile.isEmpty() ? QString() : QFileInfo(m_currentFile).absoluteFilePath());
 }
 
 void MainWindow::onSceneDirtied() {
@@ -724,6 +725,28 @@ void MainWindow::buildStatusBar() {
     statusBar()->addPermanentWidget(m_apiLabel);
     m_api = new ApiServer(m_scene, m_sim, this);
     connect(m_api, &ApiServer::clientsChanged, this, &MainWindow::updateApiLabel);
+    // Programs that build scenes: they never throw away unsaved work unasked
+    m_api->setUnsavedCheck([this]{ return m_dirty; });
+    connect(m_api, &ApiServer::projectReplaced, this, [this](const QString& path){
+        m_currentFile = path;
+        if(!path.isEmpty()) rememberRecentFile(path);
+        m_dirty = false;
+        updateTitle();
+        m_undo->reset();
+        m_viewport->fitAll();
+        showStatus(path.isEmpty() ? QString("A program started a new scene") : "A program opened " + QFileInfo(path).fileName());
+    });
+    connect(m_api, &ApiServer::projectSaved, this, [this](const QString& path){
+        m_currentFile = path;
+        rememberRecentFile(path);
+        m_dirty = false;
+        updateTitle();
+        showStatus("A program saved " + QFileInfo(path).fileName());
+    });
+    connect(m_api, &ApiServer::imported, this, [this](int rootId){
+        m_viewport->fitAll();
+        if(const SceneObject* o = m_scene->getObject(rootId)) showStatus("A program imported " + o->name);
+    });
     ApiServerDialog::restore(m_api);
     updateApiLabel();
     statusBar()->showMessage("Ready — open a project or add objects to get started");
@@ -929,18 +952,7 @@ void MainWindow::importStep() {
 }
 
 int MainWindow::addImportedPart(const StepImporter::Part& part, int parentId) {
-    QString name = part.name.isEmpty() ? "Part" : part.name;
-    int id = m_scene->addObject(name, PrimitiveType::ImportedMesh, parentId);
-    if(SceneObject* obj = m_scene->getObject(id)){
-        obj->transform.position = part.position;
-        obj->transform.rotation = part.rotationDeg;
-        obj->transform.scale    = {1, 1, 1};
-        obj->mesh               = part.mesh;
-        obj->color              = part.color;
-    }
-    for(const auto& child : part.children)
-        addImportedPart(child, id);
-    return id;
+    return StepImporter::addToScene(*m_scene, part, parentId);
 }
 
 void MainWindow::importStepFile(const QString& path) {
