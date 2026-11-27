@@ -44,6 +44,10 @@
 #include <QVBoxLayout>
 #include <QSet>
 #include <QSettings>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QRadioButton>
+#include <QLabel>
 #include <functional>
 
 // ── Constructor ───────────────────────────────────────────────────────────────
@@ -953,6 +957,36 @@ void MainWindow::importStepFile(const QString& path) {
 
     m_stepImportName = QFileInfo(path).fileName();
 
+    // STEP has no up axis: ask which way the CAD model stands (most CAD is
+    // Z-up, MotionStudio is Y-up). The last answer is the default.
+    {
+        QSettings settings("MotionStudio", "MotionStudio");
+        const bool zUp = settings.value("import/step/upAxis", "Z").toString() != "Y";
+        QDialog dlg(this);
+        dlg.setWindowTitle("Import STEP");
+        auto* lay = new QVBoxLayout(&dlg);
+        auto* title = new QLabel("Which axis points up in <b>" + m_stepImportName.toHtmlEscaped() + "</b>?", &dlg);
+        lay->addWidget(title);
+        auto* z = new QRadioButton("Z up  (SolidWorks, NX, Creo, Inventor, CATIA, FreeCAD)", &dlg);
+        auto* y = new QRadioButton("Y up  (stays as it is in the file)", &dlg);
+        (zUp ? z : y)->setChecked(true);
+        lay->addWidget(z);
+        lay->addWidget(y);
+        auto* hint = new QLabel("A Z-up model is turned upright. If it lies on its side after the import, "
+                                "undo and import again with the other axis.", &dlg);
+        hint->setObjectName("hint");
+        hint->setWordWrap(true);
+        lay->addWidget(hint);
+        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+        buttons->button(QDialogButtonBox::Ok)->setText("Import");
+        connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+        lay->addWidget(buttons);
+        if(dlg.exec() != QDialog::Accepted) return;
+        m_stepUpAxis = z->isChecked() ? StepImporter::UpAxis::Z : StepImporter::UpAxis::Y;
+        settings.setValue("import/step/upAxis", z->isChecked() ? "Z" : "Y");
+    }
+
     // Large assemblies take a while to translate and mesh: run it off the GUI
     // thread so the window keeps painting, with a modal dialog showing the
     // stage, percentage and time left (and a Cancel)
@@ -996,6 +1030,7 @@ void MainWindow::onStepImportFinished() {
         return;
     }
 
+    StepImporter::applyUpAxis(result.root, m_stepUpAxis);
     int rootId = addImportedPart(result.root, -1);
     m_scene->selectObject(rootId);
 

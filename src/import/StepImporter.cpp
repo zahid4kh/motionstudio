@@ -1,4 +1,6 @@
 #include "StepImporter.h"
+#include "../scene/SceneGraph.h"
+#include <QMatrix4x4>
 #include <QFileInfo>
 #include <algorithm>
 #include <chrono>
@@ -697,6 +699,20 @@ bool importFile(const QString&, Part&, QString& errorOut, const ProgressFn&) {
 namespace StepImporter {
 
 QString cancelledMessage() { return QStringLiteral("Import cancelled."); }
+
+void applyUpAxis(Part& root, UpAxis up) {
+    if (up == UpAxis::Y) return;
+    QMatrix4x4 local;
+    local.translate(root.position);
+    local.rotate(root.rotationDeg.x(), 1, 0, 0);
+    local.rotate(root.rotationDeg.y(), 0, 1, 0);
+    local.rotate(root.rotationDeg.z(), 0, 0, 1);
+    QMatrix4x4 upright;
+    upright.rotate(-90, 1, 0, 0);   // CAD +Z becomes +Y, CAD +Y becomes -Z
+    const Transform t = SceneGraph::toTransform(upright * local);
+    root.position = t.position;
+    root.rotationDeg = t.rotation;
+}
 
 Estimator::Estimator(qint64 fileBytes, const Rates& rates)
     : m_bytes(std::max<qint64>(fileBytes, 1)), m_rates(rates) {}

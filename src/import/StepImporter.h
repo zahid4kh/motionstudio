@@ -43,6 +43,13 @@ QString cancelledMessage();
 bool importFile(const QString& path, Part& rootOut, QString& errorOut,
                 const ProgressFn& progress = {});
 
+// The axis that points up in the CAD file. MotionStudio is Y-up; most CAD
+// systems (SolidWorks, NX, Creo, Inventor, CATIA) are Z-up, so a Z-up model
+// is turned -90° about X to stand upright. Applied to the root part, so the
+// parts keep their CAD positions relative to it.
+enum class UpAxis { Y, Z };
+void applyUpAxis(Part& root, UpAxis up);
+
 // Turns stage progress into an overall fraction and a time-left estimate.
 // Reading can't report progress and translating reports it too unevenly to
 // extrapolate, so their lengths are guessed from the file size and the rates

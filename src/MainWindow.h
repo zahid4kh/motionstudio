@@ -133,4 +133,5 @@ private:
     QFutureWatcher<StepImportResult>* m_stepWatcher  = nullptr;
     ImportProgressDialog*             m_stepProgress = nullptr;
     QString                           m_stepImportName;
+    StepImporter::UpAxis              m_stepUpAxis = StepImporter::UpAxis::Z;
 };

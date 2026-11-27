@@ -14,7 +14,9 @@
 
 Both formats are Z-up, and MotionStudio is Y-up, so the model is placed under a root frame turned upright. The import notes list anything that was approximated or skipped.
 
-**STEP:** you can also drop `.step` or `.stp` files onto the window. A progress window shows the three stages (**Read file**, **Build shapes**, **Mesh parts**), the percentage and the time left, which part is being meshed, and how long it has been running. Large assemblies can take a while:
+**STEP:** first you choose which axis points up in the file. Most CAD systems (SolidWorks, NX, Creo, Inventor, CATIA, FreeCAD) are **Z up**, and the model is turned upright; **Y up** keeps it as it is. The choice is remembered for the next import. If the model lies on its side, undo and import it again with the other axis.
+
+You can also drop `.step` or `.stp` files onto the window. A progress window shows the three stages (**Read file**, **Build shapes**, **Mesh parts**), the percentage and the time left, which part is being meshed, and how long it has been running. Large assemblies can take a while:
 
 - **Time left** is guessed from the file size at first. MotionStudio remembers how fast each stage ran, so the guess gets better with every import.
 - **Working…** in place of a time means progress has stopped moving, usually while one very large part is meshing. The window names that part.

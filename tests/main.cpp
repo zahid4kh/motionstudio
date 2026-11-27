@@ -2685,6 +2685,29 @@ TEST(stepImportMeshesFacesWithManyHoles) {
 }
 #endif
 
+// A Z-up import stands upright: CAD +Z points up (+Y), the root keeps its offset
+TEST(stepUpAxisTurnsZUpUpright) {
+    StepImporter::Part root;
+    root.position = {1, 2, 3};
+    root.rotationDeg = {0, 0, 30};
+    StepImporter::Part y = root;
+    StepImporter::applyUpAxis(y, StepImporter::UpAxis::Y);
+    CHECK(y.position == root.position && y.rotationDeg == root.rotationDeg);
+    StepImporter::applyUpAxis(root, StepImporter::UpAxis::Z);
+    SceneGraph g;
+    const int id = g.addObject("Root", PrimitiveType::ImportedMesh);
+    g.getObject(id)->transform.position = root.position;
+    g.getObject(id)->transform.rotation = root.rotationDeg;
+    const QMatrix4x4 w = g.worldTransform(id);
+    const QVector3D up = w.mapVector({0, 0, 1}), origin = w.column(3).toVector3D();
+    CHECK_NEAR(up.y(), 1, 1e-5);
+    CHECK_NEAR(origin.x(), 1, 1e-5); CHECK_NEAR(origin.y(), 3, 1e-5); CHECK_NEAR(origin.z(), -2, 1e-5);
+    // The part's own turn about CAD Z is now a turn about Y
+    const QVector3D x = w.mapVector({1, 0, 0});
+    CHECK_NEAR(x.x(), std::cos(qDegreesToRadians(30.0)), 1e-5);
+    CHECK_NEAR(x.y(), 0, 1e-5);
+}
+
 // ── Robot builder and analyser ──────────────────────────────────────────────
 
 namespace {
