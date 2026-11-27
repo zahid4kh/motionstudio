@@ -1846,6 +1846,52 @@ TEST(sensorFollowsPhysics) {
 
 // Copies fall onto a belt, ride it into a sink and are taken; scrubbing back
 // shows only the copies that existed then; Reset removes them
+// A mesh of the unit cube scaled to `size` (m), centred on the origin, as an imported part
+static std::shared_ptr<MeshGeometry> boxMeshOf(QVector3D size) {
+    auto mesh = std::make_shared<MeshGeometry>();
+    const auto& unit = primitiveSoup(PrimitiveType::Cube);
+    mesh->interleaved = unit;
+    for (size_t i = 0; i + 5 < unit.size(); i += 6)
+        for (int k = 0; k < 3; ++k) mesh->interleaved[i + k] = unit[i + k] * size[k];
+    mesh->aabbMin = -size * 0.5f;
+    mesh->aabbMax = size * 0.5f;
+    return mesh;
+}
+
+// A belt imported from CAD: a mesh (scale 1) in a Z-up assembly turned to
+// Y-up, running along the CAD's -Y, carries an imported part off its end
+TEST(importedBeltCarriesImportedPart) {
+    SceneGraph g;
+    const int cad = g.addObject("Station", PrimitiveType::ImportedMesh);
+    g.getObject(cad)->transform.rotation = {-90, 0, 0};          // CAD (x, y, z) → (x, z, -y)
+    const int belt = g.addObject("belt", PrimitiveType::ImportedMesh, cad);
+    g.getObject(belt)->mesh = boxMeshOf({0.4f, 1.2f, 0.06f});    // 1.2 m along the CAD's Y
+    g.getObject(belt)->transform.position = {0, 0, 0.5f};          // top 0.53 m above the floor
+    g.addConveyorBelt(belt);
+    g.getConveyorBelt(belt)->velocity = 0.4f;
+    g.getConveyorBelt(belt)->direction = {0, -1, 0};               // towards the CAD's -Y = world +Z
+    const int part = g.addObject("part", PrimitiveType::ImportedMesh);
+    g.getObject(part)->mesh = boxMeshOf({0.1f, 0.06f, 0.1f});
+    g.getObject(part)->transform.position = {0, 0.565f, -0.4f};
+    g.addRigidBody(part);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+
+    SimulationEngine sim(&g);
+    float onBelt = 0, landed = 0;
+    for (int i = 0; i < 250; ++i) {                                 // 4 s
+        sim.step();
+        const QVector3D p = g.getObject(part)->transform.position;
+        if (i == 60) onBelt = p.z();                                // 1 s: riding the belt
+        landed = p.y();
+    }
+    const QVector3D p = g.getObject(part)->transform.position;
+    // Carried at the belt's speed along world +Z, then off the end (z > 0.6) onto the floor
+    CHECK(onBelt > -0.15f && onBelt < 0.05f);
+    CHECK(p.z() > 0.6f);
+    CHECK(std::fabs(p.x()) < 0.02f);
+    CHECK(landed < 0.1f);
+}
+
 TEST(sourceBeltSinkWithPhysics) {
     SceneGraph g;
     int belt = addBox(g, "Conveyor", {0, 0.1f, 0}, {3, 0.2f, 0.6f});

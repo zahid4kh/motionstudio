@@ -581,28 +581,40 @@ void SimulationEngine::applyConveyorBelts() {
         if (!beltObj) continue;
         const double speed = m_auto->beltSpeed(beltId, belt.velocity);
 
-        // Belt top surface in world space
-        QMatrix4x4 bw = m_scene->worldTransform(beltId);
-        QVector3D beltPos = QVector3D(bw.column(3));
-        float beltTopY   = beltPos.y() + beltObj->transform.scale.y() * 0.5f;
-        float beltHalfX  = beltObj->transform.scale.x() * 0.5f + 0.1f;
-        float beltHalfZ  = beltObj->transform.scale.z() * 0.5f + 0.1f;
+        // The belt's box in the world (a primitive's scale or an imported
+        // mesh's bounds, under any parents): its top face is the side of the
+        // axis nearest world up, its footprint the other two axes
+        const scenequery::Obb bb = scenequery::worldBox(*m_scene, beltId);
+        int up = 0;
+        for (int i = 1; i < 3; ++i)
+            if (std::fabs(bb.axis[i].y()) > std::fabs(bb.axis[up].y())) up = i;
+        const QVector3D upAxis = bb.axis[up] * (bb.axis[up].y() < 0 ? -1.0f : 1.0f);
+        const float beltTopY = (bb.center + upAxis * bb.half[up]).y();
 
-        // World-space push direction
-        QVector3D worldDir = (bw * QVector4D(belt.direction, 0.0f)).toVector3D().normalized();
+        // World-space push direction, along the belt's surface
+        QMatrix4x4 bw = m_scene->worldTransform(beltId);
+        QVector3D worldDir = (bw * QVector4D(belt.direction, 0.0f)).toVector3D();
+        worldDir -= QVector3D::dotProduct(worldDir, upAxis) * upAxis;
+        if (worldDir.lengthSquared() < 1e-12f) continue;
+        worldDir.normalize();
 
         for (auto& [oid, dofAdr] : m_freeJointDofAddr) {
             const SceneObject* obj = m_scene->getObject(oid);
             if (!obj || m_auto->holderOf(oid) != -1) continue;
 
-            float bodyBottomY = obj->transform.position.y() - obj->transform.scale.y() * 0.5f;
+            // The part's lowest point and centre
+            const scenequery::Obb pb = scenequery::worldBox(*m_scene, oid);
+            float bodyBottomY = pb.center.y();
+            for (int i = 0; i < 3; ++i) bodyBottomY -= std::fabs(pb.axis[i].y()) * pb.half[i];
             float dy = bodyBottomY - beltTopY;
 
             // Body must be resting on (or just above) the belt surface
             if (dy > -0.08f && dy < 0.25f) {
-                float dx = fabsf(obj->transform.position.x() - beltPos.x());
-                float dz = fabsf(obj->transform.position.z() - beltPos.z());
-                if (dx < beltHalfX && dz < beltHalfZ) {
+                const QVector3D d = pb.center - bb.center;
+                bool over = true;
+                for (int i = 0; i < 3; ++i)
+                    if (i != up && std::fabs(QVector3D::dotProduct(d, bb.axis[i])) > bb.half[i] + 0.1f) over = false;
+                if (over) {
                     // Override linear velocity along belt direction
                     m_mjData->qvel[dofAdr + 0] = double(worldDir.x()) * speed;
                     m_mjData->qvel[dofAdr + 2] = double(worldDir.z()) * speed;
