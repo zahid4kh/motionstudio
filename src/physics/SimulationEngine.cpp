@@ -270,11 +270,27 @@ static QVector3D quatToEulerXYZ(float w, float x, float y, float z) {
 
 static QString flt(float v) { return QString::number(double(v), 'f', 6); }
 
+bool SimulationEngine::movesWithDrivenJoint(int oid) const {
+    for (int id = oid; id != -1; ) {
+        const Joint* j = m_scene->jointForChild(id);
+        if (j && (m_scene->motorForJoint(j->id) || j->coupledTo != -1)) return true;
+        const SceneObject* o = m_scene->getObject(id);
+        id = o ? o->parentId : -1;
+    }
+    return false;
+}
+
 void SimulationEngine::writeGeomXML(QString& xml, const SceneObject* obj,
                                      const RigidBody* rb, const QString& pad) const {
     bool hasColl = rb && rb->hasCollision;
+    // Parts without a RigidBody get a placeholder mass: a gram, or 100 kg if they
+    // move with a joint the engine drives: contact with a gram can't hold a
+    // part up (MuJoCo weighs a contact by both bodies' masses), so a deck on
+    // a lift would let what it carries sink through. Driven joints follow
+    // their profile whatever the mass, and gravity is compensated.
+    const char* placeholder = movesWithDrivenJoint(obj->id) ? "100" : "0.001";
     QString massAttr = rb ? QString(" mass=\"%1\"").arg(flt(rb->mass))
-                          : QString(" mass=\"0.001\"");
+                          : QString(" mass=\"%1\"").arg(placeholder);
     // Collision is opt-in: a body only participates in contact physics if it has a
     // RigidBody (dynamic — needs to fall/rest/interact) or a ConveyorBelt (static
     // platform other objects rest on). Everything else — plain structural links,

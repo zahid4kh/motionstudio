@@ -1893,6 +1893,38 @@ TEST(physicsHingeAtParentOrigin) {
     CHECK_NEAR((p - QVector3D(0, 1, 0)).length(), 0.5, 0.01);
 }
 
+// A part resting on a driven lift stays on it, and rises with it
+TEST(physicsPartRidesALift) {
+    SceneGraph g;
+    const int base = g.addObject("Base", PrimitiveType::ImportedMesh);   // a frame
+    const int deck = addBox(g, "Deck", {0, 0.5f, 0}, {0.6f, 0.05f, 0.6f}, base);
+    g.addConveyorBelt(deck);                                    // a static collider, stopped
+    g.getConveyorBelt(deck)->speedExpr = "0";
+    Joint lift;
+    lift.type = JointType::Prismatic;
+    lift.axis = {0, 1, 0};
+    lift.limitMin = 0;
+    lift.limitMax = 0.2f;
+    lift.parentBodyId = base;
+    lift.childBodyId = deck;
+    const int mid = g.addActuatorForJoint(g.addJoint(lift));
+    g.getMotor(mid)->velocity = 0.1f;
+    g.getMotor(mid)->targetExpr = "Up ? 0.1 : 0";
+    Signal up;
+    up.name = "Up";
+    up.kind = SignalKind::Input;
+    g.addSignal(up);
+    const int part = addBox(g, "Part", {0, 0.575f, 0}, {0.1f, 0.1f, 0.1f});   // 2 kg on the deck
+    g.addRigidBody(part);
+    g.getRigidBody(part)->mass = 2;
+    SimulationEngine sim(&g);
+    for (int i = 0; i < 60; ++i) sim.step();                     // 1 s holding
+    CHECK_NEAR(g.getObject(part)->transform.position.y(), 0.575, 0.003);
+    sim.automation()->setInput("Up", 1);
+    for (int i = 0; i < 100; ++i) sim.step();                    // 1.6 s: 1 s rising
+    CHECK_NEAR(g.getObject(part)->transform.position.y(), 0.675, 0.003);
+}
+
 // A mesh of the unit cube scaled to `size` (m), centred on the origin, as an imported part
 static std::shared_ptr<MeshGeometry> boxMeshOf(QVector3D size) {
     auto mesh = std::make_shared<MeshGeometry>();

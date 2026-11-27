@@ -83,6 +83,8 @@ private:
     void    prescribeActuatedJoints(double alpha);
     void    prescribeHeldParts();
     QString buildMJCF() const;
+    // Whether an object moves with a joint the engine drives (an actuator's or a follower's)
+    bool movesWithDrivenJoint(int objectId) const;
     void    writeBodyXML(QString& xml, int objectId, int indent) const;
     void    writeGeomXML(QString& xml, const SceneObject* obj,
                          const RigidBody* rb, const QString& pad) const;
