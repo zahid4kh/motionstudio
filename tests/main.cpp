@@ -1909,7 +1909,7 @@ TEST(physicsPartRidesALift) {
     lift.childBodyId = deck;
     const int mid = g.addActuatorForJoint(g.addJoint(lift));
     g.getMotor(mid)->velocity = 0.1f;
-    g.getMotor(mid)->targetExpr = "Up ? 0.1 : 0";
+    g.getMotor(mid)->targetExpr = "Up ? 0.2 : 0";                // to the joint's limit
     Signal up;
     up.name = "Up";
     up.kind = SignalKind::Input;
@@ -1921,8 +1921,8 @@ TEST(physicsPartRidesALift) {
     for (int i = 0; i < 60; ++i) sim.step();                     // 1 s holding
     CHECK_NEAR(g.getObject(part)->transform.position.y(), 0.575, 0.003);
     sim.automation()->setInput("Up", 1);
-    for (int i = 0; i < 100; ++i) sim.step();                    // 1.6 s: 1 s rising
-    CHECK_NEAR(g.getObject(part)->transform.position.y(), 0.675, 0.003);
+    for (int i = 0; i < 200; ++i) sim.step();                    // 3.2 s: 2 s rising
+    CHECK_NEAR(g.getObject(part)->transform.position.y(), 0.775, 0.003);
 }
 
 // A mesh of the unit cube scaled to `size` (m), centred on the origin, as an imported part
