@@ -65,7 +65,12 @@ class WaitTimeout(MotionStudioError, TimeoutError):
 
 
 class SimulationError(MotionStudioError):
-    """The simulation could not start (the automation has errors), or is not running."""
+    """The simulation could not start (the automation has errors), is not running,
+    or is active while the scene is being changed (``simulation_active``: reset it first)."""
+
+
+class UnsavedChangesError(MotionStudioError):
+    """The project open in the app has unsaved changes: save them, or pass ``discard=True``."""
 
 
 _ERRORS = {
@@ -78,6 +83,8 @@ _ERRORS = {
     "timeout": WaitTimeout,
     "simulation": SimulationError,
     "not_running": SimulationError,
+    "simulation_active": SimulationError,
+    "unsaved": UnsavedChangesError,
 }
 
 
@@ -725,6 +732,8 @@ class Studio:
             raise MotionStudioError("protocol", f"MotionStudio speaks protocol {hello.get('protocol')}, "
                                                 f"this library {PROTOCOL}: update one of them")
         self.signals = Signals(self)
+        from .scene import Scene
+        self.scene = Scene(self)   # building: objects, joints, sensors, sequences, import, save
 
     def _call(self, method: str, params: Optional[Mapping[str, Any]] = None) -> Any:
         return self._conn.call(method, params)

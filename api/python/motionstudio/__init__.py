@@ -19,6 +19,13 @@
         rec.take.save("walk.csv")        # the CSV that Record Values writes
         walker.play(rec.take, relative=True)   # again, from where it stands
 
+        scene = studio.scene             # building scenes
+        studio.reset()                   # (the simulation must be reset to change it)
+        station = scene.import_file("station.step")          # Z-up CAD stood upright
+        base = scene.add_frame("Turntable", parent=station)
+        scene.add_joint("Turn", parent=station, child=base, axis=(0, 1, 0), min=-90, max=90)
+        scene.save("station.mstudio")
+
 Units are millimetres, degrees and seconds; Y is up, as in MotionStudio.
 """
 
@@ -43,17 +50,20 @@ from .client import (
     SimulationError,
     Studio,
     Tool,
+    UnsavedChangesError,
     WaitTimeout,
     WalkState,
     connect,
 )
+from .scene import Box, Feature, Joint, Ops, Scene, SceneObject, Vec3
 from .take import Recording, Take
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "connect", "Studio", "Robot", "Humanoid", "Tool", "Actuator", "Motion", "Pose", "Place", "Gait", "WalkState",
     "JointInfo", "Signals", "Take", "Recording",
+    "Scene", "SceneObject", "Joint", "Ops", "Vec3", "Box", "Feature", "UnsavedChangesError",
     "MotionStudioError", "NotFoundError", "OutOfReachError", "OutOfLimitsError", "MotionCancelled",
     "WaitTimeout", "SimulationError", "DEFAULT_HOST", "DEFAULT_PORT", "PROTOCOL",
 ]
