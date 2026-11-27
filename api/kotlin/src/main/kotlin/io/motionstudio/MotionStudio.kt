@@ -11,6 +11,8 @@
 //       walker.walk(1000)                        // a metre ahead
 //       walker.turn(90)                          // a quarter turn to its left
 //       walker.walkPath(1000 to 0, 1000 to 1000) // through points (x to z, mm)
+//
+//       val station = studio.scene.importFile("station.step")   // building scenes (Scene.kt)
 //   }
 //
 // Units are millimetres, degrees and seconds; Y is up, as in MotionStudio.
@@ -44,8 +46,10 @@ class OutOfLimitsException(code: String, message: String) : MotionStudioExceptio
 class MotionCancelledException(code: String, message: String) : MotionStudioException(code, message)
 /** A wait ran out of time (the motion or condition carries on). */
 class WaitTimeoutException(code: String, message: String) : MotionStudioException(code, message)
-/** The simulation could not start, or is not running. */
+/** The simulation could not start, is not running, or is active while the scene is changed (reset it first). */
 class SimulationException(code: String, message: String) : MotionStudioException(code, message)
+/** The project open in the app has unsaved changes: save them, or pass discard = true. */
+class UnsavedChangesException(code: String, message: String) : MotionStudioException(code, message)
 /** The connection failed or was closed. */
 class ConnectionException(message: String) : MotionStudioException("connection", message)
 
@@ -58,7 +62,8 @@ private fun errorOf(err: Map<*, *>): MotionStudioException {
         "out_of_limits" -> OutOfLimitsException(code, msg)
         "cancelled", "reset" -> MotionCancelledException(code, msg)
         "timeout" -> WaitTimeoutException(code, msg)
-        "simulation", "not_running" -> SimulationException(code, msg)
+        "simulation", "not_running", "simulation_active" -> SimulationException(code, msg)
+        "unsaved" -> UnsavedChangesException(code, msg)
         else -> MotionStudioException(code, msg)
     }
 }
@@ -506,6 +511,8 @@ class Signals internal constructor(private val conn: Connection) : Iterable<Sign
 class Studio internal constructor(private val conn: Connection) : Closeable {
     val version: String
     val signals = Signals(conn)
+    /** Building: objects, joints, sensors, sequences, import, open and save. */
+    val scene = Scene(conn)
 
     init {
         val hello = conn.call("hello", mapOf("client" to "kotlin"))

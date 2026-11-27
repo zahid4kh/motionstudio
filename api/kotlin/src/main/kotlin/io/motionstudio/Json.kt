@@ -2,12 +2,15 @@ package io.motionstudio
 
 // A small JSON reader and writer for the API's messages: objects are Maps,
 // arrays Lists, numbers Doubles. Internal to the library.
+// A null that is sent (params with plain null values are left out)
+internal object JsonNull
+
 internal object Json {
     fun write(v: Any?): String = StringBuilder().also { write(it, v) }.toString()
 
     private fun write(out: StringBuilder, v: Any?) {
         when (v) {
-            null -> out.append("null")
+            null, JsonNull -> out.append("null")
             is Boolean -> out.append(v)
             is Number -> {
                 val d = v.toDouble()
