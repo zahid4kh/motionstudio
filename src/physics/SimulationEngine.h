@@ -100,6 +100,9 @@ private:
     std::unordered_map<int, std::pair<double, double>> m_prescribed;
     std::unordered_map<int, int> m_freeJointQposAddr; // scene object id → freejoint qpos address
     std::unordered_map<int, int> m_freeJointDofAddr;  // scene object id → freejoint dof address
+    // Each belt's world transform at the start of the scan: a belt that moves
+    // (on a turntable, a lift) carries what lies on it
+    std::unordered_map<int, QMatrix4x4> m_beltStart;
 
     void applyConveyorBelts();
 #else

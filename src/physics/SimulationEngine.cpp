@@ -153,6 +153,12 @@ void SimulationEngine::runScan() {
     }
 #endif
 
+#ifdef MUJOCO_ENABLED
+    m_beltStart.clear();
+    if (m_mjModel && m_mjData)
+        for (auto& [beltId, belt] : m_scene->allConveyorBelts()) m_beltStart[beltId] = m_scene->worldTransform(beltId);
+#endif
+
     m_auto->scan(kDt);
 
 #ifdef MUJOCO_ENABLED
@@ -605,6 +611,18 @@ void SimulationEngine::applyConveyorBelts() {
         if (worldDir.lengthSquared() < 1e-12f) continue;
         worldDir.normalize();
 
+        // How the belt itself moves this scan (a turntable, a lift): what
+        // lies on it moves with it, plus the belt's own speed
+        QMatrix4x4 carry;
+        if (auto it = m_beltStart.find(beltId); it != m_beltStart.end()) carry = bw * it->second.inverted();
+        float yawRate = 0;
+        {
+            QVector3D axis;
+            float angle = 0;
+            QQuaternion::fromRotationMatrix(carry.toGenericMatrix<3, 3>()).getAxisAndAngle(&axis, &angle);
+            yawRate = axis.y() * qDegreesToRadians(angle) / float(kDt);
+        }
+
         for (auto& [oid, dofAdr] : m_freeJointDofAddr) {
             const SceneObject* obj = m_scene->getObject(oid);
             if (!obj || m_auto->holderOf(oid) != -1) continue;
@@ -622,13 +640,20 @@ void SimulationEngine::applyConveyorBelts() {
                 for (int i = 0; i < 3; ++i)
                     if (i != up && std::fabs(QVector3D::dotProduct(d, bb.axis[i])) > bb.half[i] + 0.1f) over = false;
                 if (over) {
-                    // Override linear velocity along belt direction
-                    m_mjData->qvel[dofAdr + 0] = double(worldDir.x()) * speed;
-                    m_mjData->qvel[dofAdr + 2] = double(worldDir.z()) * speed;
-                    // Zero angular velocity so the object slides, not rolls
-                    m_mjData->qvel[dofAdr + 3] = 0.0;
-                    m_mjData->qvel[dofAdr + 4] = 0.0;
-                    m_mjData->qvel[dofAdr + 5] = 0.0;
+                    // Override linear velocity along belt direction, plus the belt's own motion there
+                    const QVector3D moved = (carry.map(pb.center) - pb.center) / float(kDt);
+                    m_mjData->qvel[dofAdr + 0] = double(worldDir.x()) * speed + moved.x();
+                    m_mjData->qvel[dofAdr + 2] = double(worldDir.z()) * speed + moved.z();
+                    // No rolling: the part only turns with the belt, about world up
+                    // (a free joint's angular velocity is in the body's frame)
+                    QVector3D w(0, yawRate, 0);
+                    if (auto qa = m_freeJointQposAddr.find(oid); qa != m_freeJointQposAddr.end() && yawRate != 0) {
+                        const double* q = m_mjData->qpos + qa->second + 3;
+                        w = QQuaternion(float(q[0]), float(q[1]), float(q[2]), float(q[3])).conjugated().rotatedVector(w);
+                    }
+                    m_mjData->qvel[dofAdr + 3] = w.x();
+                    m_mjData->qvel[dofAdr + 4] = w.y();
+                    m_mjData->qvel[dofAdr + 5] = w.z();
                 }
             }
         }

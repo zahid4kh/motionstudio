@@ -1915,6 +1915,45 @@ TEST(importedBeltCarriesImportedPart) {
     CHECK(landed < 0.1f);
 }
 
+// A stopped belt on a turntable carries its part round with it
+TEST(beltOnTurntableCarriesItsPart) {
+    SceneGraph g;
+    const int table = g.addObject("Table", PrimitiveType::ImportedMesh);   // a frame
+    g.getObject(table)->transform.position = {1, 0.3f, 0};
+    const int deck = addBox(g, "Deck", {0.3f, 0.1f, 0}, {0.8f, 0.1f, 0.3f}, table);   // centred 0.3 m off the axis
+    Joint turn;
+    turn.axis = {0, 1, 0};
+    turn.pivot = {0, 0, 0};
+    turn.parentBodyId = table;
+    turn.childBodyId = deck;
+    const int jid = g.addJoint(turn);
+    const int mid = g.addActuatorForJoint(jid);
+    g.getMotor(mid)->velocity = 60;
+    g.getMotor(mid)->targetExpr = "Go ? 90 : 0";
+    Signal go;
+    go.name = "Go";
+    go.kind = SignalKind::Input;
+    g.addSignal(go);
+    g.addConveyorBelt(deck);
+    g.getConveyorBelt(deck)->velocity = 0.3f;
+    g.getConveyorBelt(deck)->speedExpr = "0";
+    const int part = addBox(g, "Part", {1.5f, 0.5f, 0}, {0.1f, 0.1f, 0.1f});         // 0.5 m from the axis
+    g.addRigidBody(part);
+    CHECK(AutomationEngine::validateAll(g).isEmpty());
+
+    SimulationEngine sim(&g);
+    for (int i = 0; i < 20; ++i) sim.step();                     // settle
+    sim.automation()->setInput("Go", 1);
+    for (int i = 0; i < 160; ++i) sim.step();                    // 2.6 s: 1.5 s turning
+    // Turned +90° about Y round (1, ·, 0): (1.5, 0) → (1, -0.5), and the part turned too
+    const QVector3D p = g.getObject(part)->transform.position;
+    CHECK_NEAR(p.x(), 1.0, 0.03);
+    CHECK_NEAR(p.z(), -0.5, 0.03);
+    CHECK(p.y() > 0.38f);                                         // still on the deck
+    const QVector3D fwd = g.worldTransform(part).mapVector({1, 0, 0}).normalized();
+    CHECK(fwd.z() < -0.98f);
+}
+
 TEST(sourceBeltSinkWithPhysics) {
     SceneGraph g;
     int belt = addBox(g, "Conveyor", {0, 0.1f, 0}, {3, 0.2f, 0.6f});
