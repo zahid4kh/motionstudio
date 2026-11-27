@@ -3,7 +3,7 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "motionstudio"
+name = "motionstudio-api"
 version = "0.3.0"
 description = "Build and drive MotionStudio digital twins from Python: robots, humanoids, stations and their scenes"
 readme = "README.md"

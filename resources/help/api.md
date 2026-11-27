@@ -13,10 +13,10 @@ None of the libraries needs anything else. Their source is in the **api/** folde
 **Python 3.8+.** Install it from PyPI:
 
 ```sh
-pip install motionstudio
+pip install motionstudio-api                 # imported as motionstudio
 ```
 
-`pip install "motionstudio[learn]"` also installs NumPy, for learning motion. A wheel file you were given installs the same way: `pip install motionstudio-0.3.0-py3-none-any.whl`.
+`pip install "motionstudio-api[learn]"` also installs NumPy, for learning motion. A wheel file you were given installs the same way: `pip install motionstudio_api-0.3.0-py3-none-any.whl`.
 
 **Kotlin and Java (JVM 17+).** Add the dependency from Maven Central to your Gradle build:
 

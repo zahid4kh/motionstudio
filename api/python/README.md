@@ -3,11 +3,13 @@
 Build and drive MotionStudio digital twins from Python 3.8+: move robots, walk humanoids, read and write signals, and build scenes (import CAD, add joints, sensors and logic). It uses only the standard library.
 
 ```sh
-pip install motionstudio                       # from PyPI
-pip install motionstudio-0.3.0-py3-none-any.whl  # or from a wheel file you were given
+pip install motionstudio-api                   # from PyPI
+pip install motionstudio_api-0.3.0-py3-none-any.whl  # or from a wheel file you were given
 pip install ./api/python                       # or from the MotionStudio source
-pip install "motionstudio[learn]"              # with NumPy, for motionstudio.learn
+pip install "motionstudio-api[learn]"          # with NumPy, for motionstudio.learn
 ```
+
+The package is called `motionstudio-api` on PyPI and is imported as `motionstudio`.
 
 The program talks to a running MotionStudio over TCP: the app (**Tools › Robot API**, on by default, port 5800) or `motionstudio-server`, which runs a project without a window.
 
@@ -140,7 +142,7 @@ scene.save("station.mstudio")
 
 ## Learning motion (`motionstudio.learn`)
 
-`pip install "motionstudio[learn]"` (it needs NumPy, nothing else). Small neural networks, trained on your CPU in seconds to minutes, learn from takes:
+`pip install "motionstudio-api[learn]"` (it needs NumPy, nothing else). Small neural networks, trained on your CPU in seconds to minutes, learn from takes:
 
 | | |
 |---|---|

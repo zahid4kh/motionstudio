@@ -49,7 +49,7 @@ QString pythonCode(const Example& e) {
     const QString port = e.port == ApiServer::kDefaultPort ? QString() : QString("port=%1").arg(e.port);
     const QString t = e.tool.isEmpty() ? "robot" : "tool";
     std::vector<std::pair<QString, QString>> l = {
-        {"# pip install motionstudio", ""},
+        {"# pip install motionstudio-api", ""},
         {"import motionstudio as ms", ""}, {"", ""},
         {QString("with ms.connect(%1) as studio:").arg(port), ""},
         {QString("    robot = studio.robot(%1)").arg(quote(e.robot)), ""}};

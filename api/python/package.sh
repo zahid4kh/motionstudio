@@ -1,6 +1,6 @@
 #!/bin/sh
-# Builds the Python package: dist/motionstudio-<version>-py3-none-any.whl and
-# dist/motionstudio-<version>.tar.gz, checked with twine. Upload them with
+# Builds the Python package: dist/motionstudio_api-<version>-py3-none-any.whl and
+# dist/motionstudio_api-<version>.tar.gz, checked with twine. Upload them with
 #   <this script's venv>/bin/twine upload dist/*      (asks for a PyPI API token)
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
