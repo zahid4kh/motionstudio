@@ -1,0 +1,10 @@
+prefix=@PC_PREFIX@
+libdir=@PC_LIBDIR@
+includedir=@PC_INCLUDEDIR@
+
+Name: motionstudio
+Description: MotionStudio robot API for C++
+Version: @PROJECT_VERSION@
+Cflags: -I${includedir}
+Libs: -L${libdir} -lmotionstudio
+Libs.private: @PC_PRIVATE_LIBS@

@@ -1,11 +1,51 @@
 # MotionStudio C++ API
 
-Control MotionStudio robots and stations from C++17. It has no dependencies beyond the standard library and sockets, and works on Linux, macOS and Windows.
+Build and drive MotionStudio digital twins from C++17: move robots, walk humanoids, read and write signals, and build scenes. It has no dependencies beyond the standard library and sockets, and works on Linux, macOS and Windows. The program talks to a running MotionStudio over TCP: the app (**Tools › Robot API**, port 5800) or `motionstudio-server`.
+
+## Getting it
+
+The library ships as a source archive, `motionstudio-cpp-0.3.0.tar.gz` (or `.zip`), with its SHA-256 next to it. `./package.sh` in this folder makes them in `dist/`. Use it in one of these ways.
+
+**1. FetchContent** (CMake downloads and builds it with your project):
 
 ```cmake
-add_subdirectory(path/to/MotionStudio/api/cpp)      # or FetchContent / install + find_package(motionstudio)
+cmake_minimum_required(VERSION 3.24)
+project(my_app CXX)
+include(FetchContent)
+FetchContent_Declare(motionstudio
+    URL https://example.com/motionstudio-cpp-0.3.0.tar.gz     # where the archive is published
+    URL_HASH SHA256=<the hash from motionstudio-cpp-0.3.0.sha256>
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+FetchContent_MakeAvailable(motionstudio)
+add_executable(my_app main.cpp)
 target_link_libraries(my_app PRIVATE motionstudio::motionstudio)
 ```
+
+**2. Install it once, then `find_package`:**
+
+```sh
+tar xzf motionstudio-cpp-0.3.0.tar.gz && cd motionstudio-cpp-0.3.0
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+sudo cmake --install build                  # or: cmake --install build --prefix ~/.local
+```
+
+```cmake
+find_package(motionstudio 0.3 REQUIRED)     # with --prefix: -DCMAKE_PREFIX_PATH=~/.local
+target_link_libraries(my_app PRIVATE motionstudio::motionstudio)
+```
+
+**3. Without CMake** (Make, Meson, a plain compiler), after installing as in 2:
+
+```sh
+g++ -std=c++17 main.cpp $(pkg-config --cflags --libs --static motionstudio) -o my_app
+```
+
+**4. A copy in your source tree:** unpack the archive into your project and `add_subdirectory(motionstudio-cpp-0.3.0)`.
+
+It builds a static library by default; `-DBUILD_SHARED_LIBS=ON` makes a shared one. Versions 0.x keep their API within a minor version, so `find_package(motionstudio 0.3)` accepts 0.3.x only.
+
+## First program
 
 ```cpp
 #include <motionstudio/motionstudio.hpp>
@@ -22,7 +62,7 @@ int main() {
 }
 ```
 
-Units are mm, degrees and seconds, and Y is up. See [../README.md](../README.md) and [../PROTOCOL.md](../PROTOCOL.md).
+Units are mm, degrees and seconds, and Y is up. The app's guide (**Help › Robot API**) explains the model; the wire protocol is `api/PROTOCOL.md` in the MotionStudio source.
 
 ## Reference
 
