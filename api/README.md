@@ -36,7 +36,7 @@ with ms.connect() as studio:
 | | Folder | Get it |
 |---|---|---|
 | Python 3.8+ | [python/](python/) | `pip install motionstudio-api` (PyPI) |
-| C++17 | [cpp/](cpp/) | the source archive `motionstudio-cpp-0.3.0.tar.gz`: FetchContent, or install + `find_package(motionstudio 0.3)`, or pkg-config ([cpp/README.md](cpp/README.md#getting-it)) |
+| C++17 | [cpp/](cpp/) | the source archive `motionstudio-cpp-0.3.0.tar.gz` on the [v0.3.0 release](https://github.com/zahid4kh/motionstudio/releases/tag/v0.3.0): FetchContent, or install + `find_package(motionstudio 0.3)`, or pkg-config ([cpp/README.md](cpp/README.md#getting-it)) |
 | Kotlin / JVM 17+ | [kotlin/](kotlin/) | `implementation("io.github.zahid4kh:motionstudio:0.3.0")` (Maven Central) |
 
 ### Making the releases

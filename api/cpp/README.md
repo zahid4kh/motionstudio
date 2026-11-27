@@ -4,7 +4,7 @@ Build and drive MotionStudio digital twins from C++17: move robots, walk humanoi
 
 ## Getting it
 
-The library ships as a source archive, `motionstudio-cpp-0.3.0.tar.gz` (or `.zip`), with its SHA-256 next to it. `./package.sh` in this folder makes them in `dist/`. Use it in one of these ways.
+The library ships as a source archive, `motionstudio-cpp-0.3.0.tar.gz` (or `.zip`), with its SHA-256 next to it, on the [v0.3.0 release](https://github.com/zahid4kh/motionstudio/releases/tag/v0.3.0). `./package.sh` in this folder makes them in `dist/`. Use it in one of these ways.
 
 **1. FetchContent** (CMake downloads and builds it with your project):
 
@@ -13,8 +13,8 @@ cmake_minimum_required(VERSION 3.24)
 project(my_app CXX)
 include(FetchContent)
 FetchContent_Declare(motionstudio
-    URL https://example.com/motionstudio-cpp-0.3.0.tar.gz     # where the archive is published
-    URL_HASH SHA256=<the hash from motionstudio-cpp-0.3.0.sha256>
+    URL https://github.com/zahid4kh/motionstudio/releases/download/v0.3.0/motionstudio-cpp-0.3.0.tar.gz
+    URL_HASH SHA256=3551e40b6da690e9a6f9510353235e6a6fd4a0c5218d0bfe007790557c699c35
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
 FetchContent_MakeAvailable(motionstudio)
 add_executable(my_app main.cpp)
@@ -24,6 +24,7 @@ target_link_libraries(my_app PRIVATE motionstudio::motionstudio)
 **2. Install it once, then `find_package`:**
 
 ```sh
+curl -LO https://github.com/zahid4kh/motionstudio/releases/download/v0.3.0/motionstudio-cpp-0.3.0.tar.gz
 tar xzf motionstudio-cpp-0.3.0.tar.gz && cd motionstudio-cpp-0.3.0
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build

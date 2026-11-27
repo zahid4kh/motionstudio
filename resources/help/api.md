@@ -24,13 +24,13 @@ pip install motionstudio-api                 # imported as motionstudio
 dependencies { implementation("io.github.zahid4kh:motionstudio:0.3.0") }
 ```
 
-**C++17.** The library comes as a source archive, `motionstudio-cpp-0.3.0.tar.gz`. CMake can download and build it with your project:
+**C++17.** The library comes as a source archive, `motionstudio-cpp-0.3.0.tar.gz`, on the [v0.3.0 release](https://github.com/zahid4kh/motionstudio/releases/tag/v0.3.0). CMake can download and build it with your project:
 
 ```cmake
 include(FetchContent)
 FetchContent_Declare(motionstudio
-    URL <where the archive is>/motionstudio-cpp-0.3.0.tar.gz
-    URL_HASH SHA256=<its hash>
+    URL https://github.com/zahid4kh/motionstudio/releases/download/v0.3.0/motionstudio-cpp-0.3.0.tar.gz
+    URL_HASH SHA256=3551e40b6da690e9a6f9510353235e6a6fd4a0c5218d0bfe007790557c699c35
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
 FetchContent_MakeAvailable(motionstudio)
 target_link_libraries(my_app PRIVATE motionstudio::motionstudio)
@@ -39,6 +39,7 @@ target_link_libraries(my_app PRIVATE motionstudio::motionstudio)
 You can also install it once, then use it from any project:
 
 ```sh
+curl -LO https://github.com/zahid4kh/motionstudio/releases/download/v0.3.0/motionstudio-cpp-0.3.0.tar.gz
 tar xzf motionstudio-cpp-0.3.0.tar.gz && cd motionstudio-cpp-0.3.0
 cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
 sudo cmake --install build
