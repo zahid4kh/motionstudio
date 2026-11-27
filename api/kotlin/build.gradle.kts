@@ -56,7 +56,7 @@ publishing {
             from(components["java"])
             pom {
                 name.set("MotionStudio robot API")
-                description.set("Control the robots, humanoids and stations of a MotionStudio scene from Kotlin or Java: straight-line and joint moves, taught poses, walking, signals.")
+                description.set("Build and drive MotionStudio digital twins from Kotlin or Java: straight-line and joint moves, taught poses, walking, signals, and building scenes (CAD import, joints, sensors, sequences).")
                 url.set("https://github.com/zahid4kh/motionstudio")
                 licenses {
                     license {
