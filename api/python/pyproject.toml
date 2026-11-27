@@ -5,19 +5,29 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "motionstudio"
 version = "0.3.0"
-description = "Control MotionStudio robots, humanoids and stations from Python"
+description = "Build and drive MotionStudio digital twins from Python: robots, humanoids, stations and their scenes"
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }
+authors = [{ name = "Zahid Khalilov" }]
+keywords = ["robotics", "simulation", "digital twin", "automation", "motionstudio"]
 dependencies = []
-
-[project.optional-dependencies]
-learn = ["numpy>=1.20"]
 classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Manufacturing",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Topic :: Scientific/Engineering",
     "Typing :: Typed",
 ]
+
+[project.optional-dependencies]
+learn = ["numpy>=1.20"]
+
+[project.urls]
+Homepage = "https://github.com/zahid4kh/motionstudio"
 
 [tool.setuptools]
 packages = ["motionstudio"]

@@ -1,10 +1,15 @@
 # motionstudio (Python)
 
-Control MotionStudio robots and stations from Python 3.8+. It uses only the standard library.
+Build and drive MotionStudio digital twins from Python 3.8+: move robots, walk humanoids, read and write signals, and build scenes (import CAD, add joints, sensors and logic). It uses only the standard library.
 
 ```sh
-pip install .            # from api/python
+pip install motionstudio                       # from PyPI
+pip install motionstudio-0.3.0-py3-none-any.whl  # or from a wheel file you were given
+pip install ./api/python                       # or from the MotionStudio source
+pip install "motionstudio[learn]"              # with NumPy, for motionstudio.learn
 ```
+
+The program talks to a running MotionStudio over TCP: the app (**Tools › Robot API**, on by default, port 5800) or `motionstudio-server`, which runs a project without a window.
 
 ```python
 import motionstudio as ms
@@ -18,7 +23,7 @@ with ms.connect() as studio:                  # localhost:5800; ms.connect("host
     robot.home()
 ```
 
-Units are mm, degrees and seconds, and Y is up. See [../README.md](../README.md) for the model and [../PROTOCOL.md](../PROTOCOL.md) for the protocol.
+Units are mm, degrees and seconds, and Y is up. The app's guide (**Help › Robot API**) explains the model; the wire protocol is `api/PROTOCOL.md` in the MotionStudio source.
 
 ## Reference
 
