@@ -2235,6 +2235,7 @@ TEST(stepImportEstimator) {
 #include <XCAFDoc_DocumentTool.hxx>
 #include <XCAFDoc_ShapeTool.hxx>
 #include <gp_Trsf.hxx>
+#include <BRep_Builder.hxx>
 #include <Interface_Static.hxx>
 #include <Message.hxx>
 #include <Message_Messenger.hxx>
@@ -2267,6 +2268,65 @@ static QString writeTestStep(const QString& dir) {
     writer.Write(path.toUtf8().constData());
     app->Close(doc);
     return path;
+}
+
+// One part holding several bodies, as NX exports a multi-body part: two
+// copies of a named block and a named pin in one compound
+static QString writeMultiBodyStep(const QString& dir) {
+    Handle(XCAFApp_Application) app = XCAFApp_Application::GetApplication();
+    Handle(TDocStd_Document) doc;
+    app->NewDocument("MDTV-XCAF", doc);
+    Handle(XCAFDoc_ShapeTool) tool = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
+    const TopoDS_Shape block = BRepPrimAPI_MakeBox(100, 50, 20).Shape();
+    gp_Trsf right; right.SetTranslation(gp_Vec(200, 0, 0));
+    gp_Trsf up; up.SetTranslation(gp_Vec(0, 0, 20));
+    const TopoDS_Shape block2 = block.Moved(TopLoc_Location(right));
+    const TopoDS_Shape pin = BRepPrimAPI_MakeCylinder(5, 40).Shape().Moved(TopLoc_Location(up));
+    TopoDS_Compound all;
+    BRep_Builder b;
+    b.MakeCompound(all);
+    for (const TopoDS_Shape& s : {block, block2, pin}) b.Add(all, s);
+    const TDF_Label part = tool->AddShape(all, false);
+    TDataStd_Name::Set(part, "Station");
+    TDataStd_Name::Set(tool->AddSubShape(part, block), "block");
+    TDataStd_Name::Set(tool->AddSubShape(part, block2), "block");
+    TDataStd_Name::Set(tool->AddSubShape(part, pin), "pin");
+    Message::DefaultMessenger()->RemovePrinters(STANDARD_TYPE(Message_PrinterOStream));
+    STEPCAFControl_Writer writer;
+    Interface_Static::SetCVal("xstep.cascade.unit", "MM");
+    Interface_Static::SetIVal("write.stepcaf.subshapes.name", 1);
+    const QString path = dir + "/multibody.step";
+    writer.Transfer(doc, STEPControl_AsIs);
+    writer.Write(path.toUtf8().constData());
+    Interface_Static::SetIVal("write.stepcaf.subshapes.name", 0);
+    app->Close(doc);
+    return path;
+}
+
+TEST(stepImportSplitsAPartIntoItsBodies) {
+    QTemporaryDir dir;
+    const QString path = writeMultiBodyStep(dir.path());
+    StepImporter::Part root;
+    QString error;
+    CHECK(StepImporter::importFile(path, root, error));
+    CHECK(root.name == "Station");
+    CHECK(!root.mesh);
+    CHECK(root.children.size() == 3);
+    if (root.children.size() != 3) return;
+    // Each body is an object placed at its box centre, its mesh centred on it
+    const auto& c = root.children;
+    CHECK(c[0].mesh && c[1].mesh && c[2].mesh);
+    if (!c[0].mesh || !c[1].mesh || !c[2].mesh) return;
+    CHECK_NEAR(c[0].position.x(), 0.05, 1e-6);
+    CHECK_NEAR(c[0].position.z(), 0.01, 1e-6);
+    CHECK_NEAR(c[1].position.x(), 0.25, 1e-6);
+    CHECK_NEAR(c[2].position.z(), 0.04, 1e-6);
+    CHECK_NEAR(c[0].mesh->aabbMax.x() - c[0].mesh->aabbMin.x(), 0.1, 1e-4);
+    CHECK_NEAR(c[1].mesh->aabbMin.x(), -0.05, 1e-4);
+    // Named by the file, repeated names numbered
+    CHECK(c[0].name == "block:1");
+    CHECK(c[1].name == "block:2");
+    CHECK(c[2].name == "pin");
 }
 
 TEST(stepImportReportsProgressAndCancels) {

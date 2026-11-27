@@ -18,12 +18,17 @@
 #include <TDF_Tool.hxx>
 #include <TCollection_AsciiString.hxx>
 #include <Interface_Static.hxx>
+#include <XSControl_TransferReader.hxx>
+#include <XSControl_WorkSession.hxx>
+#include <StepRepr_RepresentationItem.hxx>
+#include <TCollection_HAsciiString.hxx>
 #include <Message_ProgressIndicator.hxx>
 #include <Message_ProgressScope.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepMesh_Context.hxx>
 #include <BRep_Tool.hxx>
 #include <TopExp_Explorer.hxx>
+#include <TopoDS_Iterator.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopLoc_Location.hxx>
@@ -49,8 +54,12 @@ QString labelName(const TDF_Label& label) {
     Handle(TDataStd_Name) nameAttr;
     if (label.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
         const TCollection_ExtendedString& ext = nameAttr->Get();
-        return QString::fromUtf16(reinterpret_cast<const char16_t*>(ext.ToExtString()),
-                                  ext.Length()).trimmed();
+        const QString name = QString::fromUtf16(reinterpret_cast<const char16_t*>(ext.ToExtString()),
+                                                ext.Length()).trimmed();
+        // OCCT names an assembly's own geometry (a product with both parts and
+        // bodies) after its label entry, "=>[0:1:1:5]"
+        if (name.startsWith("=>[")) return QStringLiteral("Bodies");
+        return name;
     }
     return {};
 }
@@ -226,11 +235,57 @@ QColor labelColor(const TDF_Label& label, const Handle(XCAFDoc_ShapeTool)& shape
     return {};
 }
 
+// A shape's own colour, else its first coloured face's
+QColor shapeColor(const TopoDS_Shape& shape, const Handle(XCAFDoc_ColorTool)& colorTool) {
+    if (colorTool.IsNull()) return {};
+    Quantity_Color c;
+    for (XCAFDoc_ColorType t : {XCAFDoc_ColorSurf, XCAFDoc_ColorGen})
+        if (colorTool->GetColor(shape, t, c)) return toQColor(c);
+    for (TopExp_Explorer ex(shape, TopAbs_FACE); ex.More(); ex.Next())
+        if (colorTool->GetColor(ex.Current(), XCAFDoc_ColorSurf, c)) return toQColor(c);
+    return {};
+}
+
 QString labelEntry(const TDF_Label& label) {
     TCollection_AsciiString entry;
     TDF_Tool::Entry(label, entry);
     return QString::fromLatin1(entry.ToCString());
 }
+
+// A part's pieces when its shape holds several bodies (CAD systems such as NX
+// export a multi-body part, or a whole station, as one product): the solids,
+// shells and loose faces of its compound, nested compounds flattened, each
+// with its placement. Empty when the shape is one body, which stays one mesh.
+void collectPieces(const TopoDS_Shape& shape, std::vector<TopoDS_Shape>& out) {
+    if (shape.ShapeType() != TopAbs_COMPOUND) { out.push_back(shape); return; }
+    for (TopoDS_Iterator it(shape); it.More(); it.Next()) collectPieces(it.Value(), out);
+}
+std::vector<TopoDS_Shape> pieces(const TopoDS_Shape& shape) {
+    std::vector<TopoDS_Shape> out;
+    if (!shape.IsNull()) collectPieces(shape, out);
+    if (out.size() < 2) out.clear();
+    return out;
+}
+
+// Each distinct piece's mesh, keyed by its TShape so repeated bodies share
+// one mesh. The mesh is centred on its box (CAD files usually bake a body's
+// placement into its geometry), so the object sits where the body is;
+// `centre` is that box centre in the piece's own frame.
+struct PieceMesh { std::shared_ptr<MeshGeometry> mesh; gp_Vec centre; };
+using PieceMeshes = std::map<const void*, PieceMesh>;
+
+// Moves a mesh's vertices so its box is centred on the origin; returns the old centre
+gp_Vec centreMesh(MeshGeometry& m) {
+    const QVector3D c = (m.aabbMin + m.aabbMax) * 0.5f;
+    for (size_t i = 0; i + 5 < m.interleaved.size(); i += 6) {
+        m.interleaved[i] -= c.x(); m.interleaved[i + 1] -= c.y(); m.interleaved[i + 2] -= c.z();
+    }
+    m.aabbMin -= c;
+    m.aabbMax -= c;
+    return gp_Vec(c.x(), c.y(), c.z());
+}
+// Each piece's name in the file (its solid's), keyed by its TShape
+using PieceNames = std::map<const void*, QString>;
 
 // The distinct simple shapes under a label (each meshed once), in tree order
 void collectShapes(const TDF_Label& label, const Handle(XCAFDoc_ShapeTool)& shapeTool,
@@ -272,8 +327,8 @@ MeshCost meshCost(const TopoDS_Shape& shape) {
 StepImporter::Part processLabel(const TDF_Label& label,
                                 const Handle(XCAFDoc_ShapeTool)& shapeTool,
                                 const Handle(XCAFDoc_ColorTool)& colorTool,
-                                MeshCache& cache,
-                                int depth) {
+                                MeshCache& cache, const PieceMeshes& pieceMeshes,
+                                const PieceNames& pieceNameOf, int depth) {
     StepImporter::Part part;
     part.name = labelName(label);
     part.color = labelColor(label, shapeTool, colorTool, !shapeTool->IsAssembly(label));
@@ -288,7 +343,7 @@ StepImporter::Part processLabel(const TDF_Label& label,
             TDF_Label ref;
             if (!shapeTool->GetReferredShape(comp, ref)) continue;
 
-            StepImporter::Part child = processLabel(ref, shapeTool, colorTool, cache, depth + 1);
+            StepImporter::Part child = processLabel(ref, shapeTool, colorTool, cache, pieceMeshes, pieceNameOf, depth + 1);
             // A colour on the instance overrides the part's own
             const QColor instance = labelColor(comp, shapeTool, colorTool, false);
             if (instance.isValid()) child.color = instance;
@@ -298,6 +353,31 @@ StepImporter::Part processLabel(const TDF_Label& label,
             if (child.name.isEmpty()) child.name = QString("Part_%1").arg(i);
 
             decomposeLocation(shapeTool->GetLocation(comp), child.position, child.rotationDeg);
+            part.children.push_back(std::move(child));
+        }
+    } else if (const std::vector<TopoDS_Shape> ps = pieces(shapeTool->GetShape(label)); !ps.empty()) {
+        // Several bodies: one child each, named by the file (repeated names
+        // numbered like assembly instances), coloured by the body or its faces
+        std::vector<QString> pieceNames(ps.size());
+        std::map<QString, int> count;
+        for (size_t i = 0; i < ps.size(); i++) {
+            if (auto n = pieceNameOf.find(ps[i].TShape().get()); n != pieceNameOf.end()) pieceNames[i] = n->second;
+            if (pieceNames[i].isEmpty()) pieceNames[i] = part.name.isEmpty() ? "Body" : part.name + " body";
+            count[pieceNames[i]]++;
+        }
+        std::map<QString, int> seen;
+        for (size_t i = 0; i < ps.size(); i++) {
+            auto mesh = pieceMeshes.find(ps[i].TShape().get());
+            if (mesh == pieceMeshes.end() || !mesh->second.mesh) continue;
+            StepImporter::Part child;
+            child.name = count[pieceNames[i]] > 1 ? QString("%1:%2").arg(pieceNames[i]).arg(++seen[pieceNames[i]])
+                                                  : pieceNames[i];
+            child.mesh = mesh->second.mesh;
+            child.color = shapeColor(ps[i], colorTool);
+            if (!child.color.isValid()) child.color = part.color;
+            gp_Trsf centre;
+            centre.SetTranslation(mesh->second.centre);
+            decomposeLocation(ps[i].Location() * TopLoc_Location(centre), child.position, child.rotationDeg);
             part.children.push_back(std::move(child));
         }
     } else {
@@ -467,18 +547,44 @@ bool importFile(const QString& path, Part& rootOut, QString& errorOut, const Pro
     std::vector<char> manyHoles;
     std::map<const void*, int> byTShape;
     double totalWeight = 0;
-    for (size_t i = 0; i < labels.size(); i++) {
-        const TopoDS_Shape shape = shapeTool->GetShape(labels[i]);
+    auto addShape = [&](const TopoDS_Shape& shape, const QString& name) {
         auto [it, added] = byTShape.emplace(shape.TShape().get(), int(shapes.size()));
-        shapeOf[i] = it->second;
-        if (!added) continue;
+        if (!added) return it->second;
         shapes.push_back(shape);
-        names.push_back(labelName(labels[i]));
+        names.push_back(name);
         const MeshCost cost = meshCost(shape);
         faces.push_back(cost.faces);
         weight.push_back(cost.weight);
         manyHoles.push_back(cost.manyHoles);
         totalWeight += cost.weight;
+        return it->second;
+    };
+    std::vector<int> pieceShapes;   // shapes that are pieces of a multi-body part
+    PieceNames pieceNameOf;
+    const Handle(XSControl_TransferReader) transfer = reader.ChangeReader().WS()->TransferReader();
+    auto nameInFile = [&](const TopoDS_Shape& piece) {
+        if (transfer.IsNull()) return QString();
+        for (int mode : {0, 1, -1}) {
+            Handle(StepRepr_RepresentationItem) item =
+                Handle(StepRepr_RepresentationItem)::DownCast(transfer->EntityFromShapeResult(piece, mode));
+            if (!item.IsNull() && !item->Name().IsNull())
+                return QString::fromUtf8(item->Name()->ToCString()).trimmed();
+        }
+        return QString();
+    };
+    for (size_t i = 0; i < labels.size(); i++) {
+        const TopoDS_Shape shape = shapeTool->GetShape(labels[i]);
+        const std::vector<TopoDS_Shape> ps = pieces(shape);
+        if (ps.empty()) {
+            shapeOf[i] = addShape(shape, labelName(labels[i]));
+            continue;
+        }
+        shapeOf[i] = -1;
+        for (const TopoDS_Shape& p : ps) {
+            pieceShapes.push_back(addShape(p.Located(TopLoc_Location()), labelName(labels[i])));
+            QString& name = pieceNameOf[p.TShape().get()];
+            if (name.isEmpty()) name = nameInFile(p);
+        }
     }
 
     const int n = int(shapes.size());
@@ -532,11 +638,18 @@ bool importFile(const QString& path, Part& rootOut, QString& errorOut, const Pro
 
     MeshCache cache;
     for (size_t i = 0; i < labels.size(); i++)
-        cache[labelEntry(labels[i])] = meshes[shapeOf[i]];
+        if (shapeOf[i] >= 0) cache[labelEntry(labels[i])] = meshes[shapeOf[i]];
+    PieceMeshes pieceMeshes;
+    for (int k : pieceShapes) {
+        PieceMesh& pm = pieceMeshes[shapes[k].TShape().get()];
+        if (pm.mesh || !meshes[k]) continue;
+        pm.mesh = meshes[k];
+        pm.centre = centreMesh(*pm.mesh);
+    }
 
     const QString baseName = QFileInfo(path).completeBaseName();
     if (freeShapes.Length() == 1) {
-        rootOut = processLabel(freeShapes.Value(1), shapeTool, colorTool, cache, 0);
+        rootOut = processLabel(freeShapes.Value(1), shapeTool, colorTool, cache, pieceMeshes, pieceNameOf, 0);
         decomposeLocation(shapeTool->GetLocation(freeShapes.Value(1)),
                           rootOut.position, rootOut.rotationDeg);
         if (rootOut.name.isEmpty()) rootOut.name = baseName;
@@ -545,7 +658,7 @@ bool importFile(const QString& path, Part& rootOut, QString& errorOut, const Pro
         rootOut = Part{};
         rootOut.name = baseName;
         for (int i = 1; i <= freeShapes.Length(); i++) {
-            Part child = processLabel(freeShapes.Value(i), shapeTool, colorTool, cache, 0);
+            Part child = processLabel(freeShapes.Value(i), shapeTool, colorTool, cache, pieceMeshes, pieceNameOf, 0);
             decomposeLocation(shapeTool->GetLocation(freeShapes.Value(i)),
                               child.position, child.rotationDeg);
             if (child.name.isEmpty()) child.name = QString("%1_%2").arg(baseName).arg(i);
