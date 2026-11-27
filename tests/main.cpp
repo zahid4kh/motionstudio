@@ -1846,6 +1846,29 @@ TEST(sensorFollowsPhysics) {
 
 // Copies fall onto a belt, ride it into a sink and are taken; scrubbing back
 // shows only the copies that existed then; Reset removes them
+// A hinge whose pivot is the parent's origin, (0, 0, 0), turns the child
+// about that point in MuJoCo as in the scene: a pendulum swings down
+TEST(physicsHingeAtParentOrigin) {
+    SceneGraph g;
+    const int top = g.addObject("Pivot", PrimitiveType::ImportedMesh);   // a frame
+    g.getObject(top)->transform.position = {0, 1, 0};
+    const int bob = addBox(g, "Bob", {0.5f, 0, 0}, {0.1f, 0.1f, 0.1f}, top);
+    g.addRigidBody(bob);
+    Joint hinge;
+    hinge.axis = {0, 0, 1};
+    hinge.parentBodyId = top;
+    hinge.childBodyId = bob;
+    hinge.limitMin = -180;
+    hinge.limitMax = 180;
+    const int jid = g.addJoint(hinge);
+    SimulationEngine sim(&g);
+    for (int i = 0; i < 20; ++i) sim.step();                     // 0.32 s
+    // Falling from horizontal about the parent's origin (about its own centre it wouldn't move)
+    CHECK(g.getJoint(jid)->currentValue < -20);
+    const QVector3D p = g.worldTransform(bob).column(3).toVector3D();
+    CHECK_NEAR((p - QVector3D(0, 1, 0)).length(), 0.5, 0.01);
+}
+
 // A mesh of the unit cube scaled to `size` (m), centred on the origin, as an imported part
 static std::shared_ptr<MeshGeometry> boxMeshOf(QVector3D size) {
     auto mesh = std::make_shared<MeshGeometry>();

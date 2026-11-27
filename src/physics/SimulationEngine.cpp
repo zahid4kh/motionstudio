@@ -403,17 +403,24 @@ void SimulationEngine::writeBodyXML(QString& xml, int oid, int indent) const {
     if (jnt) {
         QString jType = (jnt->type == JointType::Revolute) ? "hinge" : "slide";
 
-        // Joint::pivot is stored in the parent's local frame; MJCF's <joint
-        // pos> is defined in this (child) body's own local frame, so convert.
+        // Joint::pivot is stored in the parent's local frame ((0, 0, 0) is the
+        // parent's origin); MJCF's <joint pos> is in this (child) body's own
+        // frame, which is unscaled like the body's pos and euler above
+        QMatrix4x4 bodyFrame;
+        bodyFrame.translate(t.position);
+        bodyFrame.rotate(t.rotation.x(), 1, 0, 0);
+        bodyFrame.rotate(t.rotation.y(), 0, 1, 0);
+        bodyFrame.rotate(t.rotation.z(), 0, 0, 1);
+        const QMatrix4x4 toBody = bodyFrame.inverted();
         QString posAttr;
-        if (jnt->type == JointType::Revolute && !jnt->pivot.isNull()) {
-            QVector3D pivotLocal = m_scene->localTransform(oid).inverted().map(jnt->pivot);
+        if (jnt->type == JointType::Revolute) {
+            QVector3D pivotLocal = toBody.map(jnt->pivot);
             posAttr = QString(" pos=\"%1 %2 %3\"")
                 .arg(flt(pivotLocal.x())).arg(flt(pivotLocal.y())).arg(flt(pivotLocal.z()));
         }
 
         // Joint::axis is in the parent's frame too; MJCF's is in the child's
-        const QVector3D axis = m_scene->localTransform(oid).inverted().mapVector(jnt->axis).normalized();
+        const QVector3D axis = toBody.mapVector(jnt->axis).normalized();
 
         // Continuous revolute joints get no range (autolimits → unlimited)
         QString rangeAttr = (jnt->type == JointType::Revolute && jnt->continuous)
