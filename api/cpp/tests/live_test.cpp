@@ -92,11 +92,143 @@ static int walking(ms::Studio& studio) {
     return failures == 0 ? 0 : 1;
 }
 
+// An empty server: build a line (belt, part source, beam, ram, sink, a
+// sequence), check it, run it, save and open it (C++17: options set by field)
+static int building(ms::Studio& studio) {
+    studio.reset();
+    ms::Scene scene = studio.scene();
+    scene.newScene();
+
+    ms::ObjectOptions o;
+    o.position = ms::Target().x(1000);
+    ms::SceneObject cell = scene.addFrame("Cell", o);
+    o = {};
+    o.parent = cell.ref();
+    o.position = ms::Target().y(700);
+    o.color = "#336699";
+    ms::SceneObject table = scene.addBox("Table", {800, 40, 600}, o);
+    CHECK(table.path() == "Cell/Table");
+    NEAR(table.world().x, 1000, 1e-3); NEAR(table.world().y, 700, 1e-3);
+    const ms::Box b = table.bounds();
+    NEAR(b.min.x, 600, 1e-2); NEAR(b.size.z, 600, 1e-2);
+    CHECK(table.size() && std::fabs(table.size()->y - 40) < 1e-3);
+
+    // A handle follows its object through a rename and a move
+    o = {};
+    o.parent = cell.ref();
+    o.position = ms::Target().x(300).y(800);
+    ms::SceneObject arm = scene.addFrame("Arm", o);
+    arm.rename("Arm A").setParent("");
+    CHECK(arm.path() == "Arm A");
+    NEAR(arm.world().x, 1300, 1e-3);
+    arm.setParent(cell.ref());
+    CHECK(arm.path() == "Cell/Arm A" && cell.children().size() == 2);
+
+    ms::JointOptions jo;
+    jo.pivot = ms::Vec3{1000, 800, 0};
+    jo.min = -170; jo.max = 170;
+    jo.actuator = ms::ActuatorOptions{};
+    jo.actuator->speed = 90;
+    ms::Joint turn = scene.addJoint("Turn", cell.ref(), arm.ref(), {0, 1, 0}, jo);
+    CHECK(turn.details().actuator == "Turn");
+    turn.setValue(90);
+    NEAR(arm.world().z, -300, 1e-2); NEAR(arm.world().x, 1000, 1e-2);
+    CHECK(throws<ms::NotFound>([&] { scene.object("Nothing"); }));
+    CHECK(throws<ms::Error>([&] { scene.addJoint("Bad", cell.ref(), arm.ref(), {0, 1, 0}); }));
+    turn.remove();
+
+    // The line
+    scene.newScene();
+    ms::SceneObject line = scene.addFrame("Line");
+    o = {};
+    o.parent = line.ref();
+    o.position = ms::Target().y(450);
+    ms::SceneObject belt = scene.addBox("Belt", {2000, 100, 400}, o);
+    belt.setBelt("Run ? 0.3 : 0", ms::Vec3{1, 0, 0});
+    o = {};
+    o.position = ms::Target().x(-900).y(551);
+    ms::SceneObject part = scene.addBox("Box", {100, 100, 100}, o);
+    ms::BodyOptions body;
+    body.mass = 0.5;
+    part.setBody(body);
+    o = {};
+    o.parent = line.ref();
+    o.position = ms::Target().x(1200);
+    ms::SceneObject stand = scene.addFrame("Stand", o);
+    o = {};
+    o.parent = stand.ref();
+    o.position = ms::Target().y(300);
+    ms::SceneObject ram = scene.addBox("Ram", {50, 50, 50}, o);
+    jo = {};
+    jo.type = "prismatic";
+    jo.min = 0; jo.max = 150;
+    jo.actuator = ms::ActuatorOptions{};
+    jo.actuator->speed = 300;
+    scene.addJoint("Ram", stand.ref(), ram.ref(), {0, 1, 0}, jo);
+    ms::SignalOptions run;
+    run.kind = "input";
+    run.value = 1;
+    scene.addSignal("Run", run);
+    ms::SignalOptions seen;
+    seen.type = "int";
+    scene.addSignal("Seen", seen);
+    ms::SensorOptions beam;
+    beam.mount = belt.ref();
+    beam.frame = "world";
+    beam.at = ms::Vec3{600, 560, -300};
+    beam.direction = ms::Vec3{0, 0, 1};
+    beam.range = 600;
+    beam.detects = "bodies";
+    scene.addSensor("AtEnd", "beam", beam);
+    scene.addPose("Up", {{"Ram", 150}});
+    ms::SourceOptions feed;
+    feed.interval = 3;
+    feed.max = 3;
+    scene.addSource("Feeder", part.ref(), feed);
+    ms::SinkOptions out;
+    out.mount = belt.ref();
+    out.at = ms::Vec3{950, 100, 0};
+    out.size = ms::Vec3{100, 200, 400};
+    scene.addSink("Out", out);
+    ms::Ops ops;
+    ms::Ops::Common afterCount;
+    afterCount.after = {"Count"};
+    ops.waitFor("Part", "AtEnd")
+       .set("Count", "Seen = Seen + 1")
+       .moveToPose("Raise", "Up")
+       .move("Lower", "Ram", 0, ms::Value(600))
+       .waitFor("Gone", "!AtEnd", afterCount);
+    ms::SequenceOptions so;
+    so.loop = true;
+    so.enable = "Run";
+    scene.addSequence("Counter", ops, so);
+    CHECK(scene.sequenceJson("Counter").find("\"speed\":\"0.6\"") != std::string::npos);
+    CHECK(scene.check().empty());
+    for (const auto& p : scene.check()) std::printf("  problem: %s\n", p.c_str());
+
+    const std::string path = scene.save("cpp_line_test.mstudio");
+    scene.newScene();
+    CHECK(scene.objects().empty());
+    const ms::SceneInfo info = scene.open(path);
+    CHECK(info.sequences.size() == 1 && info.sources.size() == 1 && info.sensors.size() == 1);
+    std::remove(path.c_str());
+
+    studio.sleep(12);
+    CHECK(studio.get("Seen") >= 2);
+    CHECK(studio.get("Out.count") >= 2);
+    CHECK(throws<ms::SimulationError>([&] { scene.addFrame("Late"); }));
+    studio.reset();
+    CHECK(scene.remove("Seen") == "signal");
+    std::printf("%d checks, %d failures\n", checks, failures);
+    return failures == 0 ? 0 : 1;
+}
+
 int main(int argc, char** argv) {
     const int port = argc > 1 ? std::atoi(argv[1]) : ms::kDefaultPort;
     ms::Studio studio = ms::Studio::connect("localhost", port);
     if (argc > 2 && std::string(argv[2]) == "actuators") return actuators(studio);
     if (argc > 2 && std::string(argv[2]) == "walking") return walking(studio);
+    if (argc > 2 && std::string(argv[2]) == "building") return building(studio);
     studio.reset();
     ms::Robot robot = studio.robot();
     CHECK(robot.name() == "Robot");

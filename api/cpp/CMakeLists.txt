@@ -2,7 +2,7 @@
 #   add_subdirectory(path/to/api/cpp)          (or FetchContent)
 #   target_link_libraries(your_app PRIVATE motionstudio::motionstudio)
 cmake_minimum_required(VERSION 3.16)
-project(motionstudio_cpp VERSION 0.2.0 LANGUAGES CXX)
+project(motionstudio_cpp VERSION 0.3.0 LANGUAGES CXX)
 
 option(MOTIONSTUDIO_CPP_EXAMPLES "Build the examples" ${PROJECT_IS_TOP_LEVEL})
 option(MOTIONSTUDIO_CPP_TESTS "Build the live test" ${PROJECT_IS_TOP_LEVEL})

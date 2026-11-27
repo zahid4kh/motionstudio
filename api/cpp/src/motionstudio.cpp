@@ -4,6 +4,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <cstring>
+#include <filesystem>
 #include <iomanip>
 #include <mutex>
 #include <ostream>
@@ -45,7 +46,8 @@ namespace {
     if (code == "out_of_limits")                     throw OutOfLimits(code, msg);
     if (code == "cancelled" || code == "reset")      throw MotionCancelled(code, msg);
     if (code == "timeout")                           throw Timeout(code, msg);
-    if (code == "simulation" || code == "not_running") throw SimulationError(code, msg);
+    if (code == "simulation" || code == "not_running" || code == "simulation_active") throw SimulationError(code, msg);
+    if (code == "unsaved")                           throw UnsavedChanges(code, msg);
     throw Error(code, msg);
 }
 
@@ -523,5 +525,403 @@ double Studio::time() const    { return conn_->call("sim.state")["time"].number(
 bool   Studio::running() const { return conn_->call("sim.state")["running"].boolean(); }
 void   Studio::setSpeed(double factor) const { conn_->call("sim.speed", Json(Json::Object{{"factor", factor}})); }
 void   Studio::close() { if (conn_) conn_->close(); }
+
+
+// ── Building scenes ─────────────────────────────────────────────────────────
+
+namespace {
+
+Json vecJson(const Vec3& v) { return Json::Array{v.x, v.y, v.z}; }
+Vec3 vecFrom(const Json& j) { return {j["x"].number(), j["y"].number(), j["z"].number()}; }
+Json valueJson(const Value& v) { return v.isNumber() ? Json(v.number()) : Json(v.expression()); }
+Json strings(const std::vector<std::string>& v) {
+    Json::Array a;
+    for (const auto& s : v) a.push_back(s);
+    return a;
+}
+std::vector<std::string> names(const Json& a) {
+    std::vector<std::string> out;
+    for (const Json& j : a.array()) out.push_back(j.isString() ? j.str() : j["name"].str());
+    return out;
+}
+std::string absolute(const std::string& path) {
+    std::error_code ec;
+    const auto p = std::filesystem::absolute(path, ec);
+    return ec ? path : p.string();
+}
+Json objectOptions(const ObjectOptions& o) {
+    Json p = Json::Object{};
+    if (!o.parent.empty()) p.set("parent", o.parent);
+    if (o.position) p.set("position", targetJson(*o.position));
+    if (!o.frame.empty()) p.set("frame", o.frame);
+    if (o.size) p.set("size", vecJson(*o.size));
+    if (o.diameter) p.set("diameter", *o.diameter);
+    if (o.height) p.set("height", *o.height);
+    if (!o.color.empty()) p.set("color", o.color);
+    if (o.opacity) p.set("opacity", *o.opacity);
+    if (o.hidden) p.set("hidden", *o.hidden);
+    return p;
+}
+SceneInfo sceneInfo(const Json& j) {
+    SceneInfo i;
+    i.path = j["path"].str();
+    i.objects = int(j["objects"].number());
+    i.top = names(j["top"]);
+    i.robots = names(j["robots"]);
+    i.joints = names(j["joints"]);
+    i.signals = names(j["signals"]);
+    i.sensors = names(j["sensors"]);
+    i.sequences = names(j["sequences"]);
+    i.poses = names(j["poses"]);
+    i.sources = names(j["sources"]);
+    i.sinks = names(j["sinks"]);
+    i.motions = names(j["motions"]);
+    return i;
+}
+Json common(Json op, const std::string& name, const Ops::Common& c) {
+    op.set("name", name);
+    if (c.first) op.set("after", Json::Array{});
+    else if (!c.after.empty()) op.set("after", strings(c.after));
+    if (!c.onStart.empty()) op.set("onStart", c.onStart);
+    if (!c.onFinish.empty()) op.set("onFinish", c.onFinish);
+    if (!c.startCondition.empty()) op.set("startCondition", c.startCondition);
+    return op;
+}
+Json op(const char* type) {
+    Json o = Json::Object{};
+    o.set("type", type);
+    return o;
+}
+
+} // namespace
+
+// Objects
+
+#define OBJ(extra) Json(Json::Object{{"object", ref()}}) extra
+
+std::string SceneObject::name() const { return conn_->call("object.get", OBJ())["name"].str(); }
+std::string SceneObject::type() const { return conn_->call("object.get", OBJ())["type"].str(); }
+std::string SceneObject::parentPath() const { return conn_->call("object.get", OBJ())["parent"].str(); }
+Pose SceneObject::position() const { return poseFrom(conn_->call("object.get", OBJ())["position"]); }
+Pose SceneObject::world() const { return poseFrom(conn_->call("object.get", OBJ())["world"]); }
+Pose SceneObject::poseIn(const std::string& frame) const {
+    return poseFrom(conn_->call("object.get", OBJ(.set("frame", frame)))["inFrame"]);
+}
+std::optional<Vec3> SceneObject::size() const {
+    const Json j = conn_->call("object.get", OBJ());
+    if (!j.has("size")) return std::nullopt;
+    return vecFrom(j["size"]);
+}
+std::vector<SceneObject> SceneObject::children() const {
+    std::vector<SceneObject> out;
+    for (const Json& j : conn_->call("scene.objects", Json(Json::Object{{"under", ref()}, {"depth", 1}})).array())
+        out.push_back(SceneObject(conn_, int(j["id"].number()), j["path"].str()));
+    return out;
+}
+SceneObject& SceneObject::set(const ObjectOptions& o) {
+    Json p = objectOptions(o);
+    p.set("object", ref());
+    path_ = conn_->call("object.set", p)["path"].str();
+    return *this;
+}
+SceneObject& SceneObject::moveTo(const Target& position, const std::string& frame) {
+    ObjectOptions o;
+    o.position = position;
+    o.frame = frame;
+    return set(o);
+}
+SceneObject& SceneObject::rename(const std::string& name) {
+    path_ = conn_->call("object.set", OBJ(.set("name", name)))["path"].str();
+    return *this;
+}
+SceneObject& SceneObject::setParent(const std::string& parent) {
+    Json p = OBJ();
+    p.set("parent", parent.empty() ? Json() : Json(parent));
+    path_ = conn_->call("object.set", p)["path"].str();
+    return *this;
+}
+SceneObject SceneObject::add(const std::string& type, const std::string& name, ObjectOptions o) const {
+    o.parent = ref();
+    return Scene(conn_).add(type, name, std::move(o));
+}
+int SceneObject::remove() const { return int(conn_->call("object.remove", OBJ())["removed"].number()); }
+SceneObject SceneObject::duplicate(const std::string& name) const {
+    Json p = OBJ();
+    if (!name.empty()) p.set("name", name);
+    const Json j = conn_->call("object.duplicate", p);
+    return SceneObject(conn_, int(j["id"].number()), j["path"].str());
+}
+Box SceneObject::bounds(const std::string& frame, bool children) const {
+    const Json b = conn_->call("object.bounds", OBJ(.set("frame", frame).set("children", children)));
+    return {vecFrom(b["min"]), vecFrom(b["max"]), vecFrom(b["center"]), vecFrom(b["size"])};
+}
+std::vector<Feature> SceneObject::features(const std::vector<std::string>& kinds, const std::string& frame,
+                                           std::optional<double> minRadius, std::optional<double> maxRadius) const {
+    Json p = OBJ(.set("kinds", strings(kinds)).set("frame", frame));
+    if (minRadius) p.set("minRadius", *minRadius);
+    if (maxRadius) p.set("maxRadius", *maxRadius);
+    std::vector<Feature> out;
+    for (const Json& f : conn_->call("object.features", p)["features"].array()) {
+        Feature e{f["object"].str(), f["kind"].str(), vecFrom(f["origin"]), vecFrom(f["axis"]), std::nullopt, std::nullopt};
+        if (f.has("radius")) e.radius = f["radius"].number();
+        if (f.has("length")) e.length = f["length"].number();
+        out.push_back(std::move(e));
+    }
+    return out;
+}
+SceneObject& SceneObject::setBody(const BodyOptions& o) {
+    Json p = OBJ();
+    if (o.mass) p.set("mass", *o.mass);
+    if (o.gravity) p.set("gravity", *o.gravity);
+    if (o.collision) p.set("collision", *o.collision);
+    conn_->call("body.set", p);
+    return *this;
+}
+SceneObject& SceneObject::removeBody() { conn_->call("body.set", OBJ(.set("remove", true))); return *this; }
+SceneObject& SceneObject::setBelt(const Value& speed, std::optional<Vec3> direction, const std::string& frame) {
+    Json p = OBJ(.set("speed", valueJson(speed)));
+    if (direction) p.set("direction", vecJson(*direction));
+    if (!frame.empty()) p.set("frame", frame);
+    conn_->call("belt.set", p);
+    return *this;
+}
+SceneObject& SceneObject::removeBelt() { conn_->call("belt.set", OBJ(.set("remove", true))); return *this; }
+
+#undef OBJ
+
+// Joints
+
+JointDetails Joint::details() const {
+    const Json j = conn_->call("joint.get", Json(Json::Object{{"joint", name_}}));
+    JointDetails d;
+    d.name = j["name"].str();
+    d.type = j["type"].str();
+    d.parent = j["parent"].str();
+    d.child = j["child"].str();
+    d.axis = vecFrom(j["axis"]);
+    if (j.has("pivot")) d.pivot = vecFrom(j["pivot"]);
+    if (j.has("min")) d.min = j["min"].number();
+    if (j.has("max")) d.max = j["max"].number();
+    d.value = j["value"].number();
+    d.actuator = j["actuator"]["name"].str();
+    d.follows = j["follows"]["joint"].str();
+    return d;
+}
+void Joint::setValue(double v) const { conn_->call("joint.set", Json(Json::Object{{"joint", name_}, {"value", v}})); }
+void Joint::setRange(double min, double max) const {
+    conn_->call("joint.set", Json(Json::Object{{"joint", name_}, {"min", min}, {"max", max}}));
+}
+void Joint::remove() const { conn_->call("joint.remove", Json(Json::Object{{"joint", name_}})); }
+
+// Sequences
+
+Ops& Ops::push(std::string json) { ops_.push_back(std::move(json)); return *this; }
+Ops& Ops::raw(const std::string& json) { return push(json); }
+Ops& Ops::move(const std::string& name, const std::string& actuator, const Value& target, std::optional<Value> speed,
+               const Common& c) {
+    Json o = op("move");
+    o.set("actuator", actuator).set("target", valueJson(target));
+    if (speed) o.set("speed", valueJson(*speed));
+    return push(common(o, name, c).dump());
+}
+Ops& Ops::moveToPose(const std::string& name, const std::string& pose, std::optional<Value> speed, const Common& c) {
+    Json o = op("moveToPose");
+    o.set("pose", pose);
+    if (speed) o.set("speed", valueJson(*speed));
+    return push(common(o, name, c).dump());
+}
+Ops& Ops::run(const std::string& name, const std::string& actuator, const Value& speed, const Common& c) {
+    Json o = op("run");
+    o.set("actuator", actuator).set("speed", valueJson(speed));
+    return push(common(o, name, c).dump());
+}
+Ops& Ops::stop(const std::string& name, const std::string& actuator, const Common& c) {
+    Json o = op("stop");
+    o.set("actuator", actuator);
+    return push(common(o, name, c).dump());
+}
+Ops& Ops::set(const std::string& name, const std::string& actions, const Common& c) {
+    Common k = c;
+    k.onStart = actions;
+    return push(common(op("set"), name, k).dump());
+}
+Ops& Ops::wait(const std::string& name, const Value& seconds, const Common& c) {
+    Json o = op("wait");
+    o.set("seconds", valueJson(seconds));
+    return push(common(o, name, c).dump());
+}
+Ops& Ops::waitFor(const std::string& name, const std::string& condition, const Common& c) {
+    Json o = op("waitFor");
+    o.set("condition", condition);
+    return push(common(o, name, c).dump());
+}
+Ops& Ops::grip(const std::string& name, const std::string& gripper, const std::string& what, bool bySensor,
+               const Common& c) {
+    Json o = op("grip");
+    o.set("gripper", gripper).set(bySensor ? "sensor" : "part", what);
+    return push(common(o, name, c).dump());
+}
+Ops& Ops::release(const std::string& name, const std::string& gripper, const Common& c) {
+    Json o = op("release");
+    o.set("gripper", gripper);
+    return push(common(o, name, c).dump());
+}
+Ops& Ops::moveL(const std::string& name, const std::string& tool, const std::string& pose, std::optional<Value> speed,
+                const Common& c) {
+    Json o = op("moveL");
+    o.set("tool", tool).set("pose", pose);
+    if (speed) o.set("speed", valueJson(*speed));
+    return push(common(o, name, c).dump());
+}
+
+// Scene
+
+void Scene::newScene(bool discard) const { conn_->call("scene.new", Json(Json::Object{{"discard", discard}})); }
+SceneInfo Scene::open(const std::string& path, bool discard) const {
+    return sceneInfo(conn_->call("scene.open", Json(Json::Object{{"path", absolute(path)}, {"discard", discard}})));
+}
+std::string Scene::save(const std::string& path) const {
+    Json p = Json::Object{};
+    if (!path.empty()) p.set("path", absolute(path));
+    return conn_->call("scene.save", p)["path"].str();
+}
+SceneInfo Scene::info() const { return sceneInfo(conn_->call("scene.info")); }
+std::vector<std::string> Scene::check() const { return names(conn_->call("scene.check")["problems"]); }
+SceneObject Scene::importFile(const std::string& path, const ImportOptions& o) const {
+    Json p = Json::Object{};
+    p.set("path", absolute(path));
+    if (!o.parent.empty()) p.set("parent", o.parent);
+    if (!o.name.empty()) p.set("name", o.name);
+    if (!o.upAxis.empty()) p.set("upAxis", o.upAxis);
+    const Json root = conn_->call("scene.import", p)["root"];
+    return SceneObject(conn_, int(root["id"].number()), root["path"].str());
+}
+std::vector<SceneObject> Scene::objects(const std::string& pattern, const std::string& under, const std::string& type,
+                                        int depth) const {
+    Json p = Json::Object{};
+    if (!pattern.empty()) p.set("name", pattern);
+    if (!under.empty()) p.set("under", under);
+    if (!type.empty()) p.set("type", type);
+    if (depth >= 0) p.set("depth", depth);
+    std::vector<SceneObject> out;
+    for (const Json& j : conn_->call("scene.objects", p).array())
+        out.push_back(SceneObject(conn_, int(j["id"].number()), j["path"].str()));
+    return out;
+}
+SceneObject Scene::object(const std::string& name) const {
+    const Json j = conn_->call("object.get", Json(Json::Object{{"object", name}}));
+    return SceneObject(conn_, int(j["id"].number()), j["path"].str());
+}
+bool Scene::exists(const std::string& name) const {
+    try { object(name); return true; } catch (const NotFound&) { return false; }
+}
+SceneObject Scene::add(const std::string& type, const std::string& name, ObjectOptions o) const {
+    Json p = objectOptions(o);
+    p.set("type", type);
+    if (!name.empty()) p.set("name", name);
+    const Json j = conn_->call("object.add", p);
+    return SceneObject(conn_, int(j["id"].number()), j["path"].str());
+}
+SceneObject Scene::addBox(const std::string& name, Vec3 size, ObjectOptions o) const {
+    o.size = size;
+    return add("box", name, std::move(o));
+}
+SceneObject Scene::addCylinder(const std::string& name, double diameter, double height, ObjectOptions o) const {
+    o.diameter = diameter;
+    o.height = height;
+    return add("cylinder", name, std::move(o));
+}
+SceneObject Scene::group(const std::vector<std::string>& objects, const std::string& name) const {
+    const Json j = conn_->call("object.group", Json(Json::Object{{"objects", strings(objects)}, {"name", name}}));
+    return SceneObject(conn_, int(j["id"].number()), j["path"].str());
+}
+Joint Scene::addJoint(const std::string& name, const std::string& parent, const std::string& child, Vec3 axis,
+                      const JointOptions& o) const {
+    Json p = Json::Object{};
+    if (!name.empty()) p.set("name", name);
+    p.set("parent", parent).set("child", child).set("axis", vecJson(axis)).set("type", o.type);
+    if (o.pivot) p.set("pivot", vecJson(*o.pivot));
+    if (!o.frame.empty()) p.set("frame", o.frame);
+    if (o.min) p.set("min", *o.min);
+    if (o.max) p.set("max", *o.max);
+    if (o.continuous) p.set("continuous", *o.continuous);
+    if (o.value) p.set("value", *o.value);
+    if (!o.follows.empty())
+        p.set("follows", Json(Json::Object{{"joint", o.follows}, {"ratio", o.ratio}, {"offset", o.offset}}));
+    if (o.noActuator) p.set("actuator", false);
+    else if (o.actuator) {
+        Json a = Json::Object{};
+        if (!o.actuator->name.empty()) a.set("name", o.actuator->name);
+        if (o.actuator->speed) a.set("speed", *o.actuator->speed);
+        if (o.actuator->acceleration) a.set("acceleration", *o.actuator->acceleration);
+        if (!o.actuator->mode.empty()) a.set("mode", o.actuator->mode);
+        if (!o.actuator->target.empty()) a.set("target", o.actuator->target);
+        p.set("actuator", a);
+    }
+    return Joint(conn_, conn_->call("joint.add", p)["name"].str());
+}
+Joint Scene::joint(const std::string& name) const {
+    return Joint(conn_, conn_->call("joint.get", Json(Json::Object{{"joint", name}}))["name"].str());
+}
+void Scene::addSignal(const std::string& name, const SignalOptions& o) const {
+    Json p = Json::Object{};
+    p.set("name", name).set("kind", o.kind).set("type", o.type).set("value", o.value);
+    if (!o.expression.empty()) p.set("expression", o.expression);
+    if (!o.description.empty()) p.set("description", o.description);
+    conn_->call("signal.add", p);
+}
+void Scene::addSensor(const std::string& name, const std::string& type, const SensorOptions& o) const {
+    Json p = Json::Object{};
+    p.set("name", name).set("type", type).set("detects", o.detects);
+    if (!o.mount.empty()) p.set("mount", o.mount);
+    if (o.at) p.set("at", vecJson(*o.at));
+    if (o.direction) p.set("direction", vecJson(*o.direction));
+    if (o.size) p.set("size", vecJson(*o.size));
+    if (o.range) p.set("range", *o.range);
+    if (o.bounds) p.set("bounds", true);
+    if (!o.frame.empty()) p.set("frame", o.frame);
+    if (!o.description.empty()) p.set("description", o.description);
+    conn_->call("sensor.add", p);
+}
+void Scene::addPose(const std::string& name, const std::map<std::string, double>& joints, bool replace) const {
+    Json j = Json::Object{};
+    for (const auto& [k, v] : joints) j.set(k, v);
+    conn_->call("pose.add", Json(Json::Object{{"name", name}, {"joints", j}, {"replace", replace}}));
+}
+void Scene::addSequence(const std::string& name, const Ops& ops, const SequenceOptions& o) const {
+    Json::Array list;
+    for (const std::string& s : ops.ops_) list.push_back(Json::parse(s));
+    Json p = Json::Object{};
+    p.set("name", name).set("operations", list).set("loop", o.loop).set("replace", o.replace);
+    if (!o.enable.empty()) p.set("enable", o.enable);
+    if (!o.start.empty()) p.set("start", o.start);
+    conn_->call("sequence.add", p);
+}
+std::string Scene::sequenceJson(const std::string& name) const {
+    return conn_->call("sequence.get", Json(Json::Object{{"name", name}})).dump();
+}
+void Scene::addSource(const std::string& name, const std::string& templateObject, const SourceOptions& o) const {
+    Json p = Json::Object{};
+    p.set("name", name).set("template", templateObject).set("max", o.max).set("whenClear", o.whenClear);
+    if (o.interval) p.set("interval", valueJson(*o.interval));
+    if (!o.trigger.empty()) p.set("trigger", o.trigger).set("mode", "trigger");
+    if (!o.enable.empty()) p.set("enable", o.enable);
+    conn_->call("source.add", p);
+}
+void Scene::addSink(const std::string& name, const SinkOptions& o) const {
+    Json p = Json::Object{};
+    p.set("name", name);
+    if (!o.mount.empty()) p.set("mount", o.mount);
+    if (o.at) p.set("at", vecJson(*o.at));
+    if (o.size) p.set("size", vecJson(*o.size));
+    if (o.bounds) p.set("bounds", true);
+    if (!o.frame.empty()) p.set("frame", o.frame);
+    if (!o.source.empty()) p.set("source", o.source);
+    if (!o.enable.empty()) p.set("enable", o.enable);
+    conn_->call("sink.add", p);
+}
+std::string Scene::remove(const std::string& name) const {
+    return conn_->call("automation.remove", Json(Json::Object{{"name", name}}))["removed"].str();
+}
 
 } // namespace motionstudio
