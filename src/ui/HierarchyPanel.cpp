@@ -10,6 +10,39 @@
 #include <QScrollBar>
 #include "Theme.h"
 #include "PrimitiveIcons.h"
+#include <QDropEvent>
+#include <functional>
+
+namespace {
+// The tree lets items be dragged onto others. The drop only reports where
+// they went; the scene moves them and the tree is rebuilt from it.
+class HierarchyTree : public QTreeWidget {
+public:
+    using QTreeWidget::QTreeWidget;
+    std::function<void(const QList<QTreeWidgetItem*>&, int)> dropped;   // items, new parent id (-1 = top level)
+protected:
+    void dropEvent(QDropEvent* e) override {
+        if(e->source() != this){ e->ignore(); return; }
+        QTreeWidgetItem* target = itemAt(e->position().toPoint());
+        int parent = -1;
+        if(target){
+            switch(dropIndicatorPosition()){
+                case OnItem:   parent = target->data(0, Qt::UserRole).toInt(); break;
+                case AboveItem:
+                case BelowItem: parent = target->parent() ? target->parent()->data(0, Qt::UserRole).toInt() : -1; break;
+                case OnViewport: break;
+            }
+        }
+        // Not a move for Qt: it would delete the dragged items itself
+        e->setDropAction(Qt::IgnoreAction);
+        e->accept();
+        stopAutoScroll();
+        setState(NoState);
+        viewport()->update();
+        if(dropped) dropped(selectedItems(), parent);
+    }
+};
+}
 
 static const char* typeName(const SceneObject& obj) {
     switch(obj.type){
@@ -30,7 +63,8 @@ HierarchyPanel::HierarchyPanel(SceneGraph* scene, QWidget* parent)
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
 
-    m_tree = new QTreeWidget(this);
+    auto* tree = new HierarchyTree(this);
+    m_tree = tree;
     m_tree->setObjectName("hierarchyTree");
     m_tree->setHeaderHidden(true);
     m_tree->setIndentation(16);
@@ -38,6 +72,17 @@ HierarchyPanel::HierarchyPanel(SceneGraph* scene, QWidget* parent)
     m_tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     m_tree->setCursor(Qt::PointingHandCursor);
+    // Drag items onto another to put them under it, between items to put them
+    // next to it, or onto the empty space below to make them top level
+    m_tree->setDragDropMode(QAbstractItemView::InternalMove);
+    m_tree->setDragEnabled(true);
+    m_tree->setAcceptDrops(true);
+    m_tree->setDropIndicatorShown(true);
+    tree->dropped = [this](const QList<QTreeWidgetItem*>& items, int parentId){
+        std::vector<int> ids;
+        for(QTreeWidgetItem* item : items) ids.push_back(item->data(0, Qt::UserRole).toInt());
+        if(!ids.empty()) emit moveRequested(ids, parentId);
+    };
     layout->addWidget(m_tree, 1);
 
     connect(m_tree, &QTreeWidget::itemSelectionChanged,
@@ -247,6 +292,20 @@ void HierarchyPanel::showContextMenu(const QPoint& pos) {
                        this, [this]{ emit toggleHiddenRequested(); });
     };
 
+    std::vector<int> selectedIdList;
+    for(QTreeWidgetItem* s : selected) selectedIdList.push_back(s->data(0, Qt::UserRole).toInt());
+    // Group and Move to Top Level, for any selection
+    auto addGrouping = [&]{
+        menu.addAction(Theme::icon("group"), selected.size() == 1 ? "Group\tCtrl+G"
+                                             : QString("Group %1 Objects\tCtrl+G").arg(selected.size()),
+                       this, [this, selectedIdList]{ emit groupRequested(selectedIdList); });
+        bool nested = false;
+        for(QTreeWidgetItem* s : selected) if(s->parent()) nested = true;
+        if(nested)
+            menu.addAction(Theme::icon("arrow-up-to-line"), "Move to Top Level",
+                           this, [this, selectedIdList]{ emit moveRequested(selectedIdList, -1); });
+    };
+
     if(selected.isEmpty()){
         menu.addAction("(select an object to act on it)");
     } else if(selected.size() == 1){
@@ -267,6 +326,7 @@ void HierarchyPanel::showContextMenu(const QPoint& pos) {
             emit addSinkRequested(only->data(0, Qt::UserRole).toInt());
         });
         addHideShow();
+        addGrouping();
         if(robot::findTool(*m_scene, only->data(0, Qt::UserRole).toInt()) != -1)
             menu.addAction(Theme::icon("gauge"), "Analyze Robot…", [this, only](){
                 emit analyzeRobotRequested(only->data(0, Qt::UserRole).toInt());
@@ -294,6 +354,7 @@ void HierarchyPanel::showContextMenu(const QPoint& pos) {
             combineSelectedIntoRigidBody(selected);
         });
         addHideShow();
+        addGrouping();
         menu.addSeparator();
         menu.addAction(Theme::icon("trash-2", Theme::Tint::Danger), "Delete Selected (2)", [this, selected](){
             deleteSelectedItems(selected);
@@ -303,6 +364,7 @@ void HierarchyPanel::showContextMenu(const QPoint& pos) {
             combineSelectedIntoRigidBody(selected);
         });
         addHideShow();
+        addGrouping();
         menu.addSeparator();
         menu.addAction(Theme::icon("trash-2", Theme::Tint::Danger), QString("Delete Selected (%1)").arg(selected.size()), [this, selected](){
             deleteSelectedItems(selected);

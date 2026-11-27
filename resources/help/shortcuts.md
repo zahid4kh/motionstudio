@@ -33,3 +33,5 @@
 | Hide the selected part (or every part picked in the Hierarchy), or show it again | Alt+V |
 | Show every hidden part | Alt+Shift+V |
 | Rename in the hierarchy | F2, or double-click |
+| Group the selected parts into a new frame | Ctrl+G |
+| Move a part under another | Drag it onto that part in the Hierarchy (onto the empty space below: top level) |

@@ -54,6 +54,6 @@ A ⚠ next to a mate means it can't hold together with the others, for example a
 ## Good to know
 
 - Mates are for building the machine. They are not enforced while the simulation runs, when **joints** move parts. Assemble the parts first, then add joints ([Joints & Actuators](help:actuators)).
-- A part can't be mated to something inside its own hierarchy (a parent to its child). Give it another parent first: select both parts in the Hierarchy and right-click.
+- A part can't be mated to something inside its own hierarchy (a parent to its child). Give it another parent first: drag it onto another part in the Hierarchy.
 - **Duplicate** (Ctrl+D) copies the mates between parts inside the copy. Deleting a part deletes its mates.
 - Components from the library bring their mates along ([Import & Export](help:exchange)).

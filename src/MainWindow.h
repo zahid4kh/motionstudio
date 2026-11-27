@@ -54,6 +54,8 @@ private slots:
     void addMotorToSelected();
     void deleteSelected();
     void toggleHiddenSelected();   // Alt+V
+    void groupObjects(std::vector<int> ids);                 // Ctrl+G
+    void moveObjects(const std::vector<int>& ids, int parentId);   // Hierarchy drag & drop
     void showAllHidden();          // Alt+Shift+V
     void duplicateObject(int id);
 

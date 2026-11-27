@@ -26,6 +26,8 @@
         <file alias="icons/arrow-down-to-line.svg">resources/icons/arrow-down-to-line.svg</file>
         <file alias="icons/arrow-down.svg">resources/icons/arrow-down.svg</file>
         <file alias="icons/arrow-up.svg">resources/icons/arrow-up.svg</file>
+        <file alias="icons/arrow-up-to-line.svg">resources/icons/arrow-up-to-line.svg</file>
+        <file alias="icons/group.svg">resources/icons/group.svg</file>
         <file alias="icons/bot.svg">resources/icons/bot.svg</file>
         <file alias="icons/person-standing.svg">resources/icons/person-standing.svg</file>
         <file alias="icons/footprints.svg">resources/icons/footprints.svg</file>

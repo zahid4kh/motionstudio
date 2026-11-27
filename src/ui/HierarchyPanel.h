@@ -21,6 +21,9 @@ signals:
     void addSinkRequested(int id);     // a sink on the object's bounds
     void toggleHiddenRequested();      // Hide / Show on the selected items (Alt+V)
     void analyzeRobotRequested(int id); // Tools › Analyze Robot for the robot the object belongs to
+    // Dragged onto another item (or Move to Top Level: parentId -1)
+    void moveRequested(const std::vector<int>& ids, int parentId);
+    void groupRequested(const std::vector<int>& ids);   // Group (Ctrl+G)
 
 private slots:
     void onObjectAdded(int id);

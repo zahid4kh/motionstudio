@@ -22,6 +22,14 @@ Both formats are Z-up, and MotionStudio is Y-up, so the model is placed under a 
 
 Identical parts are meshed once, several parts are meshed at the same time, and the status bar shows how long the import took.
 
+A part that holds several bodies (NX and other CAD systems export whole machines that way) becomes one object per body, named as in the CAD file.
+
+**Organise the import** before you add joints. Each moving piece needs its own branch in the Hierarchy: the arm with everything it carries, the lift deck with its belt.
+
+- **Group** (Ctrl+G, or right-click in the Hierarchy) puts the selected parts into a new empty frame at their centre, under the parent they share. Nothing moves.
+- **Drag** parts in the Hierarchy: onto a part to put them under it, between two parts to put them next to it, onto the empty space below the list to make them top level. **Move to Top Level** in the right-click menu does the same.
+- Parts keep their place in the world, and a part with a joint keeps it and moves the same way. Only at the top level is a joint removed, since there is no parent for it to move on.
+
 ## Send models out
 
 **File › Export › URDF (ROS)…** and **MJCF (MuJoCo)…** write the mechanism with every part's geometry as STL files in a `meshes` folder next to the file. The pose with all joint values at 0 is the reference pose.

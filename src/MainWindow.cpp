@@ -27,6 +27,7 @@
 #include <QAction>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QInputDialog>
 #include <QKeySequence>
 #include <QFileInfo>
 #include <QDragEnterEvent>
@@ -210,6 +211,16 @@ void MainWindow::buildMenu() {
         connect(all, &QAction::triggered, this, &MainWindow::showAllHidden);
         edit->addAction(all);
         addAction(all);
+    }
+    {
+        auto* group = new QAction(Theme::icon("group"), "&Group", this);
+        group->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_G));
+        group->setToolTip("Put the selected objects into a new group  (Ctrl+G)");
+        connect(group, &QAction::triggered, this, [this]{
+            groupObjects(m_hierarchy ? m_hierarchy->selectedIds() : std::vector<int>{});
+        });
+        edit->addAction(group);
+        addAction(group);
     }
 
     // Menu bar on the frame, the toolbar island below it (filled by buildToolbar)
@@ -609,6 +620,8 @@ void MainWindow::buildDocks() {
     m_hierarchy  = new HierarchyPanel(m_scene, this);
     connect(m_hierarchy, &HierarchyPanel::duplicateRequested, this, &MainWindow::duplicateObject);
     connect(m_hierarchy, &HierarchyPanel::toggleHiddenRequested, this, &MainWindow::toggleHiddenSelected);
+    connect(m_hierarchy, &HierarchyPanel::groupRequested, this, &MainWindow::groupObjects);
+    connect(m_hierarchy, &HierarchyPanel::moveRequested, this, &MainWindow::moveObjects);
     m_properties = new PropertiesPanel(m_scene, this);
 
     m_hierarchyDock  = makeDock("Hierarchy",  "list-tree", m_hierarchy, Qt::LeftDockWidgetArea);
@@ -1082,6 +1095,61 @@ void MainWindow::deleteSelected() {
     QString name = m_scene->getObject(id) ? m_scene->getObject(id)->name : "object";
     m_scene->removeObject(id);
     showStatus("Deleted " + name);
+}
+
+// Ctrl+G: puts the selection into a new empty frame at its centre, under the
+// objects' common parent; nothing moves in the world
+void MainWindow::groupObjects(std::vector<int> ids) {
+    if(ids.empty() && m_scene->selectedObjectId() != -1) ids.push_back(m_scene->selectedObjectId());
+    if(ids.empty()){ showStatus("Select the objects to group first", false); return; }
+    if(m_sim->isActive()){ showStatus("Reset the simulation to group objects", false); return; }
+    bool ok = false;
+    const QString name = QInputDialog::getText(this, "Group", "Group name:", QLineEdit::Normal, "Group", &ok).trimmed();
+    if(!ok || name.isEmpty()) return;
+    const int group = m_scene->groupObjects(ids, name);
+    if(group == -1){ showStatus("Nothing to group", false); return; }
+    m_scene->selectObject(group);
+    const int n = int(m_scene->getObject(group)->childIds.size());
+    showStatus(QString("Grouped %1 object%2 into \"%3\"").arg(n).arg(n == 1 ? "" : "s").arg(name));
+}
+
+// Hierarchy drag & drop (and Move to Top Level): the objects keep their place
+// in the world and their joints, except at the top level, where a part has no
+// parent for its joint to move it on
+void MainWindow::moveObjects(const std::vector<int>& ids, int parentId) {
+    if(m_sim->isActive()){ showStatus("Reset the simulation to move objects in the hierarchy", false); return; }
+    auto given = [&](int id){ return std::find(ids.begin(), ids.end(), id) != ids.end(); };
+    int moved = 0;
+    QStringList dropped, cycles;
+    for(int id : ids){
+        const SceneObject* o = m_scene->getObject(id);
+        if(!o || o->parentId == parentId) continue;
+        bool under = false;   // comes along with a moved ancestor
+        for(const SceneObject* p = m_scene->getObject(o->parentId); p && !under; p = m_scene->getObject(p->parentId))
+            under = given(p->id);
+        if(under) continue;
+        const Joint* j = m_scene->jointForChild(id);
+        const int jointId = j ? j->id : -1;
+        const QString jointName = j ? (j->name.isEmpty() ? o->name : j->name) : QString();
+        if(m_scene->setParent(id, parentId) == SceneGraph::ReparentResult::WouldCreateCycle){
+            cycles << o->name;
+            continue;
+        }
+        ++moved;
+        if(jointId != -1 && !m_scene->getJoint(jointId)) dropped << jointName;
+    }
+    if(!cycles.isEmpty()){
+        showStatus(QString("Can't put \"%1\" inside itself").arg(cycles.join("\", \"")), false);
+        return;
+    }
+    if(!moved) return;
+    const SceneObject* p = m_scene->getObject(parentId);
+    QString msg = QString("Moved %1 object%2 %3").arg(moved).arg(moved == 1 ? "" : "s")
+                      .arg(p ? "into \"" + p->name + "\"" : QString("to the top level"));
+    if(!dropped.isEmpty())
+        msg += QString("  —  removed joint%1 \"%2\": a top-level part has no parent to move on")
+                   .arg(dropped.size() == 1 ? "" : "s", dropped.join("\", \""));
+    showStatus(msg, dropped.isEmpty());
 }
 
 // Alt+V: hides the selection (every item picked in the Hierarchy), or shows
