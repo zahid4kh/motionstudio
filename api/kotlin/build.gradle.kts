@@ -3,11 +3,13 @@
 //   ./gradlew test           live tests (start build/motionstudio-server of the repository)
 //   ./gradlew runExample -Pexample=Square
 //   ./gradlew centralBundle  signed bundle for Maven Central (build/distributions/…-bundle.zip)
+//   ./gradlew dokkaGenerate  API reference site (build/dokka/html/index.html)
 plugins {
     kotlin("jvm") version "2.4.21"
     `java-library`
     `maven-publish`
     signing
+    id("org.jetbrains.dokka") version "2.3.0"
 }
 
 group = "io.github.zahid4kh"
@@ -45,15 +47,34 @@ tasks.register<JavaExec>("runExample") {
     mainClass.set("examples.${project.findProperty("example") ?: "Square"}Kt")
 }
 
+// The API reference: KDoc comments plus Module.md, linking each declaration to its source on GitHub
+dokka {
+    moduleName.set("motionstudio")
+    dokkaSourceSets.named("main") {
+        includes.from("Module.md")
+        sourceLink {
+            localDirectory.set(file("src/main/kotlin"))
+            remoteUrl("https://github.com/zahid4kh/motionstudio/tree/main/api/kotlin/src/main/kotlin")
+            remoteLineSuffix.set("#L")
+        }
+    }
+}
+
 java {
     withSourcesJar()
-    withJavadocJar()
+}
+// Maven Central needs a javadoc jar: the Dokka site goes in it
+val javadocJar = tasks.register<Jar>("javadocJar") {
+    description = "Jar of the Dokka API reference for Maven Central"
+    archiveClassifier.set("javadoc")
+    from(tasks.named("dokkaGeneratePublicationHtml"))
 }
 
 publishing {
     publications {
         create<MavenPublication>("maven") {
             from(components["java"])
+            artifact(javadocJar)
             pom {
                 name.set("MotionStudio robot API")
                 description.set("Build and drive MotionStudio digital twins from Kotlin or Java: straight-line and joint moves, taught poses, walking, signals, and building scenes (CAD import, joints, sensors, sequences).")

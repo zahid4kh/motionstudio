@@ -8,6 +8,8 @@ dependencies { implementation("io.github.zahid4kh:motionstudio:0.3.0") }
 
 Or build it from this folder: `./gradlew publishToMavenLocal`, then add `mavenLocal()` to your repositories.
 
+API reference: https://zahid4kh.github.io/motionstudio/ (made by Dokka from the KDoc comments: `./gradlew dokkaGenerate` writes it to `build/dokka/html/`).
+
 ```kotlin
 import io.motionstudio.MotionStudio
 import io.motionstudio.Pose
