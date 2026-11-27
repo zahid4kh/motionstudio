@@ -6,7 +6,8 @@ Control MotionStudio's robots and stations from code in **Python**, **C++** or *
 - go to the poses you taught;
 - walk a humanoid: ahead, sideways, turning, to a spot or along a path;
 - run several machines at once;
-- read and write the automation's signals.
+- read and write the automation's signals;
+- build the scene itself: import CAD, group it, add joints through its geometry, belts, physics, sensors, poses, sequences and part flow, and save the project (a digital twin from a script).
 
 Every library speaks the same small protocol ([PROTOCOL.md](PROTOCOL.md)) and needs nothing else.
 
@@ -24,18 +25,24 @@ with ms.connect() as studio:
     walker.walk(1000)                   # a metre ahead
     walker.turn(90)                     # a quarter turn to its left
     walker.walk_path([(1000, 0), (1000, 1000), (0, 1000)])   # x, z in mm
+
+    scene = studio.scene                # building
+    station = scene.import_file("station.step")
+    table = scene.add_frame("Table", parent=station)
+    scene.add_joint("Turn", station, table, (0, 1, 0), min=-90, max=90)
+    scene.save("station.mstudio")
 ```
 
 | | Folder | Get it |
 |---|---|---|
 | Python 3.8+ | [python/](python/) | `pip install ./python` |
 | C++17 | [cpp/](cpp/) | `add_subdirectory(cpp)` + `target_link_libraries(app PRIVATE motionstudio::motionstudio)` |
-| Kotlin / JVM 17+ | [kotlin/](kotlin/) | `implementation("io.github.zahid4kh:motionstudio:0.2.0")` from Maven Central |
+| Kotlin / JVM 17+ | [kotlin/](kotlin/) | `./gradlew publishToMavenLocal` (Maven Central has 0.1.1, without scene building) |
 
 ## What to connect to
 
 - **The app.** **Tools › Robot API** runs the server. It is on by default, on port 5800, for this computer only. The window lists the robots in the open scene and shows a quick start for it.
-- **`motionstudio-server`.** This serves a project without the app window, for automated tests, CI, or a machine without a display. It is built next to the app (`build/motionstudio-server`).
+- **`motionstudio-server`.** This serves a project without the app window, for automated tests, CI, or a machine without a display. Without a project it serves an empty scene to build in. It is built next to the app (`build/motionstudio-server`).
 
 ```sh
 motionstudio-server cell.mstudio            # a project

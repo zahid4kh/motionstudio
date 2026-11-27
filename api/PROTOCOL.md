@@ -37,7 +37,7 @@ The Python, C++ and Kotlin libraries in this folder all speak this protocol. Use
 
 - **Robots** are named by their root object's name or its path (`"Cell/Robot"`). `scene.robots` lists them. Any object that has actuated joints below it can be used as a robot.
 - **Tools** are object names or paths, looked up under the robot first. Without a `tool`, the robot's only tool is used: an object named `…TCP…`, otherwise the end of its longest chain.
-- **Objects** with a name that appears more than once must be given by path. The error lists the paths.
+- **Objects** with a name that appears more than once must be given by path, or by `#id` (the error lists both). Objects are also found by `#id` everywhere an object is named.
 
 ## Simulation
 
@@ -58,6 +58,8 @@ Commands that need the simulation start it when it isn't running. These are the 
 | `reset` | The simulation was reset |
 | `timeout` | A wait ran out (the motion or condition carries on) |
 | `simulation` | The simulation can't start; the message lists the automation's errors |
+| `simulation_active` | The scene can't change while the simulation is active: call `sim.reset` first |
+| `unsaved` | `scene.new` / `scene.open` in the app while its project has unsaved changes: save, or pass `"discard": true` |
 | `not_running` | The value exists only while the simulation runs |
 
 ## Motions
@@ -184,6 +186,119 @@ Notes:
 - `signal.get` returns a signal's initial value while the simulation is stopped.
 - `signal.set` is applied at the start of the next scan, one write per scan per signal.
 - `signal.waitUntil` uses the same expression language as the automation, so `"PartSeen && !Robot.moving"` works.
+
+### Building scenes
+
+These methods make and change the scene: a program can import CAD, group it, put joints through it and add the physics, sensors and logic of a digital twin, then save it. In the app the changes show at once and can be undone (Ctrl+Z).
+
+- **The simulation must be reset.** While it is active (from Play or Step until Reset), every method that changes the scene fails with `simulation_active`. Call `sim.reset` first.
+- **Positions** are poses `{x, y, z, rx, ry, rz}` (mm, degrees) of an object's frame, in its parent's frame unless `frame` names another: `"world"`, or any object (its frame, without its scale). In a change, the values left out stay as they are.
+- **Points and directions** (`axis`, `pivot`, `at`, `direction`, `size`) are `{x, y, z}` or `[x, y, z]`, in mm for points and sizes.
+- **Automation values** (a Move's target, a belt's speed, a wait's seconds…): a number is in API units (mm, mm/s, degrees, seconds) and is converted. A string is an expression in the automation's own units, as typed in the app: metres for slides, m/s for belts, degrees for revolute joints (`"PickGap - 0.108"`, `"Run ? 0.3 : 0"`).
+- **Objects** are named by name, path, or `#id`. Every reply that describes an object carries its `id`. An id stays the same through renames and moves until the scene is opened again, so the libraries keep their handles by id. Two objects with the same name and parent (a CAD file can have them) can only be told apart by id.
+- **Object replies** (`object.get`, `object.add`, `object.set` …) look like this: `{id, name, path, type, parent, children: [names], position, world, size?, color, opacity, hidden, joint?, body?, belt?}`.
+  - `type` is one of `frame` (an empty, unscaled frame: build on it and hang joints from it), `mesh` (CAD geometry), `box`, `cylinder`, `sphere`, `capsule` or `basket`.
+  - `position` is in the parent's frame, `world` in the world.
+  - `size` (mm) is given for boxes, cylinders, spheres, capsules and baskets.
+
+#### Projects
+
+| Method | Params | Result |
+|---|---|---|
+| `scene.new` | `discard?` | `{path: null}`: an empty scene |
+| `scene.open` | `path`, `discard?` | `scene.info` |
+| `scene.save` | `path?` (default: the file the scene came from) | `{path}` |
+| `scene.info` | — | `{path, objects, top, robots, joints: [{name, actuator}], signals, sensors, sequences, poses, sources, sinks, motions}` |
+| `scene.check` | — | `{ok, problems: [text]}`: what would stop Play |
+| `scene.import` | `path`, `parent?`, `name?` (for the new top object), `upAxis?` (STEP: `"z"` default, `"y"`) | `{root: object, roots: [paths], objects: n, warnings}` |
+
+- **Paths** are files on the computer that runs MotionStudio. The libraries make relative paths absolute.
+- **`discard`:** in the app, `scene.new` and `scene.open` fail with `unsaved` while the open project has unsaved changes, unless `discard` is true. `motionstudio-server` has no such guard; started without a project, it serves an empty scene.
+- **`scene.import`** reads:
+  - STEP (`.step`, `.stp`): its structure becomes objects, multi-body parts are split into their bodies, and colours are kept. STEP has no up axis: the model is taken to be Z-up (most CAD systems) and stood upright, unless `upAxis` is `"y"`. A big file takes a while; the reply comes when it is in.
+  - URDF (`.urdf`) and MJCF (`.xml`).
+  - MotionStudio projects (`.mstudio`): merged in, with clashing signal, actuator and sequence names renamed.
+
+#### Objects
+
+| Method | Params | Result |
+|---|---|---|
+| `scene.objects` | `name?` (wildcard: `"legs:*"`), `under?`, `type?`, `depth?` (levels below `under` or the top) | `[{id, name, path, type, parent}]`, in tree order |
+| `object.get` | `object`, `frame?` | the object, with `inFrame` (its pose in `frame`) when `frame` is given |
+| `object.add` | `type?` (`"frame"`), `name?`, `parent?`, `position?`, `frame?`, `size?` (mm: `{x, y, z}` or one number; default 100), `diameter?`, `height?` (cylinders, along their own Y), `color?` (`"#rrggbb"`), `opacity?`, `hidden?` | the object |
+| `object.set` | `object`, plus any of `name`, `parent` (`null`: the top), `position`, `frame`, `size`, `diameter`, `height`, `color` (`null`: the parent's), `opacity`, `hidden` | the object |
+| `object.remove` | `object` | `{removed: n}` (it and everything below it) |
+| `object.group` | `objects: [names]`, `name?` | the new group: a frame at the middle of their box, under their deepest common parent |
+| `object.duplicate` | `object`, then as `object.set` | the copy (with its children, joints and actuators, renamed) |
+| `object.bounds` | `object`, `frame?` (`"world"`), `children?` (true) | `{min, max, center, size}` (mm, axis-aligned in `frame`) |
+| `object.features` | `object`, `kinds?` (`["circle", "cylinder"]`; also `"line"`, `"plane"`), `frame?`, `minRadius?`, `maxRadius?`, `children?`, `limit?` (500) | `{features: [{object, kind, origin, axis, radius?, length?}], truncated}` |
+
+Details:
+
+- **Moving an object** to another parent (`parent`) keeps where it is in the world. It also keeps its joint: the joint goes on moving it the same way. At the top level, though, there is nothing to move on, so the joint is removed.
+- **`object.features`** finds the CAD geometry a joint's axis comes from: round edges (`circle`: centre, axis, radius), round faces (`cylinder`: the axis through the middle, radius, length), straight edges (`line`) and flat faces (`plane`: centre and normal). The Hierarchy's *Pick Axis on Model* uses the same recognition.
+
+#### Joints and physics
+
+| Method | Params | Result |
+|---|---|---|
+| `joint.add` | `name?`, `parent`, `child`, `axis`, `type?` (`"revolute"`), `pivot?`, `frame?` (`"world"`), `min?`, `max?`, `continuous?`, `value?`, `actuator?`, `follows?` | the joint |
+| `joint.get` | `joint`, `frame?` | the joint: `{name, type, unit, parent, child, axis, pivot?, min, max \| continuous, value, actuator: {name, mode, speed, acceleration, enabled, target?, active?} \| null, follows?: {joint, ratio, offset}}` |
+| `joint.set` | `joint`, then any of `name`, `axis`, `pivot`, `frame`, `min`, `max`, `continuous`, `value`, `actuator`, `follows` | the joint |
+| `joint.remove` | `joint` | `{removed: true}`: the joint and its actuator; the part stays where it is |
+| `body.set` | `object`, `mass?` (kg), `gravity?`, `collision?`, `remove?` | the object: it is a rigid body (MuJoCo physics: it falls, rides belts, can be gripped) |
+| `belt.set` | `object`, `speed?` (mm/s, or an expression in m/s), `direction?` (default: its own frame, or `frame`), `enabled?`, `remove?` | the object: its top surface is a conveyor belt |
+
+Details:
+
+- **Joints are named** by their name, their actuator's name, or the object they move.
+- **The child goes under the parent** if it isn't already there.
+- **`axis` and `pivot`** are in the world unless `frame` says. The pivot defaults to the child's origin. A revolute joint needs a parent without a stretched scale: hang the parts from a `frame`, not from a sized box.
+- **`min` and `max`** are in degrees, or mm for `"prismatic"` joints, which need them.
+- **`value`** sets the joint where it starts.
+- **Actuators.** A joint gets an actuator named after it, unless `actuator` is `false` or the joint `follows` another.
+  - `actuator: {name?, speed?, acceleration?, mode?, target?, active?, enabled?}` sets its fields.
+  - `speed` and `acceleration` are in deg/s and deg/s², or mm/s and mm/s². `speed` may also be an expression.
+  - `mode` is `"position"` or `"speed"`. `target` and `active` bind it to expressions.
+- **Couplings.** `follows: {joint, ratio?, offset?}` (or just a joint's name) couples the joint to another: value = ratio · master + offset. Gears, belts and mirrored grippers work this way.
+
+#### Signals, sensors, poses, sequences and part flow
+
+| Method | Params | Result |
+|---|---|---|
+| `signal.add` | `name`, `kind?` (`"internal"`, `"input"`, `"derived"`), `type?` (`"bool"`, `"int"`, `"real"`), `value?`, `expression?` (derived), `description?`, `address?` (Modbus) | `{name, kind, type, value}` |
+| `sensor.add` | `name`, `type` (`"beam"`, `"distance"`, `"zone"`, `"position"`), `mount?`, `at?`, `direction?` (rays), `range?` (rays, mm), `size?` (zones, mm), `bounds?` (zones: the mount's box), `frame?` (default: the mount's), `detects?` (`"any"`, `"bodies"` or an object), `description?` | the sensor |
+| `pose.add` | `name`, `joints?` (`{actuator: value}`), `robot?` (without `joints`: where it stands now), `replace?` | `{name, joints}` |
+| `sequence.add` | `name`, `operations: [operation]`, `loop?`, `enable?`, `start?`, `replace?` | `sequence.get` |
+| `sequence.get` | `name` | `{name, loop, enable?, start?, operations}` |
+| `source.add` | `name`, `template` (an object), `interval?` (seconds) or `trigger?` (an expression), `enable?`, `max?`, `whenClear?` (true) | the source |
+| `sink.add` | `name`, `mount?`, `at?`, `size?` or `bounds?`, `frame?`, `source?` (only its copies), `enable?` | the sink |
+| `automation.remove` | `name` | `{removed: "signal" \| "sensor" \| "sequence" \| "source" \| "sink" \| "pose" \| "motion"}` |
+
+Details:
+
+- **Shared names.** Signals, actuators, sequences, sources and sinks share one set of names, and each name must be usable in expressions (letters, digits and `_`).
+- **Sensors** move with their mount. A sensor's zone box keeps its mount's orientation, so a `size` given in another `frame` is turned into the mount's frame, which is exact for frames turned by right angles.
+- **Operations** are objects with a `type` and a `name`. Each runs after the one before it, unless `after` lists others: names (the nearest earlier operation of that name) or 0-based indices. `"after": []` means it runs at the start of the cycle.
+- **Every operation** can have `onStart` and `onFinish` actions (`"Count = Count + 1; Busy = true"`) and a `startCondition`.
+- **Operation types and their fields:**
+
+| `type` | Fields |
+|---|---|
+| `move` | `actuator`, `target`, `speed?` |
+| `moveToPose` | `pose`, `speed?` (% of the actuators' speeds), `part?`, `sensor?` |
+| `run` | `actuator`, `speed` |
+| `stop` | `actuator` |
+| `set` | (only its actions) |
+| `wait` | `seconds` |
+| `waitFor` | `condition` |
+| `grip` | `gripper` (an object), `sensor` (what it sees is picked) or `part` |
+| `release` | `gripper` |
+| `moveL` | `tool`, `pose`, `speed?` (mm/s), `part?`, `sensor?` |
+| `walk` | `robot`, then `forward?`, `sideways?` (mm), `turn?` (degrees), or `to` (an object), or `route` (`[[x, z], …]` mm) with `heading?`; `speed?` (mm/s) |
+| `playMotion` | `motion`, `robot?`, `relative?`, `speed?` (× the recorded pace), `clip?`, `blendClip?`, `blend?`, `seconds?` |
+
+- **`sequence.get`** returns the operations as stored. `after` is a list of indices, and values are expression strings in the automation's units (a `move` sent with `"target": 120` for a slide comes back as `"0.12"`).
 
 ## Example session
 

@@ -3,7 +3,7 @@
 Control MotionStudio robots and stations from Kotlin, or any JVM language (JVM 17+). It has no runtime dependencies.
 
 ```kotlin
-dependencies { implementation("io.github.zahid4kh:motionstudio:0.2.0") }   // from Maven Central
+dependencies { implementation("io.github.zahid4kh:motionstudio:0.3.0") }   // once published; Maven Central has 0.1.1
 ```
 
 Or build it from this folder: `./gradlew publishToMavenLocal`, then add `mavenLocal()` to your repositories.
@@ -66,7 +66,26 @@ Numbers can be `Int` or `Double` (`z = 100`). Units are mm, degrees and seconds,
 - `Actuator`: `value`, `moveTo()`, `moveBy()`, `run(speed)`, `stop()`.
 - `Pose` is a data class with `offset(...)` and `copy(...)`.
 
-Errors are `MotionStudioException` (`code`, `message`), with the subclasses `NotFoundException`, `OutOfReachException`, `OutOfLimitsException`, `MotionCancelledException`, `WaitTimeoutException`, `SimulationException` and `ConnectionException`. Calls are thread-safe.
+Errors are `MotionStudioException` (`code`, `message`), with the subclasses `NotFoundException`, `OutOfReachException`, `OutOfLimitsException`, `MotionCancelledException`, `WaitTimeoutException`, `SimulationException`, `UnsavedChangesException` and `ConnectionException`. Calls are thread-safe.
+
+## Building scenes (`studio.scene`)
+
+```kotlin
+val scene = studio.scene
+studio.reset()                                              // changes need the simulation reset
+val station = scene.importFile("station.step")              // Z-up CAD stood upright
+val arm = scene.addFrame("Arm", parent = station)
+scene["arm1"].setParent(arm)                                // keeps where it is (and its joint)
+scene.addJoint("J1", station, arm, Vec3(0, 0, 1), frame = station, min = -170, max = 170,
+               actuator = mapOf("speed" to 150))
+scene.addSequence("Cycle", Ops().move("Out", "J1", 90).wait("Hold", 1).move("Back", "J1", 0), loop = true)
+scene.save("station.mstudio")
+```
+
+- `Scene`: `newScene`, `open`, `save`, `info`, `check`, `importFile`, `objects`, `scene[name]`, `exists`, `add`, `addFrame`, `addBox`, `addCylinder`, `group`, `addJoint`, `joint`, `addSignal`, `addSensor`, `addPose`, `addSequence`, `sequence`, `addSource`, `addSink`, `remove`.
+- `SceneObject` (found by its id, so it survives renames and moves): `path`, `name`, `type`, `position`, `world`, `poseIn`, `size`, `children`, `set(...)`, `moveTo(x = …, frame = …)`, `rename`, `setParent(Top for the top)`, `add`, `duplicate`, `remove`, `bounds` → `Box`, `features` → `Feature`s, `setBody`, `setBelt`.
+- `Joint`: `info`, `value` (get/set), `actuator`, `set(...)`, `remove`. `Ops`: `move`, `moveToPose`, `run`, `stop`, `set`, `wait`, `waitFor`, `grip`, `release`, `moveL`, `add(type, …)`.
+- Objects can be given as a `SceneObject` or by name, path or ref. A number is in mm, mm/s or degrees; a `String` is an expression in the automation's units (m, m/s).
 
 ## Build, examples and tests
 

@@ -95,11 +95,43 @@ rec.take.save("a-to-b.csv")
 walker.play(ms.Take.load("a-to-b.csv"), relative=True)
 ```
 
-Examples (`examples/`): `square.py`, `two_motions.py`, `station.py`, `humanoid_wave.py`, `walk_square.py`, `walk_patrol.py`, `learn_to_walk.py`.
+Examples (`examples/`): `square.py`, `two_motions.py`, `station.py`, `humanoid_wave.py`, `walk_square.py`, `walk_patrol.py`, `learn_to_walk.py`, `sorting_station.py`.
 
-Errors derive from `MotionStudioError` (`.code`, `.message`). The subclasses are `NotFoundError`, `OutOfReachError`, `OutOfLimitsError`, `MotionCancelled`, `WaitTimeout` and `SimulationError`. Losing the connection raises the built-in `ConnectionError`.
+Errors derive from `MotionStudioError` (`.code`, `.message`). The subclasses are `NotFoundError`, `OutOfReachError`, `OutOfLimitsError`, `MotionCancelled`, `WaitTimeout`, `SimulationError` and `UnsavedChangesError`. Losing the connection raises the built-in `ConnectionError`.
 
 Handles are thread-safe. A background thread reads the replies, so threads can share one `Studio`.
+
+## Building scenes (`studio.scene`)
+
+A program can build the scene: import CAD, group it, put joints through it, add belts, bodies, sensors, poses, sequences and part flow, and save the project. Changes need the simulation reset (`studio.reset()`).
+
+```python
+scene = studio.scene
+station = scene.import_file("station.step")         # Z-up CAD stood upright; up_axis="y" if not
+arm = scene.add_frame("Arm", parent=station)
+scene.object("arm1").set_parent(arm)                 # keeps where it is (and its joint)
+hub = max(scene.object("arm1").features(["circle"], frame=station), key=lambda f: f.radius)
+scene.add_joint("J1", station, arm, (0, 0, 1), frame=station, pivot=hub.origin, min=-170, max=170)
+scene.add_sequence("Cycle", ms.Ops().move("Out", "J1", 90).wait("Hold", 1).move("Back", "J1", 0), loop=True)
+scene.save("station.mstudio")
+```
+
+| `Scene` | |
+|---|---|
+| `new(discard=False)`, `open(path, discard=False)`, `save(path=None)` | Projects (in the app, unsaved changes need `discard=True`) |
+| `info()`, `check()` | What it holds by name; the automation's problems (empty: it runs) |
+| `import_file(path, parent=None, name=None, up_axis=None)` | STEP, URDF, MJCF or a project (merged) → its top `SceneObject` |
+| `objects(name=None, under=None, type=None, depth=None)`, `object(name)`, `exists(name)` | Find objects (wildcards, paths) |
+| `add(type, name, parent, position, frame, size, diameter, height, color)`, `add_frame`, `add_box`, `add_cylinder`, `add_sphere` | New objects (mm; positions in the parent's frame unless `frame`) |
+| `group(objects, name)` | A frame at their middle, with them under it |
+| `add_joint(name, parent, child, axis, type, pivot, frame, min, max, continuous, value, actuator, follows)`, `joint(name)` | Joints (`actuator={"speed": 90}`, `follows={"joint": "Gate", "ratio": -1}`) |
+| `add_signal`, `add_sensor`, `add_pose`, `add_sequence(name, Ops, loop, enable)`, `sequence(name)`, `add_source`, `add_sink`, `remove(name)` | The logic |
+
+`SceneObject` (found by id, so it survives renames and moves): `path`, `name`, `type`, `position`, `world`, `pose_in(frame)`, `size`, `children`, `set(...)`, `move_to(x=…, frame=…)`, `rename`, `set_parent(None for the top)`, `add(...)`, `duplicate`, `remove`, `bounds(frame)` → `Box`, `features(kinds, frame)` → `[Feature]`, `set_body(mass)`, `set_belt(speed, direction)`.
+
+`Ops` builds a sequence: `move`, `move_to_pose`, `run`, `stop`, `set`, `wait`, `wait_for`, `grip`, `release`, `move_l`, `walk`, `play_motion`, each with `after`, `on_start`, `on_finish`. A number is in mm, mm/s or degrees; a string is an expression in the automation's units (m, m/s): `move("Down", "J3", "Depth - 0.1")`.
+
+`examples/sorting_station.py` builds a whole sorting station twin from its STEP file.
 
 ## Learning motion (`motionstudio.learn`)
 

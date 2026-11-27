@@ -1,6 +1,6 @@
 # Robot API (code)
 
-Control robots and stations from your own programs, in **Python**, **C++** or **Kotlin**. A program can move a robot's tool in straight lines, make joint moves, go to poses you taught, walk a humanoid along a path, and read and write signals. You can test a robot program here before it runs a real machine, or let outside software drive the model.
+Control robots and stations from your own programs, in **Python**, **C++** or **Kotlin**. A program can move a robot's tool in straight lines, make joint moves, go to poses you taught, walk a humanoid along a path, and read and write signals. It can also build the scene itself: import CAD and add joints, sensors and logic (see *Building scenes*). You can test a robot program here before it runs a real machine, or let outside software drive the model.
 
 ## Switching it on
 
@@ -12,9 +12,9 @@ The libraries are in the **api/** folder of the MotionStudio source:
 |---|---|---|
 | Python 3.8+ | `api/python` | `pip install api/python` |
 | C++17 | `api/cpp` | `add_subdirectory(api/cpp)`, link `motionstudio::motionstudio` |
-| Kotlin / JVM | `api/kotlin` | from Maven Central: `implementation("io.github.zahid4kh:motionstudio:0.2.0")` |
+| Kotlin / JVM | `api/kotlin` | `./gradlew publishToMavenLocal` (Maven Central has 0.1.1, without scene building) |
 
-None of them needs anything else. To run programs without the app window (on a server, or in automated tests), use `motionstudio-server project.mstudio`. It can also build a robot from a preset: `motionstudio-server --robot "6-axis 0.9"`, or `--humanoid "Full-size"`.
+None of them needs anything else. To run programs without the app window (on a server, or in automated tests), use `motionstudio-server project.mstudio`, or `motionstudio-server` alone for an empty scene to build in. It can also build a robot from a preset: `motionstudio-server --robot "6-axis 0.9"`, or `--humanoid "Full-size"`.
 
 ## Units and frames
 
@@ -176,6 +176,46 @@ Moves, signal writes and waits **start the simulation** if it isn't running. Tim
 
 Your program's moves and the scene's own sequences drive the same actuators. If a sequence moves a joint while a program moves it too, the one that commands last wins.
 
+## Building scenes
+
+A program can also **build** the scene, as you would with the mouse but repeatably: import CAD, group its parts, put joints through its own geometry, and add belts, rigid bodies, sensors, part sources and sinks, poses and sequences. Then it saves the project. What a program builds shows in the app at once, and **Ctrl+Z** takes it back.
+
+```python
+scene = studio.scene
+studio.reset()                                   # the scene only changes while the simulation is reset
+station = scene.import_file("station.step")      # Z-up CAD is stood upright (up_axis="y" if it is Y-up)
+S = station                                      # CAD coordinates (mm, Z up) are in the station's frame
+
+table = scene.add_frame("Turntable", parent=station)
+for name in ["circle", "static", "slider_holder"]:
+    scene.object(name).set_parent(table)         # keeps where it is
+centre = scene.object("circle").bounds(S).center
+scene.add_joint("Turn", station, table, (0, 0, 1), frame=S, pivot=(centre.x, centre.y, 0),
+                min=-5, max=95, actuator={"speed": 60})
+
+scene.object("belt").set_belt("Run ? 0.2 : 0", (1, 0, 0), frame=S)    # m/s as an expression
+scene.add_signal("Run", "input", value=True)
+scene.add_sensor("AtGate", "beam", mount=table, frame=S, at=(2132, -180, 159), direction=(0, 1, 0), range=360)
+scene.add_sequence("Sorter", ms.Ops()
+                   .wait_for("Part there", "AtGate")
+                   .move("Turn", "Turn", 90)                # degrees (mm for a slide)
+                   .wait("Settle", 0.5)
+                   .move("Back", "Turn", 0), loop=True, enable="Run")
+print(scene.check())                             # what would stop Play: [] when it runs
+scene.save("station.mstudio")
+```
+
+The C++ and Kotlin libraries have the same calls: `studio.scene()` / `studio.scene`, `importFile`, `addFrame`, `addJoint`, `Ops`, `save`.
+
+- **Where things go.** Positions are in the parent's frame unless you give `frame`, which is `"world"` or any object. For CAD, giving the model's top object as the frame lets you use the coordinates you see in the CAD system.
+- **Finding parts.** Use `scene.objects("legs:*")` (wildcards), `scene.object("Station/Sorter/Lift")` (name or path) and `bounds(frame)` (a part's box). `features(["circle", "cylinder"])` finds the round edges and faces of a CAD part, with their centre, axis and radius, so a joint can go exactly through a bearing or a shaft.
+- **Joints** take an axis and a pivot. The child goes under the parent, and it gets an actuator named after the joint unless `follows` couples it to another joint (gears, mirrored gates). `min` and `max` are in degrees, or millimetres for a `prismatic` joint.
+- **Values for the logic.** A number is in mm, mm/s, degrees or seconds. A string is an expression, in the units the automation uses: metres for slides and m/s for belts, the same as you type in the Automation panel.
+- **Handles.** An object handle keeps working after you rename or move the object, because it is found by its id. Two parts with the same name (CAD files have them) can be told apart that way too.
+- **Unsaved work.** `scene.new()` and `scene.open()` won't throw away unsaved changes in the app: save first, or pass `discard=True`.
+
+`api/python/examples/sorting_station.py` builds a whole sorting station twin from its STEP file this way: a SCARA robot, conveyors, a turning and lifting sorter, bins, sensors and the logic.
+
 ## When something goes wrong
 
 A refused or failed command raises an error with a **code** and a message that says what was wrong:
@@ -188,6 +228,8 @@ A refused or failed command raises an error with a **code** and a message that s
 | `cancelled`, `reset` | `MotionCancelled` | `MotionCancelledException` | `ms::MotionCancelled` | Stopped, cancelled because an earlier motion failed, or the simulation was reset |
 | `timeout` | `WaitTimeout` | `WaitTimeoutException` | `ms::Timeout` | A wait ran out of time; the motion or condition carries on |
 | `simulation` | `SimulationError` | `SimulationException` | `ms::SimulationError` | The simulation can't start (the automation has errors) |
+| `simulation_active` | `SimulationError` | `SimulationException` | `ms::SimulationError` | The scene can't change while the simulation is active: reset it first |
+| `unsaved` | `UnsavedChangesError` | `UnsavedChangesException` | `ms::UnsavedChanges` | The project open in the app has unsaved changes: save, or pass discard |
 | `bad_request` | `MotionStudioError` | `MotionStudioException` | `ms::Error` | A parameter is wrong: a robot without legs asked to walk, a step too long for its legs |
 
 They all derive from one base class (`MotionStudioError`, `MotionStudioException`, `ms::Error`), which carries the `code`.
