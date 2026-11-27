@@ -889,6 +889,30 @@ TEST(sourceMakesCopiesAndSinkTakesThem) {
 
 // Inserting a component remaps its sources, sinks and part poses, and
 // renames clashing source / sink names; undo restores them
+// Parts moved into a group made after them (the group has the higher id)
+// stay in it through a save and load
+TEST(serializerKeepsPartsInLaterGroups) {
+    SceneGraph g;
+    const int part = addBox(g, "Part", {1, 2, 3}, {0.1f, 0.1f, 0.1f});
+    const int inner = addBox(g, "Inner", {0, 0.5f, 0}, {0.1f, 0.1f, 0.1f}, part);
+    const int group = g.addObject("Group", PrimitiveType::ImportedMesh);
+    g.getObject(group)->transform.position = {0, 1, 0};
+    const int outer = g.addObject("Outer", PrimitiveType::ImportedMesh);
+    g.setParent(group, outer);
+    g.setParent(part, group);
+    const QVector3D before = g.worldTransform(inner).column(3).toVector3D();
+    SceneGraph h;
+    roundTrip(g, h);
+    auto named = [&](const QString& n) { for (auto& [id, o] : h.allObjects()) if (o.name == n) return id; return -1; };
+    CHECK(h.allObjects().size() == 4);
+    const SceneObject* p = h.getObject(named("Part"));
+    CHECK(p && p->parentId == named("Group"));
+    CHECK(h.getObject(named("Group"))->parentId == named("Outer"));
+    CHECK(h.getObject(named("Inner"))->parentId == named("Part"));
+    CHECK_NEAR((h.worldTransform(named("Inner")).column(3).toVector3D() - before).length(), 0, 1e-5);
+    (void)inner;
+}
+
 TEST(partFlowMergesAndUndoes) {
     SceneGraph comp;
     std::vector<int> joints;

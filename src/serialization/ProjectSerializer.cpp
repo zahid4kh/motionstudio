@@ -488,9 +488,19 @@ bool ProjectSerializer::fromJson(SceneGraph& scene, const QJsonObject& root, con
         objList.append(d);
     }
 
-    // Sort by id so parents come before children
-    std::sort(objList.begin(), objList.end(), [](const ObjData& a, const ObjData& b){
-        return a.id < b.id;
+    // Parents before children: by depth in the tree, then by id. A parent can
+    // have a higher id than its children (parts moved into a group made after
+    // them), so id order alone isn't enough
+    QHash<int, int> parentOf;
+    for (const ObjData& d : objList) parentOf[d.id] = d.parentId;
+    QHash<int, int> depth;
+    for (const ObjData& d : objList) {
+        int n = 0;
+        for (int p = d.parentId; p != -1 && parentOf.contains(p) && n <= objList.size(); p = parentOf[p]) n++;
+        depth[d.id] = n;
+    }
+    std::sort(objList.begin(), objList.end(), [&](const ObjData& a, const ObjData& b){
+        return depth[a.id] != depth[b.id] ? depth[a.id] < depth[b.id] : a.id < b.id;
     });
 
     QHash<int, int> idMap;
