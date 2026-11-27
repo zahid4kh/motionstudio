@@ -14,5 +14,6 @@ templates/tutorial.md
 .kotlin/
 __pycache__/
 *.egg-info/
-sorting-station-1.snapshot.24dist/
+sorting-station-1.snapshot.24
+dist/
 .build-venv/
