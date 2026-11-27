@@ -49,7 +49,7 @@ QString pythonCode(const Example& e) {
     const QString port = e.port == ApiServer::kDefaultPort ? QString() : QString("port=%1").arg(e.port);
     const QString t = e.tool.isEmpty() ? "robot" : "tool";
     std::vector<std::pair<QString, QString>> l = {
-        {"# pip install <MotionStudio source>/api/python", ""},
+        {"# pip install motionstudio", ""},
         {"import motionstudio as ms", ""}, {"", ""},
         {QString("with ms.connect(%1) as studio:").arg(port), ""},
         {QString("    robot = studio.robot(%1)").arg(quote(e.robot)), ""}};
@@ -74,7 +74,7 @@ QString cppCode(const Example& e) {
     const QString port = e.port == ApiServer::kDefaultPort ? QString() : QString("\"localhost\", %1").arg(e.port);
     const QString t = e.tool.isEmpty() ? "robot" : "tool";
     std::vector<std::pair<QString, QString>> l = {
-        {"// add_subdirectory(<MotionStudio source>/api/cpp), link motionstudio::motionstudio", ""},
+        {"// find_package(motionstudio 0.3), link motionstudio::motionstudio (Help › Robot API)", ""},
         {"#include <motionstudio/motionstudio.hpp>", ""}, {"#include <iostream>", ""},
         {"namespace ms = motionstudio;", ""}, {"", ""}, {"int main() {", ""},
         {QString("    auto studio = ms::Studio::connect(%1);").arg(port), ""},
@@ -101,7 +101,7 @@ QString kotlinCode(const Example& e) {
     const QString port = e.port == ApiServer::kDefaultPort ? QString() : QString("port = %1").arg(e.port);
     const QString t = e.tool.isEmpty() ? "robot" : "tool";
     std::vector<std::pair<QString, QString>> l = {
-        {"// Maven Central: implementation(\"io.github.zahid4kh:motionstudio:0.2.0\")", ""},
+        {"// Maven Central: implementation(\"io.github.zahid4kh:motionstudio:0.3.0\")", ""},
         {"import io.motionstudio.MotionStudio", ""}, {"", ""},
         {QString("fun main() = MotionStudio.connect(%1).use { studio ->").arg(port), ""},
         {QString("    val robot = studio.robot(%1)").arg(quote(e.robot)), ""}};
