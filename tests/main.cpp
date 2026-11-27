@@ -4590,6 +4590,257 @@ TEST(takeKeptInTheProject) {
     CHECK(g.allMotions().size() == 1);
 }
 
+namespace {
+// The result of an API call that must succeed (prints the error if it doesn't)
+QJsonObject ok(const QJsonObject& r, const char* what) {
+    if (!r.contains("result")) {
+        std::printf("  %s: %s\n", what, qPrintable(QJsonDocument(r).toJson(QJsonDocument::Compact)));
+        ++g_failures;
+    }
+    return r.value("result").toObject();
+}
+QVector3D vec(const QJsonValue& v) {
+    const QJsonObject o = v.toObject();
+    return QVector3D(float(o["x"].toDouble()), float(o["y"].toDouble()), float(o["z"].toDouble()));
+}
+} // namespace
+
+TEST(apiServerBuildsObjectsAndJoints) {
+    SceneGraph g;
+    SimulationEngine sim(&g);
+    ApiServer server(&g, &sim);
+    CHECK(server.start(0));
+    ApiClient c;
+    CHECK(c.connectTo(server.port()));
+    ok(c.call("scene.new"), "new");
+
+    // Objects: frames and sized primitives, placed in mm in their parent's frame
+    ok(c.call("object.add", {{"name", "Cell"}, {"position", QJsonObject{{"x", 1000}}}}), "cell");
+    QJsonObject table = ok(c.call("object.add", {{"name", "Table"}, {"type", "box"}, {"parent", "Cell"},
+                                                 {"size", QJsonObject{{"x", 800}, {"y", 40}, {"z", 600}}},
+                                                 {"position", QJsonObject{{"y", 700}}}, {"color", "#336699"}}), "table");
+    CHECK(table["type"].toString() == "box" && table["path"].toString() == "Cell/Table");
+    CHECK((vec(table["world"]) - QVector3D(1000, 700, 0)).length() < 1e-3);
+    CHECK((vec(table["size"]) - QVector3D(800, 40, 600)).length() < 1e-3);
+    QJsonObject b = ok(c.call("object.bounds", {{"object", "Table"}}), "bounds");
+    CHECK((vec(b["min"]) - QVector3D(600, 680, -300)).length() < 1e-2);
+    CHECK((vec(b["size"]) - QVector3D(800, 40, 600)).length() < 1e-2);
+    // A child of a sized box is placed in mm all the same
+    QJsonObject cup = ok(c.call("object.add", {{"name", "Cup"}, {"type", "cylinder"}, {"parent", "Table"},
+                                               {"diameter", 80}, {"height", 120}, {"position", QJsonObject{{"x", 100}, {"y", 80}}}}), "cup");
+    CHECK((vec(cup["world"]) - QVector3D(1100, 780, 0)).length() < 1e-2);
+    CHECK((vec(cup["size"]) - QVector3D(80, 120, 80)).length() < 1e-2);
+    CHECK((vec(cup["position"]) - QVector3D(100, 80, 0)).length() < 1e-2);
+    // Placed in another object's frame: a Z-up frame turned upright
+    ok(c.call("object.add", {{"name", "CAD"}, {"position", QJsonObject{{"rx", -90}}}}), "cad");
+    QJsonObject pin = ok(c.call("object.add", {{"name", "Pin"}, {"frame", "CAD"}, {"position", QJsonObject{{"x", 10}, {"z", 250}}}}), "pin");
+    CHECK((vec(pin["world"]) - QVector3D(10, 250, 0)).length() < 1e-2);
+    CHECK(errorCode(c.call("object.add", {{"type", "cone"}})) == "bad_request");
+    CHECK(errorCode(c.call("object.set", {{"object", "Pin"}, {"size", 10}})) == "bad_request");
+    CHECK(errorCode(c.call("object.get", {{"object", "Nothing"}})) == "not_found");
+
+    // A revolute joint about world +Y through a pivot; a prismatic lift on it; a follower
+    ok(c.call("object.add", {{"name", "Arm"}, {"parent", "Cell"}, {"position", QJsonObject{{"x", 300}, {"y", 800}}}}), "arm");
+    QJsonObject turn = ok(c.call("joint.add", {{"name", "Turn"}, {"parent", "Cell"}, {"child", "Arm"},
+                                               {"axis", QJsonArray{0, 1, 0}}, {"pivot", QJsonObject{{"x", 1000}, {"y", 800}}},
+                                               {"min", -170}, {"max", 170},
+                                               {"actuator", QJsonObject{{"speed", 90}, {"acceleration", 360}}}}), "turn");
+    CHECK(turn["actuator"].toObject()["name"].toString() == "Turn");
+    CHECK_NEAR(turn["actuator"].toObject()["speed"].toDouble(), 90, 1e-6);
+    CHECK((vec(turn["pivot"]) - QVector3D(1000, 800, 0)).length() < 1e-2);
+    ok(c.call("object.add", {{"name", "Slide"}, {"parent", "Arm"}}), "slide");
+    QJsonObject lift = ok(c.call("joint.add", {{"name", "Lift"}, {"type", "prismatic"}, {"parent", "Arm"}, {"child", "Slide"},
+                                               {"axis", QJsonObject{{"y", 1}}}, {"min", 0}, {"max", 200},
+                                               {"actuator", QJsonObject{{"speed", 150}}}}), "lift");
+    CHECK(lift["max"].toDouble() == 200);
+    CHECK(lift["actuator"].toObject()["speed"].toDouble() == 150);
+    CHECK(errorCode(c.call("joint.add", {{"parent", "Arm"}, {"child", "Slide"}, {"axis", QJsonArray{0, 1, 0}}})) == "bad_request");
+    CHECK(errorCode(c.call("joint.add", {{"type", "prismatic"}, {"parent", "Cell"}, {"child", "Pin"}, {"axis", QJsonArray{0, 1, 0}}})) == "bad_request");
+    // Revolute joints need an unstretched parent
+    CHECK(errorCode(c.call("joint.add", {{"parent", "Table"}, {"child", "Cup"}, {"axis", QJsonArray{0, 1, 0}}})) == "bad_request");
+
+    ok(c.call("joint.set", {{"joint", "Turn"}, {"value", 90}}), "turn 90");
+    ok(c.call("joint.set", {{"joint", "Lift"}, {"value", 100}}), "lift 100");
+    // +90° about +Y turns +X towards -Z: the arm's origin goes from x+300 to z-300
+    CHECK((vec(ok(c.call("object.get", {{"object", "Arm"}}), "arm")["world"]) - QVector3D(1000, 800, -300)).length() < 1e-2);
+    CHECK((vec(ok(c.call("object.get", {{"object", "Slide"}}), "slide")["world"]) - QVector3D(1000, 900, -300)).length() < 1e-2);
+    // The lift's axis stays world +Y as reported, whatever the turn
+    CHECK((vec(ok(c.call("joint.get", {{"joint", "Lift"}}), "lift")["axis"]) - QVector3D(0, 1, 0)).length() < 1e-4);
+
+    ok(c.call("object.add", {{"name", "Wheel"}, {"parent", "Cell"}, {"position", QJsonObject{{"z", 500}}}}), "wheel");
+    QJsonObject f = ok(c.call("joint.add", {{"name", "Wheel"}, {"parent", "Cell"}, {"child", "Wheel"}, {"axis", QJsonArray{0, 0, 1}},
+                                            {"continuous", true}, {"follows", QJsonObject{{"joint", "Turn"}, {"ratio", -2}}}}), "follower");
+    CHECK(f["actuator"].isNull() && f["follows"].toObject()["joint"].toString() == "Turn");
+    CHECK_NEAR(f["value"].toDouble(), -180, 1e-3);
+    CHECK(errorCode(c.call("joint.set", {{"joint", "Wheel"}, {"actuator", true}})) == "bad_request");
+
+    // Moving under another parent keeps the joint (and where everything is)
+    ok(c.call("object.add", {{"name", "Base"}, {"parent", "Cell"}, {"position", QJsonObject{{"y", 50}, {"ry", 30}}}}), "base");
+    const QVector3D before = vec(ok(c.call("object.get", {{"object", "Slide"}}), "slide")["world"]);
+    ok(c.call("object.set", {{"object", "Arm"}, {"parent", "Base"}}), "reparent");
+    CHECK((vec(ok(c.call("object.get", {{"object", "Slide"}}), "slide")["world"]) - before).length() < 1e-2);
+    CHECK(ok(c.call("joint.get", {{"joint", "Turn"}}), "turn")["parent"].toString() == "Cell/Base");
+
+    // Group, duplicate, remove
+    QJsonObject grp = ok(c.call("object.group", {{"objects", QJsonArray{"Table", "Wheel"}}, {"name", "Kit"}}), "group");
+    CHECK(grp["path"].toString() == "Cell/Kit" && grp["children"].toArray().size() == 2);
+    CHECK(ok(c.call("object.get", {{"object", "Cell/Kit/Wheel"}}), "wheel")["joint"].toString() == "Wheel");
+    QJsonObject dup = ok(c.call("object.duplicate", {{"object", "Pin"}, {"name", "Pin 2"}, {"position", QJsonObject{{"x", -50}}}, {"frame", "world"}}), "dup");
+    CHECK(dup["name"].toString() == "Pin 2" && std::fabs(vec(dup["world"]).x() + 50) < 1e-2);
+    CHECK(ok(c.call("object.remove", {{"object", "Pin 2"}}), "remove")["removed"].toInt() == 1);
+    QJsonArray list = c.call("scene.objects", {{"name", "P*"}}).value("result").toArray();
+    CHECK(list.size() == 1 && list[0].toObject()["path"].toString() == "Pin");   // placed in CAD's frame, at the top
+    if (list.size() != 1 || list[0].toObject()["path"].toString() != "Pin") std::printf("  %s\n", QJsonDocument(list).toJson(QJsonDocument::Compact).constData());
+    CHECK(c.call("scene.objects", {{"under", "Cell"}, {"depth", 1}}).value("result").toArray().size() == 2);   // Kit and Base
+
+    // Removing a joint leaves the part where it is
+    const QVector3D slide = vec(ok(c.call("object.get", {{"object", "Slide"}}), "slide")["world"]);
+    ok(c.call("joint.remove", {{"joint", "Lift"}}), "remove joint");
+    CHECK((vec(ok(c.call("object.get", {{"object", "Slide"}}), "slide")["world"]) - slide).length() < 1e-2);
+
+    // Features of a mesh: a cylinder's round edges and face, in mm
+    const QJsonObject drum = ok(c.call("object.add", {{"name", "Drum"}, {"position", QJsonObject{{"x", 2000}, {"rz", 90}}}}), "drum");
+    for (auto& [id, o] : g.allObjects())
+        if (o.name == "Drum") {
+            auto m = std::make_shared<MeshGeometry>();
+            m->interleaved = primitiveSoup(PrimitiveType::Cylinder);
+            for (size_t i = 0; i < m->interleaved.size(); i += 6) m->interleaved[i + 1] *= 0.4f;   // 400 mm long, Ø 1 m
+            g.getObject(id)->mesh = m;
+        }
+    QJsonObject feats = ok(c.call("object.features", {{"object", "Drum"}}), "features");
+    int circles = 0, faces = 0;
+    for (const QJsonValue& v : feats["features"].toArray()) {
+        const QJsonObject e = v.toObject();
+        CHECK(std::fabs(std::fabs(vec(e["axis"]).x()) - 1) < 1e-3);    // turned about z: the axis is world x
+        CHECK_NEAR(e["radius"].toDouble(), 500, 30);                     // a 20-gon's circle
+        if (e["kind"].toString() == "circle") { ++circles; CHECK(std::fabs(std::fabs(vec(e["origin"]).x() - 2000) - 200) < 1); }
+        if (e["kind"].toString() == "cylinder") { ++faces; CHECK_NEAR(e["length"].toDouble(), 400, 1); }
+    }
+    CHECK(circles == 2 && faces == 1);
+    (void)drum;
+
+    // Nothing changes while the simulation runs
+    sim.step();
+    CHECK(errorCode(c.call("object.add", {{"name", "Late"}})) == "simulation_active");
+    sim.reset();
+}
+
+TEST(apiServerBuildsAutomation) {
+    SceneGraph g;
+    SimulationEngine sim(&g);
+    sim.setSpeedFactor(20);
+    ApiServer server(&g, &sim);
+    CHECK(server.start(0));
+    ApiClient c;
+    CHECK(c.connectTo(server.port()));
+    QTemporaryDir dir;
+
+    // A belt brings parts from a source to a beam; a lift raises each one;
+    // a sink at the end of the belt takes them
+    ok(c.call("object.add", {{"name", "Line"}}), "line");
+    ok(c.call("object.add", {{"name", "Belt"}, {"type", "box"}, {"parent", "Line"}, {"size", QJsonObject{{"x", 2000}, {"y", 100}, {"z", 400}}},
+                             {"position", QJsonObject{{"y", 450}}}}), "belt");
+    ok(c.call("belt.set", {{"object", "Belt"}, {"speed", "Run ? 0.3 : 0"}, {"direction", QJsonArray{1, 0, 0}}}), "belt speed");
+    QJsonObject part = ok(c.call("object.add", {{"name", "Box"}, {"type", "box"}, {"size", 100}, {"position", QJsonObject{{"x", -900}, {"y", 551}}}}), "box");
+    part = ok(c.call("body.set", {{"object", "Box"}, {"mass", 0.5}}), "body");
+    CHECK_NEAR(part["body"].toObject()["mass"].toDouble(), 0.5, 1e-6);
+    CHECK(!part.contains("belt"));
+    CHECK(ok(c.call("object.get", {{"object", "Belt"}}), "belt")["belt"].toObject()["speed"].toString() == "Run ? 0.3 : 0");
+
+    ok(c.call("object.add", {{"name", "Stand"}, {"parent", "Line"}, {"position", QJsonObject{{"x", 1200}}}}), "stand");
+    ok(c.call("object.add", {{"name", "Ram"}, {"type", "box"}, {"parent", "Stand"}, {"size", 50}, {"position", QJsonObject{{"y", 300}}}}), "ram");
+    ok(c.call("joint.add", {{"name", "Ram"}, {"type", "prismatic"}, {"parent", "Stand"}, {"child", "Ram"}, {"axis", QJsonArray{0, 1, 0}},
+                            {"min", 0}, {"max", 150}, {"actuator", QJsonObject{{"speed", 300}}}}), "ram joint");
+
+    ok(c.call("signal.add", {{"name", "Run"}, {"kind", "input"}, {"value", true}}), "run");
+    ok(c.call("signal.add", {{"name", "Seen"}, {"type", "int"}}), "seen");
+    ok(c.call("signal.add", {{"name", "Busy"}, {"kind", "derived"}, {"expression", "Ram.pos > 0.01"}}), "busy");
+    CHECK(errorCode(c.call("signal.add", {{"name", "Run"}})) == "bad_request");
+    CHECK(errorCode(c.call("signal.add", {{"name", "2bad"}})) == "bad_request");
+    QJsonObject beam = ok(c.call("sensor.add", {{"name", "AtEnd"}, {"type", "beam"}, {"mount", "Belt"}, {"frame", "world"},
+                                                {"at", QJsonObject{{"x", 600}, {"y", 560}, {"z", -300}}}, {"direction", QJsonArray{0, 0, 1}},
+                                                {"range", 600}, {"detects", "bodies"}}), "beam");
+    CHECK((vec(beam["at"]) - QVector3D(600, 110, -300)).length() < 1e-2);   // in the belt's frame
+    CHECK(beam["range"].toDouble() == 600);
+    CHECK(errorCode(c.call("sensor.add", {{"name", "Z"}, {"type", "zone"}})) == "bad_request");
+
+    ok(c.call("pose.add", {{"name", "Up"}, {"joints", QJsonObject{{"Ram", 150}}}}), "pose");
+    ok(c.call("source.add", {{"name", "Feeder"}, {"template", "Box"}, {"interval", 3}, {"max", 3}}), "source");
+    QJsonObject sink = ok(c.call("sink.add", {{"name", "Out"}, {"mount", "Belt"}, {"at", QJsonObject{{"x", 950}, {"y", 100}}},
+                                              {"size", QJsonObject{{"x", 100}, {"y", 200}, {"z", 400}}}}), "sink");
+    CHECK((vec(sink["size"]) - QVector3D(100, 200, 400)).length() < 1e-2);
+
+    QJsonArray ops{
+        QJsonObject{{"type", "waitFor"}, {"name", "Part"}, {"condition", "AtEnd"}},
+        QJsonObject{{"type", "set"}, {"name", "Count"}, {"onStart", "Seen = Seen + 1"}},
+        QJsonObject{{"type", "moveToPose"}, {"name", "Raise"}, {"pose", "Up"}},
+        QJsonObject{{"type", "move"}, {"name", "Lower"}, {"actuator", "Ram"}, {"target", 0}, {"speed", 600}},
+        QJsonObject{{"type", "waitFor"}, {"name", "Gone"}, {"condition", "!AtEnd"}, {"after", QJsonArray{"Count"}}},
+        QJsonObject{{"type", "wait"}, {"name", "Both"}, {"seconds", 0.1}, {"after", QJsonArray{"Lower", 4}}},
+    };
+    QJsonObject seq = ok(c.call("sequence.add", {{"name", "Counter"}, {"loop", true}, {"enable", "Run"}, {"operations", ops}}), "sequence");
+    const QJsonArray got = seq["operations"].toArray();
+    CHECK(got.size() == 6);
+    CHECK(got[1].toObject()["after"].toArray() == QJsonArray{0});
+    CHECK(got[4].toObject()["after"].toArray() == QJsonArray{1});
+    CHECK((got[5].toObject()["after"].toArray() == QJsonArray{3, 4}));
+    CHECK(got[3].toObject()["target"].toString() == "0" && got[3].toObject()["speed"].toString() == "0.6");   // mm → m
+    CHECK(errorCode(c.call("sequence.add", {{"name", "Counter"}, {"operations", QJsonArray{}}})) == "bad_request");
+    CHECK(errorCode(c.call("sequence.add", {{"name", "Bad"}, {"operations", QJsonArray{QJsonObject{{"type", "move"}, {"actuator", "Nope"}, {"target", 1}}}}})) == "not_found");
+    CHECK(errorCode(c.call("sequence.add", {{"name", "Bad"}, {"operations", QJsonArray{QJsonObject{{"type", "fly"}}}}})) == "bad_request");
+
+    QJsonObject check = ok(c.call("scene.check"), "check");
+    CHECK(check["ok"].toBool());
+    for (const QJsonValue& v : check["problems"].toArray()) std::printf("  problem: %s\n", qPrintable(v.toString()));
+
+    // Saved, cleared, opened: everything is back
+    const QString path = dir.filePath("line.mstudio");
+    CHECK(ok(c.call("scene.save", {{"path", path}}), "save")["path"].toString() == path);
+    ok(c.call("scene.new"), "new");
+    CHECK(g.allObjects().empty());
+    CHECK(errorCode(c.call("scene.save")) == "bad_request");
+    QJsonObject info = ok(c.call("scene.open", {{"path", path}}), "open");
+    CHECK(info["signals"].toArray().size() == 3 && info["sensors"].toArray().size() == 1);
+    CHECK(info["sequences"].toArray() == QJsonArray{"Counter"} && info["sources"].toArray() == QJsonArray{"Feeder"});
+    CHECK(info["robots"].toArray().size() == 1);
+    CHECK(ok(c.call("sequence.get", {{"name", "Counter"}}), "get")["operations"].toArray() == got);
+    CHECK(server.projectPath() == path);
+
+#ifdef MUJOCO_ENABLED
+    // It runs: parts ride the belt to the beam, the ram rises for each, the sink takes them
+    ok(c.call("sim.wait", {{"seconds", 12}}), "run");
+    const double seen = result(c.call("signal.get", {{"name", "Seen"}})).value("value").toDouble();
+    const double taken = result(c.call("signal.get", {{"name", "Out.count"}})).value("value").toDouble();
+    std::printf("  seen %g, taken %g\n", seen, taken);
+    CHECK(seen >= 2 && taken >= 2);
+    ok(c.call("sim.reset"), "reset");
+#endif
+
+    // Another project merges in under a parent; its clashing names are renamed
+    ok(c.call("object.add", {{"name", "Hall"}, {"position", QJsonObject{{"z", 3000}}}}), "hall");
+    QJsonObject imp = ok(c.call("scene.import", {{"path", path}, {"parent", "Hall"}}), "import");
+    CHECK(imp["roots"].toArray().size() == 2 && imp["root"].toObject()["parent"].toString() == "Hall");
+    QJsonObject after = ok(c.call("scene.info"), "info");
+    CHECK(after["sequences"].toArray().size() == 2);
+    if (after["sequences"].toArray().size() != 2) std::printf("  %s\n", QJsonDocument(after).toJson(QJsonDocument::Compact).constData());
+    CHECK(ok(c.call("scene.check"), "check")["ok"].toBool());
+
+    // Removing automation by name
+    CHECK(ok(c.call("automation.remove", {{"name", "Busy"}}), "rm")["removed"].toString() == "signal");
+    CHECK(ok(c.call("automation.remove", {{"name", "Up"}}), "rm")["removed"].toString() == "pose");
+    CHECK(ok(c.call("automation.remove", {{"name", "Up"}}), "rm")["removed"].toString() == "pose");   // the merged one
+    CHECK(errorCode(c.call("automation.remove", {{"name", "Up"}})) == "not_found");
+    CHECK(errorCode(c.call("scene.import", {{"path", dir.filePath("none.step")}})) == "not_found");
+
+    // Unsaved work in the app is only thrown away when the program says so
+    server.setUnsavedCheck([] { return true; });
+    CHECK(errorCode(c.call("scene.new")) == "unsaved");
+    CHECK(errorCode(c.call("scene.open", {{"path", path}})) == "unsaved");
+    CHECK(!g.allObjects().empty());
+    ok(c.call("scene.new", {{"discard", true}}), "discard");
+    CHECK(g.allObjects().empty());
+}
+
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     const QString filter = argc > 1 ? QString(argv[1]) : QString();

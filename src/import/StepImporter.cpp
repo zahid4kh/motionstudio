@@ -714,6 +714,20 @@ void applyUpAxis(Part& root, UpAxis up) {
     root.rotationDeg = t.rotation;
 }
 
+int addToScene(SceneGraph& scene, const Part& part, int parentId) {
+    const int id = scene.addObject(part.name.isEmpty() ? QString("Part") : part.name, PrimitiveType::ImportedMesh, parentId);
+    if (SceneObject* o = scene.getObject(id)) {
+        o->transform.position = part.position;
+        o->transform.rotation = part.rotationDeg;
+        o->transform.scale    = {1, 1, 1};
+        o->mesh               = part.mesh;
+        o->color              = part.color;
+    }
+    for (const Part& c : part.children) addToScene(scene, c, id);
+    emit scene.objectChanged(id);
+    return id;
+}
+
 Estimator::Estimator(qint64 fileBytes, const Rates& rates)
     : m_bytes(std::max<qint64>(fileBytes, 1)), m_rates(rates) {}
 

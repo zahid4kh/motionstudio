@@ -1,4 +1,5 @@
 #include "ApiServer.h"
+#include "ApiCommon.h"
 #include "../automation/Kinematics.h"
 #include "../physics/SimulationEngine.h"
 #include "../robot/Gait.h"
@@ -14,37 +15,15 @@
 #include <functional>
 #include <set>
 
+using namespace apicommon;
+
 namespace {
 
-constexpr double kMm = 1000.0;                 // API lengths are millimetres
 constexpr int    kMaxLine = 64 << 20;          // a request longer than this closes the connection (a long take is MBs)
-
-struct ApiError {
-    QString code, message;
-};
-[[noreturn]] void fail(const QString& code, const QString& message) { throw ApiError{code, message}; }
 
 using MS = AutomationEngine::MotionState;
 
-// Joint values: degrees, or millimetres for prismatic joints
-double round6(double v) { return std::round(v * 1e6) / 1e6; }
-double toApi(const Joint& j, double v)   { return round6(j.type == JointType::Prismatic ? v * kMm : v); }
-double fromApi(const Joint& j, double v) { return j.type == JointType::Prismatic ? v / kMm : v; }
-
 bool isTcp(const QString& name) { return name.contains("TCP", Qt::CaseInsensitive); }
-
-bool inSubtree(const SceneGraph& g, int root, int id) {
-    for (const SceneObject* o = g.getObject(id); o; o = g.getObject(o->parentId))
-        if (o->id == root) return true;
-    return false;
-}
-
-void collect(const SceneGraph& g, int id, std::vector<int>& out) {
-    const SceneObject* o = g.getObject(id);
-    if (!o) return;
-    out.push_back(id);
-    for (int c : o->childIds) collect(g, c, out);
-}
 
 // A machine's tools: frames named …TCP… that its own joints move, else (with
 // two joints or more) the deepest object at the end of its longest chain, or
@@ -85,41 +64,8 @@ std::vector<int> toolsOf(const SceneGraph& g, int root, const std::vector<int>& 
     return tools;
 }
 
-double number(const QJsonObject& p, const QString& key, double fallback) {
-    const QJsonValue v = p.value(key);
-    if (v.isUndefined() || v.isNull()) return fallback;
-    if (v.isBool()) return v.toBool() ? 1 : 0;
-    if (!v.isDouble()) fail("bad_request", QString("\"%1\" must be a number").arg(key));
-    return v.toDouble();
-}
-QString text(const QJsonObject& p, const QString& key, bool required = true) {
-    const QJsonValue v = p.value(key);
-    if ((v.isUndefined() || v.isNull()) && !required) return {};
-    if (!v.isString() || v.toString().trimmed().isEmpty())
-        fail("bad_request", QString("\"%1\" must be a name").arg(key));
-    return v.toString().trimmed();
-}
-bool flag(const QJsonObject& p, const QString& key, bool fallback) {
-    const QJsonValue v = p.value(key);
-    if (v.isUndefined() || v.isNull()) return fallback;
-    if (!v.isBool()) fail("bad_request", QString("\"%1\" must be true or false").arg(key));
-    return v.toBool();
-}
-
-QString listOf(QStringList names, int max = 12) {
-    names.sort(Qt::CaseInsensitive);
-    if (names.size() > max) { names = names.mid(0, max); names << "…"; }
-    return names.join(", ");
-}
-
 } // namespace
 
-struct ApiServer::Call {
-    QTcpSocket* socket = nullptr;
-    QJsonValue  id;
-    bool        deferred = false;
-    Pending     pending;
-};
 
 ApiServer::ApiServer(SceneGraph* scene, SimulationEngine* sim, QObject* parent)
     : QObject(parent), m_scene(scene), m_sim(sim)
@@ -372,6 +318,35 @@ const std::map<QString, ApiServer::Handler>& ApiServer::handlers() {
         {"take.start",        &ApiServer::takeStart},
         {"take.stop",         &ApiServer::takeStop},
         {"take.status",       &ApiServer::takeStatus},
+        {"scene.new",         &ApiServer::sceneNew},
+        {"scene.open",        &ApiServer::sceneOpen},
+        {"scene.save",        &ApiServer::sceneSave},
+        {"scene.info",        &ApiServer::sceneInfo},
+        {"scene.check",       &ApiServer::sceneCheck},
+        {"scene.objects",     &ApiServer::sceneObjects},
+        {"scene.import",      &ApiServer::sceneImport},
+        {"object.add",        &ApiServer::objectAdd},
+        {"object.get",        &ApiServer::objectGet},
+        {"object.set",        &ApiServer::objectSet},
+        {"object.remove",     &ApiServer::objectRemove},
+        {"object.group",      &ApiServer::objectGroup},
+        {"object.duplicate",  &ApiServer::objectDuplicate},
+        {"object.bounds",     &ApiServer::objectBounds},
+        {"object.features",   &ApiServer::objectFeatures},
+        {"joint.add",         &ApiServer::jointAdd},
+        {"joint.get",         &ApiServer::jointGet},
+        {"joint.set",         &ApiServer::jointSet},
+        {"joint.remove",      &ApiServer::jointRemove},
+        {"body.set",          &ApiServer::bodySet},
+        {"belt.set",          &ApiServer::beltSet},
+        {"signal.add",        &ApiServer::signalAdd},
+        {"sensor.add",        &ApiServer::sensorAdd},
+        {"pose.add",          &ApiServer::poseAdd},
+        {"sequence.add",      &ApiServer::sequenceAdd},
+        {"sequence.get",      &ApiServer::sequenceGet},
+        {"source.add",        &ApiServer::sourceAdd},
+        {"sink.add",          &ApiServer::sinkAdd},
+        {"automation.remove", &ApiServer::automationRemove},
     };
     return h;
 }
@@ -400,6 +375,7 @@ void ApiServer::handleLine(QTcpSocket* s, const QByteArray& line) {
     if (!pv.isUndefined() && !pv.isNull() && !pv.isObject()) return error("bad_request", "\"params\" must be an object");
     try {
         const QJsonValue result = it->second(this, pv.toObject(), call);
+        if (call.async) return;
         if (call.deferred) {
             call.pending.socket = s;
             call.pending.id = call.id;

@@ -73,13 +73,15 @@ add_library(MotionStudioCore STATIC
     src/io/ModbusServer.cpp
     src/io/ApiServer.cpp
     src/io/RobotFormats.cpp
+    src/io/ApiScene.cpp
+    src/viewport/MeshFeatures.cpp
     src/robot/RobotBuilder.cpp
     src/robot/RobotAnalysis.cpp
     src/robot/HumanoidBuilder.cpp
     src/robot/Gait.cpp
 )
 target_include_directories(MotionStudioCore PUBLIC src)
-target_link_libraries(MotionStudioCore PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::Xml)
+target_link_libraries(MotionStudioCore PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::Xml Qt6::Concurrent)
 
 if(MUJOCO_FOUND)
     target_link_libraries(MotionStudioCore PUBLIC mujoco)
@@ -108,7 +110,6 @@ set(SOURCES
     src/viewport/SectionPanel.cpp
     src/viewport/AssemblePanel.cpp
     src/viewport/ViewCube.cpp
-    src/viewport/MeshFeatures.cpp
     src/ui/HierarchyPanel.cpp
     src/ui/PropertiesPanel.cpp
     src/ui/TemplateDialog.cpp

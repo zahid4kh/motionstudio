@@ -9,6 +9,8 @@
 // Imports a STEP file (.step/.stp) into a tree of parts that mirrors the
 // CAD assembly structure. Built on OpenCASCADE XCAF; when compiled without
 // OCCT_ENABLED, importFile() fails with an explanatory error.
+class SceneGraph;
+
 namespace StepImporter {
 
 struct Part {
@@ -49,6 +51,10 @@ bool importFile(const QString& path, Part& rootOut, QString& errorOut,
 // parts keep their CAD positions relative to it.
 enum class UpAxis { Y, Z };
 void applyUpAxis(Part& root, UpAxis up);
+
+// Adds an imported tree to a scene under `parentId` (-1 = the top); returns
+// the new top object
+int addToScene(SceneGraph& scene, const Part& part, int parentId = -1);
 
 // Turns stage progress into an overall fraction and a time-left estimate.
 // Reading can't report progress and translating reports it too unevenly to

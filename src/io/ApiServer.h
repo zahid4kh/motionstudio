@@ -49,6 +49,13 @@ public:
     int     clientCount() const { return int(m_clients.size()); }
     QString lastError() const { return m_error; }
     long    requestCount() const { return m_requests; }
+    // The project file the scene was opened from or saved to ("" = none):
+    // what scene.save writes when it is given no path
+    void    setProjectPath(const QString& path) { m_projectPath = path; }
+    QString projectPath() const { return m_projectPath; }
+    // Whether the open project has unsaved changes (the app's flag): then
+    // scene.new and scene.open need "discard": true
+    void    setUnsavedCheck(std::function<bool()> check) { m_unsaved = std::move(check); }
 
     // A mechanism as the API sees it: a root object and the actuated joints
     // below it that form one machine (a robot arm, a humanoid, a turntable)
@@ -64,6 +71,11 @@ public:
 signals:
     void clientsChanged(int count);
     void activity();
+    // A program replaced the whole scene (scene.new, scene.open) or saved it
+    void projectReplaced(const QString& path);
+    void projectSaved(const QString& path);
+    // A program imported a model (scene.import); its top object
+    void imported(int rootId);
 
 private:
     struct Call;
@@ -134,6 +146,50 @@ private:
     QJsonValue takeStop(const QJsonObject& p, Call& c);
     QJsonValue takeStatus(const QJsonObject& p, Call& c);
     void       sampleTakes();
+
+    // Building scenes (ApiScene.cpp)
+    void        requireEditable() const;
+    QMatrix4x4  frameParam(const QJsonObject& p, const QString& key, int parentId, const QString& fallback) const;
+    QJsonObject objectInfo(int id) const;
+    QJsonObject jointInfo(int jointId, const QMatrix4x4& frame) const;
+    int         jointParam(const QJsonObject& p, const QString& key) const;
+    int         objectOrNull(const QJsonObject& p, const QString& key) const;
+    void        applyObject(int id, const QJsonObject& p, bool creating);
+    void        applyJoint(int jointId, const QJsonObject& p, bool creating);
+    void        readSensor(SensorConfig& s, const QJsonObject& p, bool zoneOnly);
+    QJsonObject sensorJson(const SensorConfig& s) const;
+    Operation   readOperation(const QJsonObject& o, const std::vector<Operation>& before);
+    QJsonObject operationJson(const Operation& op, const Sequence& seq) const;
+    void        answerLater(QTcpSocket* socket, const QJsonValue& id, const QJsonObject& reply);
+    QJsonValue  sceneNew(const QJsonObject& p, Call& c);
+    QJsonValue  sceneOpen(const QJsonObject& p, Call& c);
+    QJsonValue  sceneSave(const QJsonObject& p, Call& c);
+    QJsonValue  sceneInfo(const QJsonObject& p, Call& c);
+    QJsonValue  sceneCheck(const QJsonObject& p, Call& c);
+    QJsonValue  sceneObjects(const QJsonObject& p, Call& c);
+    QJsonValue  sceneImport(const QJsonObject& p, Call& c);
+    QJsonValue  objectAdd(const QJsonObject& p, Call& c);
+    QJsonValue  objectGet(const QJsonObject& p, Call& c);
+    QJsonValue  objectSet(const QJsonObject& p, Call& c);
+    QJsonValue  objectRemove(const QJsonObject& p, Call& c);
+    QJsonValue  objectGroup(const QJsonObject& p, Call& c);
+    QJsonValue  objectDuplicate(const QJsonObject& p, Call& c);
+    QJsonValue  objectBounds(const QJsonObject& p, Call& c);
+    QJsonValue  objectFeatures(const QJsonObject& p, Call& c);
+    QJsonValue  jointAdd(const QJsonObject& p, Call& c);
+    QJsonValue  jointGet(const QJsonObject& p, Call& c);
+    QJsonValue  jointSet(const QJsonObject& p, Call& c);
+    QJsonValue  jointRemove(const QJsonObject& p, Call& c);
+    QJsonValue  bodySet(const QJsonObject& p, Call& c);
+    QJsonValue  beltSet(const QJsonObject& p, Call& c);
+    QJsonValue  signalAdd(const QJsonObject& p, Call& c);
+    QJsonValue  sensorAdd(const QJsonObject& p, Call& c);
+    QJsonValue  poseAdd(const QJsonObject& p, Call& c);
+    QJsonValue  sequenceAdd(const QJsonObject& p, Call& c);
+    QJsonValue  sequenceGet(const QJsonObject& p, Call& c);
+    QJsonValue  sourceAdd(const QJsonObject& p, Call& c);
+    QJsonValue  sinkAdd(const QJsonObject& p, Call& c);
+    QJsonValue  automationRemove(const QJsonObject& p, Call& c);
     // A walk request for the robot in `p` with the gait options in `p`
     AutomationEngine::WalkRequest walkRequest(const QJsonObject& p, const Robot& r) const;
     QJsonValue submitWalk(const QJsonObject& p, Call& c, AutomationEngine::WalkRequest w, const QString& label);
@@ -151,5 +207,7 @@ private:
     std::map<int, TakeRt> m_takes;
     int               m_nextTake = 1;
     QString           m_error;
+    QString           m_projectPath;
+    std::function<bool()> m_unsaved;
     long              m_requests = 0;
 };

@@ -32,6 +32,9 @@ public:
     const AxisFeature& faceFeature(int triangle) const;
     // The straight and circular edges bounding the triangle's face
     std::vector<const AxisFeature*> edgesAround(int triangle) const;
+    // Every face and edge chain found (faces of kind None included)
+    const std::vector<AxisFeature>& faces() const { return m_faces; }
+    const std::vector<AxisFeature>& edges() const { return m_edges; }
 
 private:
     struct Triangle { int v[3]; QVector3D normal; float area; };

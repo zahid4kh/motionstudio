@@ -1,8 +1,10 @@
 // motionstudio-server: the robot API without the app window. Loads a project
-// (or builds a robot from a builder preset) and serves the API on a port, so
-// robot programs can run headless, in CI or on another machine.
+// (or builds a robot from a builder preset, or starts empty for programs that
+// build their scene) and serves the API on a port, so programs can run
+// headless, in CI or on another machine.
 #include <QCommandLineParser>
 #include <QCoreApplication>
+#include <QFileInfo>
 #include <QTextStream>
 #include <cstdio>
 #include "io/ApiServer.h"
@@ -39,7 +41,7 @@ int main(int argc, char** argv) {
     cli.setApplicationDescription("Serves the MotionStudio robot API for a project, without the app window.");
     cli.addHelpOption();
     cli.addVersionOption();
-    cli.addPositionalArgument("project", "The .mstudio project to load.", "[project]");
+    cli.addPositionalArgument("project", "The .mstudio project to load (none: an empty scene to build in).", "[project]");
     QCommandLineOption robotOpt("robot", "Build a robot from a Robot Builder preset instead (see --presets).", "preset");
     QCommandLineOption humanoidOpt("humanoid", "Build a humanoid from a Humanoid Builder preset instead.", "preset");
     QCommandLineOption portOpt({"p", "port"}, "TCP port (default 5800).", "port", QString::number(ApiServer::kDefaultPort));
@@ -87,6 +89,8 @@ int main(int argc, char** argv) {
             print("Can't open " + what);
             return 2;
         }
+    } else if (cli.positionalArguments().isEmpty()) {
+        what = "an empty scene";   // for programs that build their own (scene.import, object.add …)
     } else {
         cli.showHelp(2);
     }
@@ -98,6 +102,8 @@ int main(int argc, char** argv) {
     });
 
     ApiServer server(&scene, &sim);
+    if (cli.positionalArguments().size() == 1 && !cli.isSet(robotOpt) && !cli.isSet(humanoidOpt))
+        server.setProjectPath(QFileInfo(what).absoluteFilePath());
     const quint16 port = quint16(cli.value(portOpt).toUInt());
     if (!server.start(port, cli.isSet(anyOpt) ? QHostAddress::Any : QHostAddress::LocalHost)) {
         print(QString("Can't listen on port %1: %2").arg(port).arg(server.lastError()));
