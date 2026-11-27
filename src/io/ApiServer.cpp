@@ -439,6 +439,14 @@ void ApiServer::ensureRunning() {
 }
 
 int ApiServer::objectParam(const QString& what, const QString& name, int within) const {
+    // "#id" (an object's id, from object.get or scene.objects: stable until the scene is reloaded)
+    if (name.startsWith('#')) {
+        bool okId = false;
+        const int id = name.mid(1).toInt(&okId);
+        const SceneObject* o = okId ? m_scene->getObject(id) : nullptr;
+        if (!o || o->copyOf != -1) fail("not_found", QString("there is no %1 %2").arg(what, name));
+        return id;
+    }
     // Exact name or path (or the end of a path), preferring objects under `within`
     std::vector<int> hits;
     for (const auto& [id, o] : m_scene->allObjects()) {
@@ -459,8 +467,8 @@ int ApiServer::objectParam(const QString& what, const QString& name, int within)
     if (hits.size() == 1) return hits.front();
     if (hits.empty()) fail("not_found", QString("there is no %1 \"%2\"").arg(what, name));
     QStringList paths;
-    for (int id : hits) paths << pathOf(*m_scene, id);
-    fail("ambiguous", QString("%1 objects are called \"%2\"; use a path: %3").arg(hits.size()).arg(name, listOf(paths)));
+    for (int id : hits) paths << QString("%1 (#%2)").arg(pathOf(*m_scene, id)).arg(id);
+    fail("ambiguous", QString("%1 objects are called \"%2\"; use a path or #id: %3").arg(hits.size()).arg(name, listOf(paths)));
 }
 
 ApiServer::Robot ApiServer::robotParam(const QJsonObject& p, bool required) const {

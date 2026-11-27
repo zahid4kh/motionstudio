@@ -197,7 +197,7 @@ QJsonObject ApiServer::objectInfo(int id) const {
         if (const SceneObject* co = m_scene->getObject(c); co && co->copyOf == -1) children.append(co->name);
     const QMatrix4x4 frame = kin::toolFrame(*m_scene, id);
     const QMatrix4x4 parent = o->parentId == -1 ? QMatrix4x4() : kin::toolFrame(*m_scene, o->parentId);
-    QJsonObject info{{"name", o->name}, {"path", pathOf(*m_scene, id)}, {"type", typeName(*o)},
+    QJsonObject info{{"id", id}, {"name", o->name}, {"path", pathOf(*m_scene, id)}, {"type", typeName(*o)},
                      {"parent", o->parentId == -1 ? QJsonValue() : QJsonValue(pathOf(*m_scene, o->parentId))},
                      {"children", children},
                      {"position", poseJson(parent.inverted() * frame)},
@@ -533,7 +533,7 @@ QJsonValue ApiServer::sceneObjects(const QJsonObject& p, Call&) {
         const SceneObject* o = m_scene->getObject(id);
         if (!o || o->copyOf != -1) return;
         if (depth >= 1 && re.match(o->name).hasMatch() && (type.isEmpty() || typeName(*o) == type))
-            out.append(QJsonObject{{"name", o->name}, {"path", pathOf(*m_scene, id)}, {"type", typeName(*o)},
+            out.append(QJsonObject{{"id", id}, {"name", o->name}, {"path", pathOf(*m_scene, id)}, {"type", typeName(*o)},
                                    {"parent", o->parentId == -1 ? QJsonValue() : QJsonValue(pathOf(*m_scene, o->parentId))}});
         if (maxDepth >= 0 && depth >= maxDepth) return;
         for (int c : o->childIds) walk(c, depth + 1);
@@ -643,7 +643,11 @@ QJsonValue ApiServer::objectAdd(const QJsonObject& p, Call&) {
 }
 
 QJsonValue ApiServer::objectGet(const QJsonObject& p, Call&) {
-    return objectInfo(objectParam("object", text(p, "object")));
+    const int id = objectParam("object", text(p, "object"));
+    QJsonObject info = objectInfo(id);
+    if (given(p, "frame"))   // where it is in another frame
+        info["inFrame"] = poseJson(frameParam(p, "frame", -1, "world").inverted() * kin::toolFrame(*m_scene, id));
+    return info;
 }
 
 QJsonValue ApiServer::objectSet(const QJsonObject& p, Call&) {

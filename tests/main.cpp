@@ -4635,6 +4635,7 @@ TEST(apiServerBuildsObjectsAndJoints) {
     ok(c.call("object.add", {{"name", "CAD"}, {"position", QJsonObject{{"rx", -90}}}}), "cad");
     QJsonObject pin = ok(c.call("object.add", {{"name", "Pin"}, {"frame", "CAD"}, {"position", QJsonObject{{"x", 10}, {"z", 250}}}}), "pin");
     CHECK((vec(pin["world"]) - QVector3D(10, 250, 0)).length() < 1e-2);
+    CHECK((vec(ok(c.call("object.get", {{"object", "Pin"}, {"frame", "CAD"}}), "in CAD")["inFrame"]) - QVector3D(10, 0, 250)).length() < 1e-2);
     CHECK(errorCode(c.call("object.add", {{"type", "cone"}})) == "bad_request");
     CHECK(errorCode(c.call("object.set", {{"object", "Pin"}, {"size", 10}})) == "bad_request");
     CHECK(errorCode(c.call("object.get", {{"object", "Nothing"}})) == "not_found");
@@ -4687,9 +4688,17 @@ TEST(apiServerBuildsObjectsAndJoints) {
     CHECK(ok(c.call("object.get", {{"object", "Cell/Kit/Wheel"}}), "wheel")["joint"].toString() == "Wheel");
     QJsonObject dup = ok(c.call("object.duplicate", {{"object", "Pin"}, {"name", "Pin 2"}, {"position", QJsonObject{{"x", -50}}}, {"frame", "world"}}), "dup");
     CHECK(dup["name"].toString() == "Pin 2" && std::fabs(vec(dup["world"]).x() + 50) < 1e-2);
+    // Two objects of one name: ambiguous, but each has an id
+    ok(c.call("object.add", {{"name", "Twin"}}), "twin");
+    const int twin = ok(c.call("object.add", {{"name", "Twin"}}), "twin")["id"].toInt();
+    CHECK(errorCode(c.call("object.get", {{"object", "Twin"}})) == "ambiguous");
+    CHECK(ok(c.call("object.set", {{"object", QString("#%1").arg(twin)}, {"name", "Twin B"}}), "by id")["name"].toString() == "Twin B");
+    CHECK(errorCode(c.call("object.get", {{"object", "#99999"}})) == "not_found");
+    ok(c.call("object.remove", {{"object", "Twin"}}), "rm");
+    ok(c.call("object.remove", {{"object", "Twin B"}}), "rm");
     CHECK(ok(c.call("object.remove", {{"object", "Pin 2"}}), "remove")["removed"].toInt() == 1);
     QJsonArray list = c.call("scene.objects", {{"name", "P*"}}).value("result").toArray();
-    CHECK(list.size() == 1 && list[0].toObject()["path"].toString() == "Pin");   // placed in CAD's frame, at the top
+    CHECK(list.size() == 1 && list[0].toObject()["path"].toString() == "Pin" && list[0].toObject()["id"].toInt() > 0);   // placed in CAD's frame, at the top
     if (list.size() != 1 || list[0].toObject()["path"].toString() != "Pin") std::printf("  %s\n", QJsonDocument(list).toJson(QJsonDocument::Compact).constData());
     CHECK(c.call("scene.objects", {{"under", "Cell"}, {"depth", 1}}).value("result").toArray().size() == 2);   // Kit and Base
 
