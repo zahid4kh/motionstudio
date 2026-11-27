@@ -6,15 +6,49 @@ Control robots and stations from your own programs, in **Python**, **C++** or **
 
 **Tools › Robot API…** runs the server that programs connect to. It is on by default, on port **5800**, for programs on this computer only. The window lists the robots in the scene with their joints and tools, and shows a quick start for this scene in each language (**Copy Code**). While programs are connected, the status bar shows **API :5800 · 1 program**.
 
-The libraries are in the **api/** folder of the MotionStudio source:
+## Getting the libraries
 
-| Language | Folder | Use it |
-|---|---|---|
-| Python 3.8+ | `api/python` | `pip install api/python` |
-| C++17 | `api/cpp` | `add_subdirectory(api/cpp)`, link `motionstudio::motionstudio` |
-| Kotlin / JVM | `api/kotlin` | `./gradlew publishToMavenLocal` (Maven Central has 0.1.1, without scene building) |
+None of the libraries needs anything else. Their source is in the **api/** folder of the MotionStudio source.
 
-None of them needs anything else. To run programs without the app window (on a server, or in automated tests), use `motionstudio-server project.mstudio`, or `motionstudio-server` alone for an empty scene to build in. It can also build a robot from a preset: `motionstudio-server --robot "6-axis 0.9"`, or `--humanoid "Full-size"`.
+**Python 3.8+.** Install it from PyPI:
+
+```sh
+pip install motionstudio
+```
+
+`pip install "motionstudio[learn]"` also installs NumPy, for learning motion. A wheel file you were given installs the same way: `pip install motionstudio-0.3.0-py3-none-any.whl`.
+
+**Kotlin and Java (JVM 17+).** Add the dependency from Maven Central to your Gradle build:
+
+```kotlin
+dependencies { implementation("io.github.zahid4kh:motionstudio:0.3.0") }
+```
+
+**C++17.** The library comes as a source archive, `motionstudio-cpp-0.3.0.tar.gz`. CMake can download and build it with your project:
+
+```cmake
+include(FetchContent)
+FetchContent_Declare(motionstudio
+    URL <where the archive is>/motionstudio-cpp-0.3.0.tar.gz
+    URL_HASH SHA256=<its hash>
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+FetchContent_MakeAvailable(motionstudio)
+target_link_libraries(my_app PRIVATE motionstudio::motionstudio)
+```
+
+You can also install it once, then use it from any project:
+
+```sh
+tar xzf motionstudio-cpp-0.3.0.tar.gz && cd motionstudio-cpp-0.3.0
+cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
+sudo cmake --install build
+```
+
+After that, use `find_package(motionstudio 0.3 REQUIRED)` in CMake. Without CMake, compile with `g++ -std=c++17 main.cpp $(pkg-config --cflags --libs --static motionstudio)`.
+
+## Running without the app window
+
+On a server, or in automated tests, use `motionstudio-server project.mstudio`, or `motionstudio-server` alone for an empty scene to build in. It can also build a robot from a preset: `motionstudio-server --robot "6-axis 0.9"`, or `--humanoid "Full-size"`.
 
 ## Units and frames
 

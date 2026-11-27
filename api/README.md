@@ -35,9 +35,19 @@ with ms.connect() as studio:
 
 | | Folder | Get it |
 |---|---|---|
-| Python 3.8+ | [python/](python/) | `pip install ./python` |
-| C++17 | [cpp/](cpp/) | `add_subdirectory(cpp)` + `target_link_libraries(app PRIVATE motionstudio::motionstudio)` |
-| Kotlin / JVM 17+ | [kotlin/](kotlin/) | `./gradlew publishToMavenLocal` (Maven Central has 0.1.1, without scene building) |
+| Python 3.8+ | [python/](python/) | `pip install motionstudio` (PyPI) |
+| C++17 | [cpp/](cpp/) | the source archive `motionstudio-cpp-0.3.0.tar.gz`: FetchContent, or install + `find_package(motionstudio 0.3)`, or pkg-config ([cpp/README.md](cpp/README.md#getting-it)) |
+| Kotlin / JVM 17+ | [kotlin/](kotlin/) | `implementation("io.github.zahid4kh:motionstudio:0.3.0")` (Maven Central) |
+
+### Making the releases
+
+| | Command | Gives | Publish it |
+|---|---|---|---|
+| Python | `python/package.sh` | `python/dist/*.whl`, `*.tar.gz` | `python/.build-venv/bin/twine upload python/dist/*` (a PyPI API token) |
+| C++ | `cpp/package.sh` | `cpp/dist/motionstudio-cpp-<v>.tar.gz`, `.zip`, `.sha256` | attach them to a GitHub release (or any public URL) |
+| Kotlin | `cd kotlin && ./gradlew centralBundle` | `kotlin/build/distributions/motionstudio-<v>-bundle.zip` (signed) | central.sonatype.com › Publish Component |
+
+The version is in `python/pyproject.toml`, `cpp/CMakeLists.txt` and `kotlin/build.gradle.kts`; change all three together.
 
 ## What to connect to
 
